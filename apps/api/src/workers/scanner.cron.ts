@@ -7,6 +7,7 @@ import { jobProfit, percentComplete, costRisk } from '../utils/jobProfit.js';
 import { loadWorkCalendar, workingMinutesOn } from '../utils/workCalendar.js';
 import { computeTaskTypeMedians, taskTypeGroupKey } from '../utils/taskTypeMedian.js';
 import { rupees } from '../utils/money.js';
+import { pushNewAlerts } from '../services/push.js';
 
 function median(values: number[]): number {
   if (values.length === 0) return 0;
@@ -746,6 +747,7 @@ export async function runAgencyHealthScanner(): Promise<number> {
       await applyCompanyStatusDerivation(org.id);
 
       let createdForOrg = 0;
+      const newAlertIds: string[] = [];
       const evaluated = await evaluateAgencyHealthRules(org.id);
       const stillOpenKeys = new Set(evaluated.map((item) => `${item.rule}:${item.entityType}:${item.entityId}`));
 
@@ -761,7 +763,7 @@ export async function runAgencyHealthScanner(): Promise<number> {
         });
 
         if (!existing) {
-          await prisma.alert.create({
+          const created = await prisma.alert.create({
             data: {
               organizationId: org.id,
               rule: item.rule,
@@ -771,6 +773,7 @@ export async function runAgencyHealthScanner(): Promise<number> {
               message: item.message,
             },
           });
+          newAlertIds.push(created.id);
           totalAlertsProcessed++;
           createdForOrg++;
         }
@@ -800,6 +803,7 @@ export async function runAgencyHealthScanner(): Promise<number> {
        * route exists to withhold.
        */
       if (createdForOrg > 0) emitToOrganization(org.id, 'notification:new', null);
+      await pushNewAlerts(org.id, newAlertIds);
     } catch (err) {
       logger.error(`Agency health scanner error for org ${org.id}: ${err}`);
     }

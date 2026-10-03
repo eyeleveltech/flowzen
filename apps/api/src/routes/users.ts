@@ -12,6 +12,7 @@ import { sendMail } from '../utils/mailer.js';
 import { logger } from '../utils/logger.js';
 import { Prisma, RolePreset } from '@prisma/client';
 import { bookValue } from '../utils/assetValue.js';
+import { teamScope } from '../services/teamScope.js';
 
 const PERMISSION_KEYS = [
   'work.own', 'work.team', 'work.all',
@@ -37,12 +38,15 @@ usersRouter.use(authenticate);
 //
 // WHO IS ASKING decides the shape. Manager and above get the full record;
 // below that this is a picker — name, job title, whether the account is live
-// — because a Member has no reason to learn everyone's phone number.
+// — because a Member has no reason to learn everyone's phone number. A Head
+// gets the full record for the people of the departments they lead, and
+// themselves; everybody else is in the list the picker way.
 
 usersRouter.get('/', async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
     const detailed = hasPermission(req.user!, 'work.team');
+    const scope = await teamScope(req.user!);
 
     const users = await prisma.user.findMany({
       where: { organizationId: orgId },
@@ -59,6 +63,9 @@ usersRouter.get('/', async (req: AuthRequest, res: Response, next) => {
       },
     });
 
+    const mine = (u: any) =>
+      scope.all || u.id === req.user!.userId || (u.department && scope.departmentIds.includes(u.department.id));
+
     res.json(
       users.map((u: any) => ({
         id: u.id,
@@ -69,7 +76,7 @@ usersRouter.get('/', async (req: AuthRequest, res: Response, next) => {
         // An invited person exists but cannot sign in yet — `active: false`
         // with a token still on the record is PENDING, not switched off.
         status: u.active ? 'ACTIVE' : u.inviteToken ? 'PENDING' : 'INACTIVE',
-        ...(detailed
+        ...(detailed && mine(u)
           ? {
               email: u.email,
               phone: u.phone,

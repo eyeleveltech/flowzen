@@ -10,6 +10,7 @@ import { Sidebar } from '@/components/layout/sidebar';
 import { TopNav } from '@/components/layout/top-nav';
 import { BottomTabs } from '@/components/layout/bottom-tabs';
 import { CommandPaletteMount } from '@/components/layout/command-palette-mount';
+import { ZenDock, useZenDockWidth } from '@/components/layout/zen-dock';
 import { NoAccess } from '@/components/layout/no-access';
 import { useNotificationStore } from '@/stores/useNotificationStore';
 import { X, Bell } from 'lucide-react';
@@ -23,6 +24,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { sidebarCollapsed, mobileSidebarOpen, setMobileSidebarOpen } = useUIStore();
   const { activeToast, clearToast } = useNotificationStore();
   const isMobile = useIsMobile();
+  /** Room on the right for Zen while it is docked open — the page shrinks rather than sitting under it. */
+  const zenWidth = useZenDockWidth();
 
   useEffect(() => {
     loadFromStorage();
@@ -133,7 +136,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {!isMobile && <Sidebar isMobile={false} />}
 
       <motion.main
-        animate={{ marginLeft: isMobile ? 0 : (sidebarCollapsed ? 72 : 260) }}
+        animate={{ marginLeft: isMobile ? 0 : (sidebarCollapsed ? 72 : 260), marginRight: zenWidth }}
         transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
         className="flex-1 flex flex-col min-w-0 bg-surface w-full"
       >
@@ -147,6 +150,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {isMobile && <BottomTabs />}
 
       <CommandPaletteMount />
+
+      {/* Zen, once for every page, so moving around keeps the conversation. */}
+      <ZenDock />
 
       {/* Real-time Toast Notification — positioned above bottom tabs on mobile */}
       {activeToast && (

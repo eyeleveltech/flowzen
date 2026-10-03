@@ -6,6 +6,7 @@ import { sendMail } from '../utils/mailer.js';
 import { emitToOrganization } from '../sse.js';
 import { loadWorkCalendar, workingMinutesOn, type WorkCalendar } from '../utils/workCalendar.js';
 import { approverIds, escalationIds, minutesLabel, TASK_TYPE_LABEL } from '../services/taskApprovals.js';
+import { pushApprovalChase } from '../services/push.js';
 
 /**
  * The approval chaser — Plan 2.
@@ -244,6 +245,7 @@ async function chaseRound(
       (id) => !onIt.has(id),
     );
     await mailPeople(orgId, people, mailFor(round, 'ESCALATED', waited, appUrl));
+    await pushApprovalChase(orgId, people, round, 'ESCALATED', waited);
     return 'ESCALATED';
   }
 
@@ -268,6 +270,7 @@ async function chaseRound(
     });
     const people = (await approverIds(orgId, type)).filter((id) => !onIt.has(id));
     await mailPeople(orgId, people, mailFor(round, 'REMINDER', waited, appUrl));
+    await pushApprovalChase(orgId, people, round, 'REMINDER', waited);
     return 'REMINDED';
   }
 

@@ -67,6 +67,10 @@ model Organization {
   /// Settings → Integrations: lets people connect Google Calendar. Off until
   /// an admin turns it on, and only offered when the server has Google keys.
   googleCalendarEnabled Boolean @default(false)
+  /// Settings → Integrations: phone notifications (Web Push). Off until an
+  /// admin turns it on, and only offered when the server has VAPID keys. Off
+  /// means nothing is sent and the Profile card is hidden.
+  pushEnabled        Boolean  @default(false)
   /// The old free-text list of departments. Replaced by `Department` rows
   /// (Departments Plan 1): nothing writes it any more, /config builds its
   /// `departments` from the rows for any old reader, and it goes in Plan 4.
@@ -185,6 +189,8 @@ model Organization {
   usageDays                  UsageDay[]
   weeklyBriefs               WeeklyBrief[]
   departmentRecords          Department[]
+  pushSubscriptions          PushSubscription[]
+  pushOutbox                 PushOutbox[]
 
   /// "EL" -> EL/CAM/001. The stickers get printed once, so this is a setting
   /// rather than a constant, but changing it does not renumber what exists.
@@ -281,6 +287,9 @@ model User {
   externalBusyBlocks   ExternalBusyBlock[]
   googleEventLinks     GoogleEventLink[]
   usageDays                UsageDay[]
+  pushSubscriptions        PushSubscription[]
+  notificationPreference   NotificationPreference?
+  pushOutbox               PushOutbox[]
 
   @@index([organizationId, active])
   @@map("users")
@@ -1438,6 +1447,10 @@ model Invoice {
   workType       TaskWorkType?
   workId         String?
   amount         Decimal       @db.Decimal(12, 2)
+  /// The GST inside `amount`, as entered from the Tally invoice (or summed
+  /// from the document's CGST/SGST/IGST when one is attached). `amount` stays
+  /// the payable total; this says how much of it is tax. Null: not recorded.
+  gstAmount      Decimal?      @db.Decimal(12, 2)
   raisedAt       DateTime      @db.Date
   dueAt          DateTime      @db.Date
   status         InvoiceStatus @default(RAISED)
@@ -1579,7 +1592,10 @@ model DocumentLineItem {
 model Payment {
   id         String   @id @default(cuid())
   invoiceId  String
+  /// What was received — GST included when there is any. Settles the invoice.
   amount     Decimal  @db.Decimal(12, 2)
+  /// The GST inside `amount`, as entered with the payment. Null: not recorded.
+  gstAmount  Decimal? @db.Decimal(12, 2)
   receivedAt DateTime @db.Date
   mode       String
   reference  String?
@@ -1932,6 +1948,14 @@ model ZenMessage {
   actedAt        DateTime?
   /// What the task became, once it was created.
   createdTaskId  String?
+  /// The plans and messages Zen prepared on this turn (Zen Plan 4): each a
+  /// list of steps holding the exact request for an existing endpoint, which
+  /// the browser sends on a click. Kept like `draft`, so a reopened thread
+  /// shows the same cards it showed at the time.
+  cards          Json?
+  /// Which of those steps were clicked and what came back, keyed
+  /// "card.step" — so a step done once is shown done and never offered again.
+  stepsDone      Json?
   createdAt      DateTime  @default(now())
 
   conversation ZenConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
@@ -2204,4 +2228,77 @@ model Department {
   @@unique([organizationId, name])
   @@index([organizationId, archivedAt])
   @@map("departments")
+}
+
+// ── Phone notifications (Web Push) ───────────────────────────────────────────
+//
+// Opt-in per person and per device: a row here is one browser that said yes.
+// Sending goes through PushOutbox, never straight from a request, so a slow or
+// broken push service can never hold up or undo the thing being told about.
+
+/// One device that turned phone notifications on.
+model PushSubscription {
+  id             String    @id @default(cuid())
+  organizationId String
+  userId         String
+  /// The push service's address for this browser. Unique: the same browser
+  /// subscribing again replaces its row rather than adding a second.
+  endpoint       String    @unique
+  p256dh         String
+  auth           String
+  /// "iPhone · Safari", read from the user agent when it subscribed.
+  deviceLabel    String?
+  /// Failed sends in a row that were not a "gone" answer; reset on success.
+  failedCount    Int       @default(0)
+  createdAt      DateTime  @default(now())
+  lastUsedAt     DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_subscriptions")
+}
+
+/// Which kinds of push a person wants. No row means the defaults.
+model NotificationPreference {
+  userId        String  @id
+  pushApprovals Boolean @default(true)
+  pushCalendar  Boolean @default(true)
+  pushTasks     Boolean @default(true)
+  /// Everything in the bell. Off by default: it can be noisy.
+  pushBell      Boolean @default(false)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_preferences")
+}
+
+/// A push waiting to go, or gone. The worker sends what is due every minute.
+model PushOutbox {
+  id             String    @id @default(cuid())
+  organizationId String
+  userId         String
+  /// APPROVALS | CALENDAR | TASKS | BELL | SUMMARY | TEST
+  kind           String
+  /// De-duplication: one event is one push, e.g. "review:<id>:submitted".
+  sourceKey      String
+  title          String
+  body           String
+  url            String
+  /// Now, or — outside working hours — the next working morning's start.
+  dueAt          DateTime
+  /// When the worker finished with it: sent, folded into a summary, or given up.
+  sentAt         DateTime?
+  attempts       Int       @default(0)
+  /// Why it did not go as itself, when it did not. Null for a clean send.
+  lastError      String?
+  createdAt      DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, sourceKey])
+  @@index([sentAt, dueAt])
+  @@map("push_outbox")
 }

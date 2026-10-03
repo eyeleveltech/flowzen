@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, type AuthRequest, hasPermission, requirePermission } from '../middleware/auth.js';
 import { TaskWorkType } from '@prisma/client';
+import { peopleInScope } from '../services/teamScope.js';
 
 export const allocationsRouter = Router();
 
@@ -215,6 +216,10 @@ const confirmSchema = z.object({
 
 /**
  * POST /api/allocations/confirm — Confirm allocations for the month
+ *
+ * A Head confirms the split for the people of the departments they lead;
+ * Accounts and Management confirm anybody's. Without `userIds` it is everybody
+ * the caller may confirm — for a Head, all of theirs.
  */
 allocationsRouter.post(
   '/confirm',
@@ -231,9 +236,22 @@ allocationsRouter.post(
       const orgId = req.user!.organizationId;
       const approverId = req.user!.userId;
 
+      const whose = await peopleInScope(req.user!, { organizationId: orgId });
+      if (userIds && userIds.length > 0) {
+        const asked = Array.from(new Set(userIds));
+        const allowed = await prisma.user.count({ where: { AND: [whose, { id: { in: asked } }] } });
+        if (allowed < asked.length) {
+          res.status(403).json({
+            success: false,
+            error: 'You can confirm the split only for people in the departments you lead.',
+          });
+          return;
+        }
+      }
+
       const where: any = {
         month,
-        user: { organizationId: orgId },
+        user: whose,
       };
       if (userIds && userIds.length > 0) {
         where.userId = { in: userIds };

@@ -1,7 +1,7 @@
 import { prisma } from '../lib/prisma.js';
 import { sendMail } from '../utils/mailer.js';
 import { logger } from '../utils/logger.js';
-import { RULE_PERMISSION, MINE_REGARDLESS, peopleAlertClauses } from '../routes/notifications.js';
+import { alertClausesFor } from '../routes/notifications.js';
 import { resolvePermissions } from '../middleware/auth.js';
 
 /**
@@ -52,42 +52,21 @@ export async function alertsForUser(
   organizationId: string,
   user: { userId: string; preset: string; permissions: string[] },
 ): Promise<{ id: string; rule: string; message: string; severity: string; entityType: string }[]> {
-  const caller = {
+  // The bell's own rule, asked as the person — so a Head is mailed only about
+  // their departments' people, exactly as their bell shows.
+  const clauses = await alertClausesFor({
     userId: user.userId,
     organizationId,
+    email: '',
+    name: '',
     preset: user.preset as never,
     permissions: resolvePermissions(user.preset as never, user.permissions),
-  };
-  const held = new Set<string>(caller.permissions);
-  const can = (needed?: string) => needed === undefined || held.has(needed);
-
-  const allowedRules = Object.keys(RULE_PERMISSION).filter((rule) => can(RULE_PERMISSION[rule]));
-
-  // The three task rules reach the person the task belongs to whatever their
-  // permissions say — a rule about your own work is a fact about you.
-  const missingTaskRules = MINE_REGARDLESS.filter((r) => !allowedRules.includes(r));
-  const myTaskIds =
-    missingTaskRules.length > 0
-      ? (
-          await prisma.task.findMany({
-            where: { organizationId, deletedAt: null, assignees: { some: { userId: user.userId } } },
-            select: { id: true },
-          })
-        ).map((t) => t.id)
-      : [];
-
-  const mine =
-    myTaskIds.length > 0
-      ? [{ rule: { in: [...missingTaskRules] }, entityType: 'Task', entityId: { in: myTaskIds } }]
-      : [];
-  // Approvals waiting on them, and today's events they are on — the bell's
-  // own clauses.
-  const approvals = await peopleAlertClauses(organizationId, user.userId);
-
-  if (allowedRules.length === 0 && mine.length === 0 && approvals.length === 0) return [];
+    active: true,
+  });
+  if (clauses.length === 0) return [];
 
   return prisma.alert.findMany({
-    where: { organizationId, resolvedAt: null, OR: [{ rule: { in: allowedRules } }, ...mine, ...approvals] },
+    where: { organizationId, resolvedAt: null, OR: clauses },
     orderBy: [{ severity: 'asc' }, { createdAt: 'desc' }],
     take: 40,
     select: { id: true, rule: true, message: true, severity: true, entityType: true },

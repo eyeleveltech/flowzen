@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MotionConfig } from 'framer-motion';
 import { useEffect, useState, type ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/stores';
 import { connectSSE, disconnectSSE } from '@/lib/sse';
 import { Toaster } from 'react-hot-toast';
@@ -71,6 +72,25 @@ export function Providers({ children }: { children: ReactNode }) {
 
 function SocketProvider({ children }: { children: ReactNode }) {
   const { isAuthenticated, loadFromStorage } = useAuthStore();
+  const router = useRouter();
+
+  /*
+   * A phone notification tapped while Flowzen is already open: the service
+   * worker focuses this window and says where to go (public/sw.js). Only a
+   * path of our own; the bell is opened rather than navigated to.
+   */
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    const onMessage = (e: MessageEvent) => {
+      const msg = e.data as { type?: string; url?: unknown } | null;
+      if (msg?.type !== 'flowzen:navigate' || typeof msg.url !== 'string') return;
+      if (!msg.url.startsWith('/') || msg.url.startsWith('//')) return;
+      router.push(msg.url);
+      if (/[?&]bell=1/.test(msg.url)) window.dispatchEvent(new Event('flowzen:open-bell'));
+    };
+    navigator.serviceWorker.addEventListener('message', onMessage);
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage);
+  }, [router]);
 
   useEffect(() => {
     loadFromStorage();

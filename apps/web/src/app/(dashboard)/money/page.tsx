@@ -32,6 +32,8 @@ interface Invoice {
   number: string;
   company: { id: string; name: string };
   amount: number;
+  /** The GST inside `amount`, when it was recorded. */
+  gstAmount?: number | null;
   status: string;
   raisedAt: string;
   dueAt: string;
@@ -376,7 +378,12 @@ export default function MoneyPage() {
                       )}
                     </td>
                     <td className="text-secondary font-mono">{inv.number}</td>
-                    <td className="font-semibold text-primary text-right">{formatMoney(inv.amount)}</td>
+                    <td className="font-semibold text-primary text-right">
+                      {formatMoney(inv.amount)}
+                      {inv.gstAmount ? (
+                        <span className="block text-micro font-normal text-secondary">incl. GST {formatMoney(inv.gstAmount)}</span>
+                      ) : null}
+                    </td>
                     <td className="text-right">
                       <span className={`text-sm font-semibold ${owed && owed > 0 ? (late ? 'text-danger' : 'text-warning-ink') : 'text-secondary'}`}>
                         {owed && owed > 0 ? formatMoney(owed) : '—'}
@@ -815,6 +822,8 @@ export default function MoneyPage() {
         <RecordPaymentModal
           invoiceId={payingInvoice.id}
           defaultAmount={payingInvoice.balanceDue || payingInvoice.amount}
+          invoiceTotal={payingInvoice.amount}
+          invoiceGst={payingInvoice.gstAmount}
           onClose={() => setPayingInvoice(null)}
           onRecorded={() => { setPayingInvoice(null); void load(); }}
         />

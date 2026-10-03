@@ -7,10 +7,26 @@ import { LAST_REVIEW } from '../services/taskApprovals.js';
 import { composeApprovalsReport } from '../services/approvalsReport.js';
 import { toCsv } from '../utils/csv.js';
 import { sendCsv } from '../utils/csvResponse.js';
+import { teamScope, peopleInScope } from '../services/teamScope.js';
 
 export const teamRouter = Router();
 
 teamRouter.use(authenticate);
+
+// ── Whose people this is ────────────────────────────────────────────────────
+//
+// For the line a Head sees on Team and All work: "Showing Video (12 people)".
+// `all` for everybody whose view is not limited — Management, and a Head who
+// leads no department yet.
+
+teamRouter.get('/scope', async (req: AuthRequest, res: Response, next) => {
+  try {
+    const scope = await teamScope(req.user!);
+    res.json({ success: true, scope: scope.all ? { all: true } : { all: false, departments: scope.departments } });
+  } catch (error) {
+    next(error);
+  }
+});
 
 // ── Member picker (name + id only) ──────────────────────────────────────────
 //
@@ -18,12 +34,17 @@ teamRouter.use(authenticate);
 // setup.admin everywhere else). /capacity needs work.team for task counts,
 // but a BD user with only company.write still needs to pick a company's
 // owner from *somewhere*, so this is gated on nothing but being logged in.
+//
+// Not limited to a Head's departments: assigning across departments is
+// normal, so the picker offers everybody. `?scoped=1` is for the screens that
+// filter BY person over a Head's own people — the calendar's team layer.
 
 teamRouter.get('/members', async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
+    const base = { organizationId: orgId, active: true };
     const members = await prisma.user.findMany({
-      where: { organizationId: orgId, active: true },
+      where: req.query.scoped === '1' ? await peopleInScope(req.user!, base) : base,
       orderBy: { name: 'asc' },
       select: { id: true, name: true, designation: true, dept: true, departmentId: true },
     });
@@ -47,7 +68,8 @@ teamRouter.get('/capacity', requirePermission('work.team'), async (req: AuthRequ
     }
 
     const members = await prisma.user.findMany({
-      where,
+      // A Head sees the people of the departments they lead.
+      where: await peopleInScope(req.user!, where),
       // In the departments' own order, as every other screen lists them.
       orderBy: [{ department: { sortOrder: 'asc' } }, { department: { name: 'asc' } }, { name: 'asc' }],
       select: {
@@ -138,9 +160,10 @@ teamRouter.get('/capacity', requirePermission('work.team'), async (req: AuthRequ
     /*
      * The departments: the organisation's own records, in their order — the
      * same list every screen offers, whatever the filter above narrowed
-     * `members` to.
+     * `members` to. A Head is offered only the ones they lead.
      */
-    const departments = await listDepartments(orgId);
+    const scope = await teamScope(req.user!);
+    const departments = (await listDepartments(orgId)).filter((d) => scope.all || scope.departmentIds.includes(d.id));
 
     if (req.query.format === 'csv') {
       const csv = toCsv(formatted, [
@@ -213,7 +236,9 @@ teamRouter.get('/:id', requirePermission('work.team'), async (req: AuthRequest, 
     const canSeeSalaries = hasPermission(req.user!, 'setup.admin');
 
     const member = await prisma.user.findFirst({
-      where: { id, organizationId: orgId },
+      // Somebody outside a Head's departments is "not on this team" to them —
+      // the same 404 as an id that does not exist.
+      where: await peopleInScope(req.user!, { id, organizationId: orgId }, { includeSelf: true }),
       select: {
         id: true,
         name: true,

@@ -68,6 +68,31 @@ export const useAuthStore = create<AuthStore>((set) => ({
 
 // ─── UI Store ─────────────────────────────────
 
+/*
+ * Zen's panel: open or closed, docked or expanded — remembered per browser.
+ *
+ * Every read and write is wrapped: storage can be switched off or full, and a
+ * panel that throws on open is worse than one that forgets. Anything that
+ * cannot be read comes back closed and docked.
+ */
+const ZEN_KEY = 'flowzen-zen-panel';
+type ZenPanel = { open: boolean; expanded: boolean };
+const readZen = (): ZenPanel => {
+  try {
+    const raw = JSON.parse(localStorage.getItem(ZEN_KEY) ?? 'null');
+    return { open: raw?.open === true, expanded: raw?.expanded === true };
+  } catch {
+    return { open: false, expanded: false };
+  }
+};
+const writeZen = (panel: ZenPanel) => {
+  try {
+    localStorage.setItem(ZEN_KEY, JSON.stringify(panel));
+  } catch {
+    // Remembering is a convenience; the panel works without it.
+  }
+};
+
 interface UIStore {
   sidebarOpen: boolean;
   sidebarCollapsed: boolean;
@@ -84,6 +109,20 @@ interface UIStore {
   setMobileSidebarOpen: (open: boolean) => void;
   setCommandPaletteOpen: (open: boolean) => void;
   setPageHeader: (title: string, subtitle?: string | null) => void;
+  /** Zen's panel. */
+  zenOpen: boolean;
+  zenExpanded: boolean;
+  /**
+   * Bumped when somebody opens Zen, not when a reload brings it back — so the
+   * box takes focus when asked for, and a page that reopens with Zen docked
+   * keeps its own keyboard (the calendar's T, J and K).
+   */
+  zenFocusToken: number;
+  setZenOpen: (open: boolean) => void;
+  toggleZen: () => void;
+  setZenExpanded: (expanded: boolean) => void;
+  /** Read back what this browser remembered. Once, after the first render. */
+  restoreZen: () => void;
 }
 
 export const useUIStore = create<UIStore>((set) => ({
@@ -98,6 +137,29 @@ export const useUIStore = create<UIStore>((set) => ({
   setMobileSidebarOpen: (open) => set({ mobileSidebarOpen: open }),
   setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
   setPageHeader: (title, subtitle = null) => set({ pageTitle: title, pageSubtitle: subtitle }),
+  zenOpen: false,
+  zenExpanded: false,
+  zenFocusToken: 0,
+  setZenOpen: (open) =>
+    set((s) => {
+      writeZen({ open, expanded: s.zenExpanded });
+      return { zenOpen: open, zenFocusToken: open ? s.zenFocusToken + 1 : s.zenFocusToken };
+    }),
+  toggleZen: () =>
+    set((s) => {
+      const open = !s.zenOpen;
+      writeZen({ open, expanded: s.zenExpanded });
+      return { zenOpen: open, zenFocusToken: open ? s.zenFocusToken + 1 : s.zenFocusToken };
+    }),
+  setZenExpanded: (expanded) =>
+    set((s) => {
+      writeZen({ open: s.zenOpen, expanded });
+      return { zenExpanded: expanded };
+    }),
+  restoreZen: () => {
+    const panel = readZen();
+    set({ zenOpen: panel.open, zenExpanded: panel.expanded });
+  },
 }));
 
 export * from './confirm';

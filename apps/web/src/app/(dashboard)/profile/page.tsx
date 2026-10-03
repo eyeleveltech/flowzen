@@ -36,6 +36,7 @@ import { PageSkeleton } from '@/components/ui/skeleton-loaders';
 import { getInitials, getAvatarColor } from '@/lib/utils';
 import { HeldAssets } from '@/components/assets/HeldAssets';
 import { GoogleCalendarCard } from '@/components/profile/GoogleCalendarCard';
+import { PhoneNotificationsCard } from '@/components/profile/PhoneNotificationsCard';
 import { presetLabel } from '@/lib/people';
 
 export default function ProfilePage() {
@@ -160,6 +161,9 @@ export default function ProfilePage() {
 
         {/* Optional, and only when the organisation has it switched on. */}
         <GoogleCalendarCard />
+
+        {/* Per device, and only when the organisation has it switched on. */}
+        <PhoneNotificationsCard />
 
         {/* ── What cannot be changed here, and why ────────────────────────── */}
         <Card padding="none">

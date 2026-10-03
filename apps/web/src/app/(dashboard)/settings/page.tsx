@@ -48,46 +48,9 @@ import { UsageTab } from './components/UsageTab';
 import { IntegrationsTab } from './components/IntegrationsTab';
 import { ApprovalsTab } from './components/ApprovalsTab';
 import { AssetsTab } from './components/AssetsTab';
+import { SETTINGS_GROUPS } from '@/config/settingsTabs';
 
-/**
- * The sections, in groups.
- *
- * Nine of them in one wrapping row of buttons came to two and a half rows on a
- * laptop, in the order they happened to be built — so "Trash" sat beside
- * "Onboarding" and the row you were on moved as the window changed width. They
- * answer three different kinds of question, and grouping them says which:
- * what the agency IS, WHO is here, and what HAPPENED.
- */
-const GROUPS = [
-  {
-    label: 'The agency',
-    tabs: [
-      { key: 'organisation', label: 'Organisation', caption: 'Identity, calendar, assistant' },
-      { key: 'documents', label: 'Tax & numbering', caption: 'GST, prefixes, currency' },
-      { key: 'proforma', label: 'Documents & billing', caption: 'What a document says' },
-      { key: 'email', label: 'Email', caption: 'How it is sent' },
-      { key: 'integrations', label: 'Integrations', caption: 'Google Calendar' },
-    ],
-  },
-  {
-    label: 'People & kit',
-    tabs: [
-      { key: 'team', label: 'Team', caption: 'Who is here' },
-      { key: 'departments', label: 'Departments', caption: 'Teams, heads, who is in each' },
-      { key: 'approvals', label: 'Approvals', caption: 'Who signs off work' },
-      { key: 'assets', label: 'Assets', caption: 'Tags and depreciation' },
-      { key: 'onboarding', label: 'Onboarding', caption: 'What a new client needs' },
-    ],
-  },
-  {
-    label: 'Records',
-    tabs: [
-      { key: 'trash', label: 'Trash', caption: 'Removed, not gone' },
-      { key: 'activity', label: 'Activity', caption: 'Everything that happened' },
-      { key: 'usage', label: 'Usage', caption: 'Who is using Flowzen' },
-    ],
-  },
-] as const;
+const GROUPS = SETTINGS_GROUPS;
 
 type TabKey = (typeof GROUPS)[number]['tabs'][number]['key'];
 
@@ -392,8 +355,13 @@ export default function SettingsPage() {
               <div key={group.label} className="flex shrink-0 gap-1.5 lg:flex-col lg:gap-0.5">
                 <p className="eyebrow hidden px-2 pb-1 lg:block">{group.label}</p>
                 {group.tabs
-                  // Integrations only when the server has the Google keys to offer.
-                  .filter((t) => t.key !== 'integrations' || config?.organization.googleCalendarConfigured)
+                  // Integrations only when the server has Google or phone-notification keys to offer.
+                  .filter(
+                    (t) =>
+                      t.key !== 'integrations' ||
+                      config?.organization.googleCalendarConfigured ||
+                      config?.organization.pushConfigured,
+                  )
                   // Who is using Flowzen is for management only — the server refuses everybody else too.
                   .filter((t) => t.key !== 'usage' || config?.me.preset === 'MANAGEMENT')
                   .map((t) => {
@@ -889,13 +857,17 @@ export default function SettingsPage() {
 
         {tab === 'departments' && <DepartmentsTab canEdit={canEdit} />}
 
-        {tab === 'integrations' && config.organization.googleCalendarConfigured && (
-          <IntegrationsTab
-            enabled={Boolean(config.organization.googleCalendarEnabled)}
-            canEdit={canEdit}
-            onChanged={() => void load()}
-          />
-        )}
+        {tab === 'integrations' &&
+          (config.organization.googleCalendarConfigured || config.organization.pushConfigured) && (
+            <IntegrationsTab
+              googleConfigured={Boolean(config.organization.googleCalendarConfigured)}
+              enabled={Boolean(config.organization.googleCalendarEnabled)}
+              pushConfigured={Boolean(config.organization.pushConfigured)}
+              pushEnabled={Boolean(config.organization.pushEnabled)}
+              canEdit={canEdit}
+              onChanged={() => void load()}
+            />
+          )}
 
         {tab === 'activity' && (
           <ActivityTab key={activityPerson} tz={tz} locale={locale} initialPerson={activityPerson} />

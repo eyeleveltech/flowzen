@@ -68,6 +68,7 @@ import { RecordPaymentModal } from '@/components/work/RecordPaymentModal';
 import { RetainerBillingStrip, type BillingSubject } from '@/components/work/RetainerBilling';
 import { RetainerBillingHistory } from '@/components/work/RetainerBillingBoard';
 import { billingStepFor } from '@/lib/retainerBilling';
+import { useZenForm } from '@/lib/zenForms';
 import { getPriorityDot, getPriorityLabel } from '@/lib/priority';
 
 type RStatus = 'ACTIVE' | 'STOPPED';
@@ -150,8 +151,26 @@ type Allocation = {
   user: { id: string; name: string; dept: string };
   confirmedBy: { id: string; name: string } | null;
 };
-type Payment = { id: string; amount: string | number | null; receivedAt: string; mode: string; reference: string | null };
-type Invoice = { id: string; number: string; amount: string | number | null; status: string; dueAt: string; paidAt: string | null; payments: Payment[] };
+type Payment = {
+  id: string;
+  amount: string | number | null;
+  /** The GST inside `amount`, when it was recorded. */
+  gstAmount?: string | number | null;
+  receivedAt: string;
+  mode: string;
+  reference: string | null;
+};
+type Invoice = {
+  id: string;
+  number: string;
+  amount: string | number | null;
+  /** The GST inside `amount`, when it was recorded. */
+  gstAmount?: string | number | null;
+  status: string;
+  dueAt: string;
+  paidAt: string | null;
+  payments: Payment[];
+};
 
 type MonthCard = {
   id: string;
@@ -281,6 +300,12 @@ export default function RetainerMonthCardPage() {
     },
   ];
   const [tab, setTab] = useTabState(tabs);
+  /*
+   * A month's proforma or invoice form a Zen card asked for (Zen Plan 4) —
+   * opened from the billing strip, for the month on the address. A key whose
+   * values are gone still names the form, which then opens for this month.
+   */
+  const [zenForm, zenFormOpened] = useZenForm();
   const [addingTask, setAddingTask] = useState(false);
   const [addingCost, setAddingCost] = useState(false);
   /** The cost row being corrected, if any. */
@@ -1029,7 +1054,22 @@ export default function RetainerMonthCardPage() {
             spent before any work appears. Onboarding text earns a permanent
             slot only while it is still telling you something.
           */}
-          {billingSubject && <RetainerBillingStrip subject={billingSubject} onChanged={() => void loadMonthCard()} />}
+          {billingSubject && (
+            <RetainerBillingStrip
+              subject={billingSubject}
+              onChanged={() => void loadMonthCard()}
+              openForm={
+                zenForm &&
+                (zenForm.name === 'monthProforma' || zenForm.name === 'monthInvoice') &&
+                (!zenForm.values.monthCardId || zenForm.values.monthCardId === billingSubject.monthCardId)
+                  ? zenForm.name === 'monthProforma'
+                    ? 'proforma'
+                    : 'invoice'
+                  : null
+              }
+              onFormOpened={zenFormOpened}
+            />
+          )}
 
           {!canEnterMoney && (
             <div className="mb-5 rounded-xl border border-dashed border-line bg-subtle/40 px-4 py-3.5 text-xs text-secondary">
@@ -1265,6 +1305,9 @@ export default function RetainerMonthCardPage() {
                       </div>
                       <div className="text-right">
                         <p className="text-sm font-semibold text-primary">{money(monthCard.invoice.amount)}</p>
+                        {Number(monthCard.invoice.gstAmount) > 0 && (
+                          <p className="text-micro text-secondary">incl. GST {money(monthCard.invoice.gstAmount)}</p>
+                        )}
                         <Badge
                           tone={
                             monthCard.invoice.status === 'PAID'
@@ -1288,7 +1331,12 @@ export default function RetainerMonthCardPage() {
                           {monthCard.invoice.payments.map((p) => (
                             <li key={p.id} className="flex items-center justify-between rounded-lg bg-subtle/40 px-3 py-2 text-sm">
                               <span className="text-secondary">{date(p.receivedAt)} · {p.mode}{p.reference ? ` · ${p.reference}` : ''}</span>
-                              <span className="font-medium text-primary">{money(p.amount)}</span>
+                              <span className="text-right font-medium text-primary">
+                                {money(p.amount)}
+                                {Number(p.gstAmount) > 0 && (
+                                  <span className="block text-micro font-normal text-secondary">incl. GST {money(p.gstAmount)}</span>
+                                )}
+                              </span>
                             </li>
                           ))}
                         </ul>
@@ -1403,6 +1451,8 @@ export default function RetainerMonthCardPage() {
         <RecordPaymentModal
           invoiceId={monthCard.invoice.id}
           defaultAmount={Number(monthCard.invoice.amount ?? 0)}
+          invoiceTotal={monthCard.invoice.amount}
+          invoiceGst={monthCard.invoice.gstAmount}
           onClose={() => setRecordingPayment(false)}
           onRecorded={() => {
             setRecordingPayment(false);

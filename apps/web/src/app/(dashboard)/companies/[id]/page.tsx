@@ -5,6 +5,7 @@ import { useWorkCacheNudge } from '@/hooks/useWorkCacheNudge';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, type TabDef } from '@/components/ui/tabs';
 import { plural } from '@/lib/utils';
+import { useZenForm } from '@/lib/zenForms';
 import { activityText, activityScope, activityDetail } from '@/lib/activity';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -52,10 +53,10 @@ import { AddVersionModal } from '@/components/clients/AddVersionModal';
 import { RowMenu } from '@/components/ui/row-menu';
 import { LoseProposalModal } from '@/components/clients/LoseProposalModal';
 import { NewProformaModal } from '@/components/clients/NewProformaModal';
-import { NewProjectModal } from '@/components/clients/NewProjectModal';
+import { NewProjectModal, type ProjectInitial } from '@/components/clients/NewProjectModal';
 import { RemoveCompanyModal } from '@/components/clients/RemoveCompanyModal';
 import { EditContactModal } from '@/components/clients/EditContactModal';
-import { NewRetainerModal } from '@/components/clients/NewRetainerModal';
+import { NewRetainerModal, type RetainerInitial } from '@/components/clients/NewRetainerModal';
 import { ScheduleFollowUpModal } from '@/components/clients/ScheduleFollowUpModal';
 import { TaskDrawer, type DrawerTask } from '@/components/work/TaskDrawer';
 import { withDueTime } from '@/lib/due-time';
@@ -116,10 +117,34 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
    * checkbox in the second made it a variant of paid work rather than its own
    * thing. It is also the only one a prospect can have.
    */
+  /*
+   * A form a Zen card asked for (Zen Plan 4): a proforma for a proposal, or
+   * the retainer or project from a won deal — opened filled in, saved only by
+   * the person pressing the form's own Save.
+   */
+  const [zenForm, zenFormOpened] = useZenForm();
+  const [retainerInitial, setRetainerInitial] = useState<RetainerInitial | undefined>(undefined);
+  const [projectInitial, setProjectInitial] = useState<ProjectInitial | undefined>(undefined);
   const [creatingSampleFor, setCreatingSampleFor] = useState<{
     companyId: string;
     companyName: string;
   } | null>(null);
+  useEffect(() => {
+    if (!zenForm || !company) return;
+    const v = zenForm.values;
+    const num = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) ? x : undefined);
+    const str = (x: unknown) => (typeof x === 'string' && x ? x : undefined);
+    if (zenForm.name === 'retainer') {
+      setRetainerInitial({ gstPercent: num(v.gstPercent), startDate: str(v.startDate), termMonths: num(v.termMonths) });
+      setCreatingRetainerFor({ companyId: company.id, companyName: company.name, monthlyValue: num(v.monthlyValue), sourceProposalId: str(v.sourceProposalId) });
+    } else if (zenForm.name === 'project') {
+      setProjectInitial({ name: str(v.name), gstPercent: num(v.gstPercent), startDate: str(v.startDate), endDate: str(v.endDate) });
+      setCreatingProjectFor({ companyId: company.id, companyName: company.name, quotedValue: num(v.quotedValue), sourceProposalId: str(v.sourceProposalId) });
+    } else if (zenForm.name === 'proposalProforma' && str(v.proposalId)) {
+      setRaisingProformaFor({ id: str(v.proposalId), defaultAmount: num(v.amount) ?? 0 });
+    }
+    zenFormOpened();
+  }, [zenForm, company, zenFormOpened]);
   const [schedulingFollowUp, setSchedulingFollowUp] = useState(false);
   /*
    * A follow-up IS a task, so it opens like one.
@@ -1573,10 +1598,15 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
       <NewProjectModal
         deals={unfulfilledDeals('PROJECT')}
         open={Boolean(creatingProjectFor)}
-        onClose={() => setCreatingProjectFor(null)}
+        onClose={() => {
+          setCreatingProjectFor(null);
+          setProjectInitial(undefined);
+        }}
         prefill={creatingProjectFor ?? undefined}
+        initial={projectInitial}
         onCreated={(id) => {
           setCreatingProjectFor(null);
+          setProjectInitial(undefined);
           toast.success('Project created');
           router.push(`/projects/${id}?from=company`);
         }}
@@ -1643,10 +1673,15 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
       <NewRetainerModal
         deals={unfulfilledDeals('RETAINER')}
         open={Boolean(creatingRetainerFor)}
-        onClose={() => setCreatingRetainerFor(null)}
+        onClose={() => {
+          setCreatingRetainerFor(null);
+          setRetainerInitial(undefined);
+        }}
         prefill={creatingRetainerFor ?? undefined}
+        initial={retainerInitial}
         onCreated={(id) => {
           setCreatingRetainerFor(null);
+          setRetainerInitial(undefined);
           toast.success('Retainer created');
           router.push(`/retainers/${id}?from=company`);
         }}

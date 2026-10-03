@@ -2,8 +2,9 @@ import { Router, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import { RolePreset } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
-import { authenticate, hasPermission, requirePermission, type AuthRequest } from '../middleware/auth.js';
+import { authenticate, hasPermission, requirePermission, resolvePermissions, type AuthRequest } from '../middleware/auth.js';
 import { emitToOrganization } from '../sse.js';
+import { isDepartmentScoped } from '../services/teamScope.js';
 
 /**
  * /api/departments — departments as real records (Departments Plan 1).
@@ -26,6 +27,41 @@ departmentsRouter.use(authenticate);
 
 /** Who may be a head: a person whose access is Department head or Management. */
 export const HEAD_PRESETS: RolePreset[] = [RolePreset.HEAD, RolePreset.MANAGEMENT];
+
+/**
+ * People with Department head access who lead no department.
+ *
+ * Their team view is not limited yet — teamScope leaves them seeing everybody
+ * until they are given a department — so Settings says so, by the same test
+ * the routes use.
+ */
+async function headsLeadingNothing(orgId: string) {
+  const [people, led] = await Promise.all([
+    prisma.user.findMany({
+      where: { organizationId: orgId, active: true, preset: { not: RolePreset.MANAGEMENT } },
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true, preset: true, permissions: true },
+    }),
+    prisma.department.findMany({
+      where: { organizationId: orgId, archivedAt: null, headId: { not: null } },
+      select: { headId: true },
+    }),
+  ]);
+  const heads = new Set(led.map((d) => d.headId));
+  return people
+    .filter(
+      (p) =>
+        !heads.has(p.id) &&
+        isDepartmentScoped({
+          userId: p.id,
+          organizationId: orgId,
+          preset: p.preset,
+          permissions: resolvePermissions(p.preset, p.permissions),
+          active: true,
+        }),
+    )
+    .map((p) => ({ id: p.id, name: p.name }));
+}
 
 const nameSchema = z.string().trim().min(1, 'A department needs a name.').max(60, 'Keep the name under 60 characters.');
 
@@ -108,7 +144,7 @@ departmentsRouter.get('/', async (req: AuthRequest, res: Response, next: NextFun
       return;
     }
     const withPeople = req.query.withPeople === '1';
-    const [departments, unplaced] = await Promise.all([
+    const [departments, unplaced, leadingNothing] = await Promise.all([
       listDepartments(orgId, { includeArchived, withPeople }),
       withPeople
         ? prisma.user.findMany({
@@ -117,8 +153,14 @@ departmentsRouter.get('/', async (req: AuthRequest, res: Response, next: NextFun
             select: { id: true, name: true, designation: true, preset: true },
           })
         : Promise.resolve(null),
+      withPeople ? headsLeadingNothing(orgId) : Promise.resolve(null),
     ]);
-    res.json({ success: true, departments, ...(unplaced ? { unplaced } : {}) });
+    res.json({
+      success: true,
+      departments,
+      ...(unplaced ? { unplaced } : {}),
+      ...(leadingNothing ? { headsLeadingNothing: leadingNothing } : {}),
+    });
   } catch (e) {
     next(e);
   }

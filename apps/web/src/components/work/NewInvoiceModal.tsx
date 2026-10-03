@@ -17,6 +17,7 @@ import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Field, FieldSelect } from '@/components/ui/field';
 import { ErrorNote } from '@/components/ui/empty-state';
+import { InvoiceGstFields, useInvoiceGst } from '@/components/work/InvoiceGstFields';
 import { monthLabel } from '@/lib/retainerBilling';
 
 type Target = { label: string; workType: 'RETAINER' | 'PROJECT'; monthCardId?: string; projectId?: string };
@@ -35,6 +36,7 @@ export function NewInvoiceModal({ onClose, onCreated }: Props) {
 
   const [number, setNumber] = useState('');
   const [amount, setAmount] = useState('');
+  const gst = useInvoiceGst(amount);
   const [raisedAt, setRaisedAt] = useState(new Date().toISOString().slice(0, 10));
   const [dueAt, setDueAt] = useState('');
   const [saving, setSaving] = useState(false);
@@ -85,7 +87,7 @@ export function NewInvoiceModal({ onClose, onCreated }: Props) {
   }, [companyId]);
 
   const selectedTarget = targets.find((t) => (t.monthCardId ?? t.projectId) === targetKey);
-  const canSave = Boolean(companyId) && Boolean(selectedTarget) && Boolean(number.trim()) && Number(amount) > 0 && Boolean(raisedAt);
+  const canSave = Boolean(companyId) && Boolean(selectedTarget) && Boolean(number.trim()) && Number(amount) > 0 && Boolean(raisedAt) && gst.gstValid;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,7 +97,8 @@ export function NewInvoiceModal({ onClose, onCreated }: Props) {
     try {
       await api.invoices.create({
         companyId,
-        amount: Number(amount),
+        amount: gst.on ? gst.total : Number(amount),
+        ...(gst.gstAmount !== null ? { gstAmount: gst.gstAmount } : {}),
         raisedAt,
         dueAt: dueAt || undefined,
         customNumber: number.trim(),
@@ -135,7 +138,8 @@ export function NewInvoiceModal({ onClose, onCreated }: Props) {
           />
 
           <Field label="Tally invoice number" value={number} onChange={setNumber} required placeholder="e.g. INV-2026-0142" />
-          <Field label="Amount (₹)" value={amount} onChange={setAmount} type="number" required />
+          <Field label={gst.on ? 'Amount before GST (₹)' : 'Amount (₹)'} value={amount} onChange={setAmount} type="number" required />
+          <InvoiceGstFields gst={gst} disabled={saving} />
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Raised on" value={raisedAt} onChange={setRaisedAt} type="date" required />
             <Field label="Due date" value={dueAt} onChange={setDueAt} type="date" hint="Defaults to 15 days from raised" />

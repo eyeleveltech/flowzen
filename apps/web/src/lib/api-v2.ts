@@ -117,6 +117,23 @@ async function request<T>(
   return (payload.data !== undefined ? payload.data : payload) as T;
 }
 
+/**
+ * The requests a Zen card may send: task changes and approvals, proposal
+ * flags, won and lost, and booking or moving an event. Nothing else — not a
+ * delete, not a cost, not a document.
+ */
+const ZEN_ALLOWED: [ZenRequest['method'], RegExp][] = [
+  ['PATCH', /^\/tasks\/[\w-]+$/],
+  ['PATCH', /^\/tasks\/[\w-]+\/status$/],
+  ['POST', /^\/tasks\/[\w-]+\/(approve|request-changes|submit-review)$/],
+  ['PATCH', /^\/proposals\/[\w-]+\/stage$/],
+  ['POST', /^\/proposals\/[\w-]+\/(win|lose)$/],
+  ['POST', /^\/calendar\/events$/],
+  ['PATCH', /^\/calendar\/events\/[\w-]+$/],
+];
+export const zenRequestAllowed = (req: ZenRequest | null | undefined): boolean =>
+  Boolean(req && ZEN_ALLOWED.some(([method, path]) => req.method === method && path.test(req.path)));
+
 const get = <T>(e: string) => request<T>(e);
 const post = <T>(e: string, body?: unknown) => request<T>(e, { method: 'POST', body });
 const patch = <T>(e: string, body?: unknown) => request<T>(e, { method: 'PATCH', body });
@@ -222,6 +239,46 @@ export type TaskDraft = {
   };
 };
 
+/**
+ * A job Zen has prepared (Zen Plan 4) — the same shape the server's
+ * `services/zenJobs.ts` builds. Every step holds the exact request for an
+ * endpoint that already exists; the panel sends it, on your own session, only
+ * when you press that step. Money documents are forms that open filled in.
+ */
+export type ZenRequest = { method: 'POST' | 'PATCH'; path: string; body?: Record<string, unknown> };
+export type ZenItem = {
+  label: string;
+  detail?: string;
+  request?: ZenRequest;
+  options?: { label: string; request: ZenRequest | null }[];
+  choice?: number;
+};
+export type ZenForm = {
+  name: 'proposalProforma' | 'monthProforma' | 'monthInvoice' | 'retainer' | 'project';
+  path: string;
+  values: Record<string, unknown>;
+};
+export type ZenStep =
+  | { kind: 'post'; label: string; detail?: string; items: ZenItem[]; after?: number[]; doneText?: string }
+  | { kind: 'form'; label: string; detail?: string; form: ZenForm; after?: number[] }
+  | { kind: 'link'; label: string; detail?: string; href: string }
+  | { kind: 'note'; label: string; detail?: string };
+export type ZenCard =
+  | { type: 'plan'; title: string; summary?: string[]; warnings?: string[]; notes?: string[]; link?: string; steps: ZenStep[] }
+  | {
+      type: 'message';
+      title: string;
+      to: { name: string; role: string; phone: string | null; email: string | null } | null;
+      subject: string;
+      text: string;
+      whatsapp: string;
+      mailto: string;
+      note?: string;
+      link?: string;
+    };
+/** What was recorded for a step once it was carried out, keyed "card.step". */
+export type ZenStepsDone = Record<string, { at?: string; result?: string | null }>;
+
 export type Role = 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER' | 'SALES' | 'MEMBER';
 
 export type CompanyStatus =
@@ -267,6 +324,9 @@ export interface OrgConfig {
     /** Settings → Integrations (setup.admin): the server has Google keys, and the switch. */
     googleCalendarConfigured?: boolean;
     googleCalendarEnabled?: boolean;
+    /** …and phone notifications: the server has VAPID keys, and the switch. */
+    pushConfigured?: boolean;
+    pushEnabled?: boolean;
     /**
      * The departments a person can belong to.
      *
@@ -958,6 +1018,8 @@ export interface BillingInvoice {
   number: string;
   status: string;
   amount: number;
+  /** The GST inside `amount`, when it was recorded. */
+  gstAmount?: number | null;
   raisedAt?: string;
   dueAt: string;
   /** Received so far. */
@@ -1432,6 +1494,19 @@ export const api = {
     /** Marks a draft as acted on, so reopening does not offer to create it twice. */
     markActed: (messageId: string, taskId?: string) =>
       post(`/assistant/messages/${messageId}/acted`, taskId ? { taskId } : {}),
+    /** Records one step of a prepared job as carried out, with what came back. */
+    markStep: (messageId: string, step: string, result: string) =>
+      post(`/assistant/messages/${messageId}/acted`, { step, result }),
+    /**
+     * Sends one step's request — a card's change — on your own session.
+     *
+     * Only the endpoints a prepared job may use get through, so a stored card
+     * can never be turned into a request to anything else.
+     */
+    sendStep: (req: ZenRequest) => {
+      if (!zenRequestAllowed(req)) return Promise.reject(new ApiError('Zen cannot make that change.', 400));
+      return req.method === 'PATCH' ? patch(req.path, req.body ?? {}) : post(req.path, req.body ?? {});
+    },
     /** What Zen has learned about how you work — readable, and deletable. */
     memory: () =>
       get<{ success: boolean; memories: { id: string; text: string; createdAt: string }[] }>('/assistant/memory'),
@@ -1484,6 +1559,8 @@ export const api = {
          * work on the board that you did not look at first.
          */
         onDraft?: (draft: TaskDraft) => void;
+        /** A prepared job — a plan of steps, or a message to send yourself. Nothing has happened yet. */
+        onCard?: (card: ZenCard) => void;
       },
     ): Promise<void> => {
       const res = await fetch(`${API_URL}/assistant/stream`, {
@@ -1527,6 +1604,7 @@ export const api = {
             error?: string;
             name?: string;
             draft?: TaskDraft;
+            card?: ZenCard;
             conversationId?: string;
             messageId?: string;
           };
@@ -1535,6 +1613,7 @@ export const api = {
           if (name === 'replace' && data.text) opts.onReplace?.(data.text);
           if (name === 'tool' && data.name) opts.onTool?.(data.name);
           if (name === 'draft' && data.draft) opts.onDraft?.(data.draft);
+          if (name === 'card' && data.card) opts.onCard?.(data.card);
           // Sent before the first token, so the panel holds the thread even if
           // the answer then fails — the next question continues it rather than
           // opening another.
@@ -2087,12 +2166,18 @@ export const api = {
     approvalsReport: (days: 7 | 30) => get<ApprovalsReport>(`/team/approvals-report?days=${days}`),
     capacity: (params: Record<string, string> = {}) =>
       get<{ success: boolean; departments: Department[]; members: any[] }>(`/team/capacity?${new URLSearchParams(params)}`),
-    /** Name + id only, for an owner picker — gated on nothing but being logged in, unlike capacity. */
-    members: () =>
+    /**
+     * Name + id only, for an owner picker — gated on nothing but being logged in, unlike capacity.
+     * Everybody, so a Head can assign across departments; `scoped` narrows it to a Head's own
+     * people, for filters over work they manage.
+     */
+    members: (opts: { scoped?: boolean } = {}) =>
       get<{
         success: boolean;
         members: { id: string; name: string; designation: string | null; dept: string; departmentId: string | null }[];
-      }>('/team/members'),
+      }>(`/team/members${opts.scoped ? '?scoped=1' : ''}`),
+    /** Whose people the caller manages: everybody, or the departments they lead. */
+    scope: () => get<{ success: boolean; scope: TeamScope }>('/team/scope'),
     /**
      * One person with the work actually on them — every task, and the project
      * or retainer month it belongs to. The capacity list counts tasks and
@@ -2329,7 +2414,13 @@ export const api = {
       const q = new URLSearchParams();
       if (opts.includeArchived) q.set('includeArchived', '1');
       if (opts.withPeople) q.set('withPeople', '1');
-      return get<{ success: boolean; departments: Department[]; unplaced?: DepartmentPerson[] }>(
+      return get<{
+        success: boolean;
+        departments: Department[];
+        unplaced?: DepartmentPerson[];
+        /** Department head access, but no department to lead — they still see everybody. */
+        headsLeadingNothing?: { id: string; name: string }[];
+      }>(
         `/departments${q.size ? `?${q}` : ''}`,
       );
     },
@@ -2377,6 +2468,20 @@ export const api = {
     /** Google's consent is a page, so this is where the browser goes — not a fetch. */
     connectUrl: () => `${API_URL}/google/connect`,
     disconnect: () => post<{ success: boolean }>('/google/disconnect'),
+  },
+
+  /** Profile → Phone notifications: this person's devices and switches. */
+  push: {
+    /** On for this organisation, and the key a browser subscribes with. */
+    config: () => get<{ success: boolean; enabled: boolean; publicKey: string | null }>('/push/config'),
+    subscribe: (sub: { endpoint: string; keys: { p256dh: string; auth: string } }) =>
+      post<{ success: boolean; device: PushDevice }>('/push/subscribe', sub),
+    devices: () => get<{ success: boolean; devices: PushDevice[] }>('/push/subscriptions'),
+    removeDevice: (id: string) => del<{ success: boolean }>(`/push/subscriptions/${id}`),
+    preferences: () => get<{ success: boolean; preferences: PushPreferences }>('/push/preferences'),
+    setPreferences: (prefs: Partial<PushPreferences>) =>
+      put<{ success: boolean; preferences: PushPreferences }>('/push/preferences', prefs),
+    test: () => post<{ success: boolean; devices: number }>('/push/test'),
   },
 
   calendar: {
@@ -2554,6 +2659,14 @@ export type Department = {
   people?: DepartmentPerson[];
 };
 export type DepartmentPerson = { id: string; name: string; designation: string | null; preset: string };
+
+/**
+ * Whose people the caller manages (Departments Plan 3). `all` for Management,
+ * for anybody without Team work, and for a Head who leads no department yet.
+ */
+export type TeamScope =
+  | { all: true }
+  | { all: false; departments: { id: string; name: string; peopleCount: number }[] };
 
 export type UsageSummary = {
   success: boolean;
@@ -2735,3 +2848,21 @@ export const COMPANY_STATUS: Record<CompanyStatus, { label: string; tone: string
   PROJECT_COMPLETED: { label: 'Project completed', tone: 'bg-info-tint text-info border-info/30' },
   CHURNED: { label: 'Churned', tone: 'bg-danger-tint text-danger border-danger/30' },
 };
+
+/** One device that turned phone notifications on. */
+export interface PushDevice {
+  id: string;
+  deviceLabel: string | null;
+  createdAt: string;
+  lastUsedAt: string | null;
+  /** So the Profile card can tell which row is the browser it is in. */
+  endpoint: string;
+}
+
+/** The four kinds of phone notification, each its own switch. */
+export interface PushPreferences {
+  pushApprovals: boolean;
+  pushCalendar: boolean;
+  pushTasks: boolean;
+  pushBell: boolean;
+}

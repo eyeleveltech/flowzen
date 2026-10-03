@@ -29,6 +29,7 @@ import Link from 'next/link';
 import { api, fileUrl, formatDate } from '@/lib/api-v2';
 import { useConfig, useDepartments, useTeamMembers } from '@/hooks/queries';
 import { usePageHeader } from '@/hooks/usePageHeader';
+import { TeamScopeLine } from '@/components/work/TeamScopeLine';
 import { StatTile, StatRow } from '@/components/ui/stat-tile';
 import { Card } from '@/components/ui/card';
 import { Field } from '@/components/ui/field';
@@ -95,7 +96,7 @@ type Task = {
   dueDate: string;
   /** Optional, "17:30" — shown after the date. */
   dueTime?: string | null;
-  assignees: { id: string; name: string; designation?: string | null }[];
+  assignees: { id: string; name: string; designation?: string | null; dept?: string | null }[];
   assignedAt: string | null;
   clientName: string | null;
   companyId: string | null;
@@ -248,6 +249,9 @@ export default function AllWorkPage() {
           {error instanceof Error ? error.message : 'Could not load the work'}
         </ErrorNote>
       )}
+
+      {/* A Head sees their departments' work; this says so. */}
+      <TeamScopeLine />
 
       <StatRow>
         <StatTile label="Open" value={counts.open} note="still owed" />
@@ -443,14 +447,24 @@ export default function AllWorkPage() {
                             {t.assignees[0].name}
                             {t.assignees.length > 1 ? ` +${t.assignees.length - 1}` : ''}
                           </span>
-                          {/* What they are called, not what the app lets them
-                              do — see lib/people.ts. It answers "should this
-                              person be carrying this?" at a glance. */}
-                          {t.assignees[0].designation && (
-                            <span className="block truncate text-micro text-secondary">
-                              {t.assignees[0].designation}
-                            </span>
-                          )}
+                          {/* Their department, then what they are called —
+                              not what the app lets them do (lib/people.ts).
+                              Together they answer "should this person be
+                              carrying this?" at a glance. The job title is
+                              left off when it only repeats the department
+                              ("Digital Marketing · Digital Marketing"). */}
+                          {(() => {
+                            const a = t.assignees[0];
+                            const line = [
+                              a.dept,
+                              a.designation && a.designation.toLowerCase() !== a.dept?.toLowerCase() ? a.designation : null,
+                            ].filter(Boolean);
+                            return line.length > 0 ? (
+                              <span className="block truncate text-micro text-secondary" title={line.join(' · ')}>
+                                {line.join(' · ')}
+                              </span>
+                            ) : null;
+                          })()}
                         </span>
                       </div>
                     )}

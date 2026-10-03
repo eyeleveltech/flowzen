@@ -77,7 +77,7 @@ type Milestone = {
   order: number;
   proformas?: { id: string; number: string; status: string }[];
   /** The invoice settling it, when one has been recorded. */
-  invoices?: { id: string; number: string; amount: string | number | null; status: string; paidAt?: string | null }[];
+  invoices?: { id: string; number: string; amount: string | number | null; gstAmount?: string | number | null; status: string; paidAt?: string | null }[];
 };
 type Task = {
   id: string;

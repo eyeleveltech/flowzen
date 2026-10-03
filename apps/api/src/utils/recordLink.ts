@@ -108,3 +108,14 @@ export const linkForUser = (
  * own desk — the read-only view drawn from its history. My Work decides which.
  */
 export const taskLink = (taskId: string): string => `/my-work?task=${taskId}`;
+
+/** A client's page, on one of its tabs (OVERVIEW, WORK, PROPOSALS, MONEY, AUDIT). */
+export const companyLink = (companyId: string, tab?: 'OVERVIEW' | 'WORK' | 'PROPOSALS' | 'MONEY' | 'AUDIT'): string =>
+  `/companies/${companyId}${tab ? `?tab=${tab}` : ''}`;
+
+/** One month of a retainer — the month card — optionally on one of its tabs. */
+export const retainerMonthLink = (
+  retainerId: string,
+  month: string,
+  tab?: 'projects' | 'costs' | 'allocations' | 'invoice' | 'billing',
+): string => `/retainers/${retainerId}?month=${month}${tab ? `&tab=${tab}` : ''}`;

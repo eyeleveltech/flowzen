@@ -27,7 +27,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { api, formatDate, formatMoney } from '@/lib/api-v2';
+import { api, formatDate } from '@/lib/api-v2';
 import { Drawer } from '@/components/ui/drawer';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
@@ -173,10 +173,6 @@ export function MemberDrawer({ memberId, onClose }: { memberId: string | null; o
                     label="Average close"
                     value={member.avgTurnaround ?? <span className="text-secondary">Nothing finished yet</span>}
                   />
-                  {/* Null, not zero — §9 keeps a salary behind setup.admin, and
-                      a masked figure printed as ₹0 is a wrong number rather
-                      than a hidden one. */}
-                  {member.monthlyCost != null && <Row label="Monthly cost" value={formatMoney(member.monthlyCost)} />}
                 </dl>
               </Card>
 

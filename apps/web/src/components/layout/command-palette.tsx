@@ -18,6 +18,7 @@ import {
   Receipt,
   ArrowRight,
   X,
+  Sparkles,
 } from 'lucide-react';
 import { ENQUIRY, enquiryName } from '@/lib/vocabulary';
 import {
@@ -101,7 +102,9 @@ export function CommandPalette() {
     },
     [queryClient],
   );
-  const { commandPaletteOpen, setCommandPaletteOpen } = useUIStore();
+  const { commandPaletteOpen, setCommandPaletteOpen, setZenOpen } = useUIStore();
+  // Zen is Management's, as on the server — nobody else is offered it.
+  const mayAskZen = useAuthStore((state) => state.user?.preset === 'MANAGEMENT');
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResults | null>(null);
   const [loading, setLoading] = useState(false);
@@ -359,8 +362,36 @@ export function CommandPalette() {
     return s;
   }, [results]);
 
+  /*
+   * "Ask Zen" — first, when the box is empty or the words are about Zen.
+   * Ctrl/Cmd + J does the same from anywhere.
+   */
+  const zenSections = useMemo((): Section[] => {
+    const q = query.trim().toLowerCase();
+    if (!mayAskZen || (q.length >= 2 && !'ask zen'.includes(q) && !q.includes('zen'))) return [];
+    return [
+      {
+        title: 'Zen',
+        icon: Sparkles,
+        items: [
+          {
+            id: 'ask-zen',
+            label: 'Ask Zen',
+            sub: 'Ctrl+J',
+            run: () => {
+              setCommandPaletteOpen(false);
+              setQuery('');
+              setResults(null);
+              setZenOpen(true);
+            },
+          },
+        ],
+      },
+    ];
+  }, [mayAskZen, query, setCommandPaletteOpen, setZenOpen]);
+
   /** Action mode replaces the find results; it never appears alongside them. */
-  const sections = actionSections ?? navSections;
+  const sections = actionSections ?? [...zenSections, ...navSections];
   const flatItems = useMemo(() => sections.flatMap((s) => s.items), [sections]);
 
   // Keep the selection inside the current result set.

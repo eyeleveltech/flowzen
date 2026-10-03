@@ -118,6 +118,8 @@ invoicesRouter.get('/', requirePermission('money.status'), async (req: AuthReque
          */
         hasDocument: inv.subtotal !== null,
         amount: canSeeFigures ? invoiceAmount : null,
+        /** The GST inside `amount`, when it was recorded. */
+        gstAmount: canSeeFigures && inv.gstAmount !== null ? Number(inv.gstAmount) : null,
         totalPaid: canSeeFigures ? totalPaid : null,
         balanceDue: canSeeFigures ? balanceDue : null,
         agingDays,
@@ -131,6 +133,7 @@ invoicesRouter.get('/', requirePermission('money.status'), async (req: AuthReque
         { label: 'Company', value: (i) => i.company.name },
         { label: 'Status', value: (i) => i.status },
         { label: 'Amount', value: (i) => i.amount ?? '' },
+        { label: 'GST', value: (i) => i.gstAmount ?? '' },
         { label: 'Total paid', value: (i) => i.totalPaid ?? '' },
         { label: 'Balance due', value: (i) => i.balanceDue ?? '' },
         { label: 'Raised', value: (i) => i.raisedAt.toISOString().slice(0, 10) },
@@ -237,6 +240,7 @@ invoicesRouter.get('/retainer-billing', requirePermission('money.figures'), asyn
             number: true,
             status: true,
             amount: true,
+            gstAmount: true,
             raisedAt: true,
             dueAt: true,
             payments: { select: { amount: true } },
@@ -323,6 +327,7 @@ invoicesRouter.get('/retainer-billing', requirePermission('money.figures'), asyn
                 number: inv.number,
                 status: inv.status,
                 amount: Number(inv.amount),
+                gstAmount: inv.gstAmount === null ? null : Number(inv.gstAmount),
                 raisedAt: inv.raisedAt,
                 dueAt: inv.dueAt,
                 paid,
@@ -487,6 +492,7 @@ invoicesRouter.get('/:id', async (req: AuthRequest, res: Response, next: NextFun
     const data = {
       ...invoice,
       amount: canSeeFigures ? invoiceAmount : null,
+      gstAmount: invoice.gstAmount === null ? null : money(invoice.gstAmount),
       totalPaid: canSeeFigures ? totalPaid : null,
       balanceDue: canSeeFigures ? balanceDue : null,
       subtotal: invoice.subtotal === null ? null : money(invoice.subtotal),
@@ -509,6 +515,7 @@ invoicesRouter.get('/:id', async (req: AuthRequest, res: Response, next: NextFun
       payments: invoice.payments.map((p) => ({
         ...p,
         amount: canSeeFigures ? Number(p.amount) : null,
+        gstAmount: p.gstAmount === null ? null : money(p.gstAmount),
       })),
     };
 
@@ -534,7 +541,13 @@ const workTypeSchema = z.enum(['MONTH_CARD', 'RETAINER', 'PROJECT']).transform((
 
 const createInvoiceSchema = z.object({
   companyId: z.string().min(1),
+  /** The payable total — GST included when there is any. Payments settle against it. */
   amount: z.number().positive(),
+  /**
+   * The GST inside `amount`, as on the Tally invoice. Left out or null: not
+   * recorded. Zero: no GST charged.
+   */
+  gstAmount: z.number().min(0).nullable().optional(),
   raisedAt: z.string().optional(),
   dueAt: z.string().optional(),
   workType: workTypeSchema.optional().nullable(),
@@ -572,6 +585,7 @@ invoicesRouter.post(
       const {
         companyId,
         amount,
+        gstAmount,
         raisedAt,
         dueAt,
         workType,
@@ -582,6 +596,12 @@ invoicesRouter.post(
         customNumber,
       } = parsed.data;
       let { monthCardId } = parsed.data;
+
+      // The GST is part of the total, so it is always less than it.
+      if (gstAmount != null && gstAmount >= amount) {
+        res.status(400).json({ success: false, error: 'The GST has to be less than the invoice total.' });
+        return;
+      }
 
       // Verify company belongs to org
       const company = await prisma.company.findFirst({
@@ -732,6 +752,7 @@ invoicesRouter.post(
               number: invoiceNumber,
               companyId,
               amount,
+              ...(gstAmount != null ? { gstAmount, gstApplicable: gstAmount > 0 } : {}),
               raisedAt: raisedDate,
               dueAt: dueDate,
               workType: (workType ?? (monthCardId ? TaskWorkType.MONTH_CARD : undefined)) as TaskWorkType | undefined,
@@ -777,7 +798,7 @@ invoicesRouter.post(
           entityType: 'Invoice',
           entityId: invoice.id,
           verb: 'created',
-          payload: { number: invoice.number, amount, companyName: company.name },
+          payload: { number: invoice.number, amount, ...(gstAmount != null ? { gstAmount } : {}), companyName: company.name },
         },
       });
 
@@ -789,7 +810,10 @@ invoicesRouter.post(
 );
 
 const paymentSchema = z.object({
+  /** What was received — GST included when there is any. */
   amount: z.number().positive(),
+  /** The GST inside `amount`. Left out or null: not recorded. */
+  gstAmount: z.number().min(0).nullable().optional(),
   receivedAt: z.string().optional(),
   mode: z.enum(['NEFT', 'RTGS', 'UPI', 'CHEQUE', 'BANK_TRANSFER', 'CASH']),
   reference: z.string().optional().nullable(),
@@ -811,6 +835,12 @@ invoicesRouter.post(
         res.status(400).json({ success: false, error: parsed.error.issues[0].message });
         return;
       }
+      const paymentGst = parsed.data.gstAmount;
+      // The GST is part of what was received, so it is always less than it.
+      if (paymentGst != null && paymentGst >= parsed.data.amount) {
+        res.status(400).json({ success: false, error: 'The GST has to be less than the amount received.' });
+        return;
+      }
 
       const invoice = await prisma.invoice.findFirst({
         where: { id, organizationId: orgId },
@@ -828,6 +858,7 @@ invoicesRouter.post(
         data: {
           invoiceId: id,
           amount: parsed.data.amount,
+          ...(paymentGst != null ? { gstAmount: paymentGst } : {}),
           receivedAt: receivedDate,
           mode: parsed.data.mode,
           reference: parsed.data.reference || undefined,
@@ -885,6 +916,7 @@ invoicesRouter.post(
           verb: isFullySettled ? 'fully_paid' : 'payment_received',
           payload: {
             paymentAmount: parsed.data.amount,
+            ...(paymentGst != null ? { paymentGst } : {}),
             totalPaid,
             invoiceNumber: invoice.number,
             companyName: invoice.company.name,
@@ -1090,6 +1122,9 @@ invoicesRouter.put(
           where: { id },
           data: {
             amount: snapshot.total,
+            gstAmount: parsed.data.gstApplicable
+              ? Math.round((snapshot.cgstAmount + snapshot.sgstAmount + snapshot.igstAmount) * 100) / 100
+              : 0,
             status: nextStatus,
             // Cleared when it stops being settled, so the date on the row is
             // never a payment date for a bill that is not paid.

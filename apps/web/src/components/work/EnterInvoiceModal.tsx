@@ -18,28 +18,40 @@ import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { ErrorNote } from '@/components/ui/empty-state';
+import { InvoiceGstFields, useInvoiceGst } from '@/components/work/InvoiceGstFields';
 
 type Props = {
   companyId: string;
   monthCardId: string;
   /** "October 2026", for the title. */
   monthLabel?: string;
+  /** Before GST — the month's fee, or the proforma's amount. */
   defaultAmount: number;
-  /** The proforma this invoice settles, when there is one. */
-  proforma?: { id: string; number: string } | null;
+  /** The retainer's GST rate. Above zero, GST starts ticked at this rate. */
+  gstPercent?: number | null;
+  /** The proforma this invoice settles, when there is one — with its GST, if it charged any. */
+  proforma?: { id: string; number: string; gst?: number | null } | null;
   onClose: () => void;
   onCreated: () => void;
 };
 
-export function EnterInvoiceModal({ companyId, monthCardId, monthLabel, defaultAmount, proforma, onClose, onCreated }: Props) {
+export function EnterInvoiceModal({ companyId, monthCardId, monthLabel, defaultAmount, gstPercent, proforma, onClose, onCreated }: Props) {
   const [number, setNumber] = useState('');
   const [amount, setAmount] = useState(defaultAmount > 0 ? String(defaultAmount) : '');
+  // A proforma that charged GST passes its exact figure on; otherwise the
+  // retainer's rate decides whether it starts ticked.
+  const proformaGst = proforma?.gst && proforma.gst > 0 ? proforma.gst : null;
+  const gst = useInvoiceGst(amount, {
+    defaultOn: proforma ? proformaGst !== null : (gstPercent ?? 0) > 0,
+    ratePercent: gstPercent,
+    defaultGst: proformaGst,
+  });
   const [raisedAt, setRaisedAt] = useState(new Date().toISOString().slice(0, 10));
   const [dueAt, setDueAt] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const canSave = Boolean(number.trim()) && Number(amount) > 0 && Boolean(raisedAt);
+  const canSave = Boolean(number.trim()) && Number(amount) > 0 && Boolean(raisedAt) && gst.gstValid;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,7 +64,8 @@ export function EnterInvoiceModal({ companyId, monthCardId, monthLabel, defaultA
         monthCardId,
         ...(proforma ? { proformaId: proforma.id } : {}),
         workType: 'RETAINER',
-        amount: Number(amount),
+        amount: gst.on ? gst.total : Number(amount),
+        ...(gst.gstAmount !== null ? { gstAmount: gst.gstAmount } : {}),
         raisedAt,
         dueAt: dueAt || undefined,
         customNumber: number.trim(),
@@ -79,7 +92,15 @@ export function EnterInvoiceModal({ companyId, monthCardId, monthLabel, defaultA
       <form onSubmit={submit}>
         <ModalBody className="space-y-4">
           <Field label="Invoice number (from Tally)" value={number} onChange={setNumber} required placeholder="e.g. INV-2026-0142" />
-          <Field label="Amount (₹)" value={amount} onChange={setAmount} type="number" required hint="As on the Tally invoice." />
+          <Field
+            label={gst.on ? 'Amount before GST (₹)' : 'Amount (₹)'}
+            value={amount}
+            onChange={setAmount}
+            type="number"
+            required
+            hint={gst.on ? undefined : 'As on the Tally invoice.'}
+          />
+          <InvoiceGstFields gst={gst} disabled={saving} />
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Raised on" value={raisedAt} onChange={setRaisedAt} type="date" required />
             <Field label="Due date" value={dueAt} onChange={setDueAt} type="date" hint="Defaults to 15 days from raised" />

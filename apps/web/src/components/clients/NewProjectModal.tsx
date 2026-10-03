@@ -33,11 +33,26 @@ type Prefill = {
   sourceProposalId?: string;
 };
 
+/**
+ * Values to start the form with — what Zen filled in (Zen Plan 4). Applied as
+ * the form opens, after its own defaults; the person still reads and saves it.
+ */
+export type ProjectInitial = {
+  name?: string;
+  gstPercent?: number;
+  startDate?: string;
+  endDate?: string;
+  ownerId?: string;
+  priority?: string;
+  description?: string;
+};
+
 type Props = {
   open: boolean;
   onClose: () => void;
   onCreated: (id: string) => void;
   prefill?: Prefill;
+  initial?: ProjectInitial;
   /**
    * The won deals this project could be coming from — see `NewRetainerModal`,
    * which asks the same question for the same reason: a project created from
@@ -82,7 +97,7 @@ type CustomRow = { label: string; percent: string; amount: string };
 const blankRow = (): CustomRow => ({ label: '', percent: '', amount: '' });
 
 
-export function NewProjectModal({ open, onClose, onCreated, prefill, deals = [], forceSample = false }: Props) {
+export function NewProjectModal({ open, onClose, onCreated, prefill, initial, deals = [], forceSample = false }: Props) {
   const [companies, setCompanies] = useState<Company[]>([]);
   const team = useTeamMembers();
   const [companyId, setCompanyId] = useState('');
@@ -143,11 +158,19 @@ export function NewProjectModal({ open, onClose, onCreated, prefill, deals = [],
     setDescription('');
     setBilling('STANDARD');
     setCustomRows([blankRow(), blankRow()]);
+    // What Zen filled in, over the defaults.
+    if (initial?.name) setName(initial.name);
+    if (initial?.gstPercent != null) setGstPercent(String(initial.gstPercent));
+    if (initial?.startDate) setStartDate(initial.startDate);
+    if (initial?.endDate) setEndDate(initial.endDate);
+    if (initial?.ownerId) setOwnerId(initial.ownerId);
+    if (initial?.priority) setPriority(initial.priority);
+    if (initial?.description) setDescription(initial.description);
     setError(null);
     if (!prefill) {
       void api.companies.list().then((res) => setCompanies(res.companies)).catch(() => {});
     }
-  }, [open, prefill]);
+  }, [open, prefill, initial]);
 
   const quoted = Number(quotedValue) || 0;
   const customPercentTotal = customRows.reduce((s, r) => s + (Number(r.percent) || 0), 0);

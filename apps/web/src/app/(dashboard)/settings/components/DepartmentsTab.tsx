@@ -326,6 +326,9 @@ export function DepartmentsTab({ canEdit }: { canEdit: boolean }) {
   const active = all.filter((d) => !d.archived);
   const archived = all.filter((d) => d.archived);
   const unplaced = data?.unplaced ?? [];
+  // Department head access with no department to lead: their view is not
+  // limited yet, so they still see everybody.
+  const leadingNothing = (data?.headsLeadingNothing ?? []).map((p) => p.name);
 
   // Anybody with Department head or Management access, wherever they sit.
   const headCandidates = useMemo(
@@ -417,6 +420,14 @@ export function DepartmentsTab({ canEdit }: { canEdit: boolean }) {
           <Note tone="warn">
             {andList(noHead)} {noHead.length === 1 ? 'has' : 'have'} no head yet.
             {canEdit && headCandidates.length === 0 ? ` ${HEAD_HINT}` : ''}
+          </Note>
+        )}
+        {leadingNothing.length > 0 && (
+          <Note tone="info">
+            {andList(leadingNothing)} {leadingNothing.length === 1 ? 'has' : 'have'} Department head access but{' '}
+            {leadingNothing.length === 1 ? 'leads' : 'lead'} no department, so still{' '}
+            {leadingNothing.length === 1 ? 'sees' : 'see'} everyone.
+            {canEdit ? ' Make them the head of their department below, or change their access in Team → Access.' : ''}
           </Note>
         )}
         {canEdit && <p className="text-xs text-secondary">{HEAD_HINT}</p>}

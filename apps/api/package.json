@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "build": "tsc && node -e \"require('fs').cpSync('src/services/zen', 'dist/services/zen', { recursive: true })\"",
     "typecheck": "tsc -p tsconfig.typecheck.json",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -53,6 +53,7 @@
     "openai": "^6.44.0",
     "puppeteer": "^25.2.0",
     "sanitize-html": "^2.17.6",
+    "web-push": "^3.6.7",
     "winston": "^3.19.0",
     "winston-daily-rotate-file": "^5.0.0",
     "zod": "^3.24.1"
@@ -68,6 +69,7 @@
     "@types/nodemailer": "^8.0.0",
     "@types/sanitize-html": "^2.16.1",
     "@types/supertest": "^7.2.0",
+    "@types/web-push": "^3.6.4",
     "prisma": "^6.2.0",
     "supertest": "^7.2.2",
     "tsx": "^4.19.2",

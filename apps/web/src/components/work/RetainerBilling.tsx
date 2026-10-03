@@ -14,7 +14,7 @@
  * reads the same wherever it is looked at.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { Check, Download, FileText, Mail, ReceiptText, Wallet, XCircle } from 'lucide-react';
 import { api, ApiError, formatMoney, type BillingStep, type RetainerBillingRow } from '@/lib/api-v2';
@@ -41,13 +41,28 @@ export function BillingNext({
   subject,
   onChanged,
   size = 'sm',
+  openForm,
+  onFormOpened,
 }: {
   subject: BillingSubject;
   onChanged: () => void;
   size?: 'sm' | 'md';
+  /**
+   * Open this month's proforma or invoice form straight away — what a Zen card
+   * asked for (Zen Plan 4). The form opens with its usual values; the person
+   * still checks it and presses Save.
+   */
+  openForm?: 'proforma' | 'invoice' | null;
+  /** Told once the form is open, so it is not opened a second time. */
+  onFormOpened?: () => void;
 }) {
   const confirm = useConfirmStore((st) => st.confirm);
   const [open, setOpen] = useState<null | 'proforma' | 'invoice' | 'payment' | 'email'>(null);
+  useEffect(() => {
+    if (!openForm) return;
+    setOpen(openForm);
+    onFormOpened?.();
+  }, [openForm, onFormOpened]);
   const { proforma, invoice, step } = subject;
   const label = monthLabel(subject.month);
   const live = isLiveProforma(proforma);
@@ -147,7 +162,12 @@ export function BillingNext({
           monthCardId={subject.monthCardId}
           monthLabel={label}
           defaultAmount={live && proforma ? proforma.amount : subject.fee}
-          proforma={live && proforma ? { id: proforma.id, number: proforma.number } : null}
+          gstPercent={subject.gstPercent}
+          proforma={
+            live && proforma
+              ? { id: proforma.id, number: proforma.number, gst: Math.round((proforma.total - proforma.amount) * 100) / 100 }
+              : null
+          }
           onClose={() => setOpen(null)}
           onCreated={() => {
             toast.success('Invoice entered');
@@ -159,6 +179,8 @@ export function BillingNext({
         <RecordPaymentModal
           invoiceId={invoice.id}
           defaultAmount={Math.max(0, invoice.amount - invoice.paid)}
+          invoiceTotal={invoice.amount}
+          invoiceGst={invoice.gstAmount}
           onClose={() => setOpen(null)}
           onRecorded={done}
         />
@@ -198,7 +220,18 @@ function Step({ n, title, state, detail }: { n: number; title: string; state: St
 
 const PF_STATUS: Record<string, string> = { UNPAID: 'waiting for payment', PAID: 'paid', EXPIRED: 'expired', CANCELLED: 'cancelled' };
 
-export function RetainerBillingStrip({ subject, onChanged }: { subject: BillingSubject; onChanged: () => void }) {
+export function RetainerBillingStrip({
+  subject,
+  onChanged,
+  openForm,
+  onFormOpened,
+}: {
+  subject: BillingSubject;
+  onChanged: () => void;
+  /** See `BillingNext`. */
+  openForm?: 'proforma' | 'invoice' | null;
+  onFormOpened?: () => void;
+}) {
   const { proforma, invoice, step } = subject;
   const live = isLiveProforma(proforma);
   const order: BillingStep[] = ['PROFORMA', 'INVOICE', 'PAYMENT', 'DONE'];
@@ -256,7 +289,7 @@ export function RetainerBillingStrip({ subject, onChanged }: { subject: BillingS
           <Step n={2} title="Invoice" state={invoice ? 'done' : stateOf(1)} detail={invoiceDetail} />
           <Step n={3} title="Paid" state={step === 'DONE' ? 'done' : stateOf(2)} detail={paidDetail} />
         </div>
-        <BillingNext subject={subject} onChanged={onChanged} />
+        <BillingNext subject={subject} onChanged={onChanged} openForm={openForm} onFormOpened={onFormOpened} />
       </div>
     </section>
   );

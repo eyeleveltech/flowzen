@@ -22,6 +22,7 @@ import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Field, FieldSelect } from '@/components/ui/field';
 import { ErrorNote, Note } from '@/components/ui/empty-state';
+import { InvoiceGstFields, paymentGstStart, useInvoiceGst } from '@/components/work/InvoiceGstFields';
 
 const MODES = [
   { value: 'NEFT', label: 'NEFT' },
@@ -40,7 +41,7 @@ export type MilestoneForBilling = {
   amount: string | number | null;
   status: string;
   /** The invoice already recorded against it, when there is one. */
-  invoice?: { id: string; number: string; amount: string | number | null } | null;
+  invoice?: { id: string; number: string; amount: string | number | null; gstAmount?: string | number | null } | null;
 };
 
 /**
@@ -64,9 +65,22 @@ export function MilestoneInvoiceModal({
   onDone: () => void;
 }) {
   const due = Number(milestone.amount ?? 0);
+  const invoicing = mode === 'INVOICE';
+
+  // A payment against an invoice that carries GST starts as the invoice's
+  // total, split in its own ratio.
+  const [payStart] = useState(() => {
+    const total = Number(milestone.invoice?.amount ?? 0);
+    return invoicing ? null : paymentGstStart(total, { total, gst: Number(milestone.invoice?.gstAmount ?? 0) });
+  });
+  const startAmount = payStart?.on ? payStart.base : due;
 
   const [number, setNumber] = useState('');
-  const [amount, setAmount] = useState(due > 0 ? String(due) : '');
+  const [amount, setAmount] = useState(startAmount > 0 ? String(startAmount) : '');
+  const gst = useInvoiceGst(
+    amount,
+    payStart?.on ? { defaultOn: true, ratePercent: payStart.ratePercent, defaultGst: payStart.gst } : {},
+  );
   const [raisedAt, setRaisedAt] = useState(today());
   const [dueAt, setDueAt] = useState('');
   const [payMode, setPayMode] = useState('NEFT');
@@ -74,9 +88,11 @@ export function MilestoneInvoiceModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const invoicing = mode === 'INVOICE';
   const canSave =
-    Number(amount) > 0 && (invoicing ? number.trim().length > 0 && Boolean(raisedAt) : Boolean(raisedAt)) && !busy;
+    Number(amount) > 0 &&
+    (invoicing ? number.trim().length > 0 && Boolean(raisedAt) : Boolean(raisedAt)) &&
+    gst.gstValid &&
+    !busy;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -89,7 +105,8 @@ export function MilestoneInvoiceModal({
           companyId,
           projectId,
           milestoneId: milestone.id,
-          amount: Number(amount),
+          amount: gst.on ? gst.total : Number(amount),
+          ...(gst.gstAmount !== null ? { gstAmount: gst.gstAmount } : {}),
           // The number Tally gave it. Without one the server would allocate
           // its own, and then two books would disagree about what this is
           // called.
@@ -101,7 +118,8 @@ export function MilestoneInvoiceModal({
       } else {
         if (!milestone.invoice) throw new Error('There is no invoice against this milestone yet.');
         await api.invoices.recordPayment(milestone.invoice.id, {
-          amount: Number(amount),
+          amount: gst.on ? gst.total : Number(amount),
+          ...(gst.gstAmount !== null ? { gstAmount: gst.gstAmount } : {}),
           receivedAt: raisedAt,
           mode: payMode,
           reference: reference.trim() || null,
@@ -147,7 +165,7 @@ export function MilestoneInvoiceModal({
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Field
-              label={invoicing ? 'Amount (₹)' : 'Amount received (₹)'}
+              label={gst.on ? 'Amount before GST (₹)' : invoicing ? 'Amount (₹)' : 'Amount received (₹)'}
               value={amount}
               onChange={setAmount}
               type="number"
@@ -165,6 +183,8 @@ export function MilestoneInvoiceModal({
               hint={invoicing ? undefined : 'The day the money reached you — change it if that was not today.'}
             />
           </div>
+
+          <InvoiceGstFields gst={gst} disabled={busy} kind={invoicing ? 'invoice' : 'payment'} />
 
           {invoicing ? (
             <Field

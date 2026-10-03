@@ -1,5 +1,9 @@
 import { prisma } from '../lib/prisma.js';
 import type { AiTool } from './ai/types.js';
+import { ZEN_LOOKUPS, isZenLookup, runZenLookup } from './zenLookups.js';
+import { repeatLabel } from './taskRepeat.js';
+import { companyLink, rawLinkFor, retainerMonthLink, taskLink } from '../utils/recordLink.js';
+import { proposalProbability, STAGE_PROBABILITY_SELECT } from '../utils/stageProbability.js';
 
 /**
  * What Zen may look up, and how.
@@ -33,12 +37,26 @@ import type { AiTool } from './ai/types.js';
  *   4. Bounded. Every list takes a limit and caps it, because a model asking
  *      for "all tasks" should not be able to put four thousand rows on the
  *      wire.
+ *   5. Linked. Every row carries a `link` to where it is in the app, built by
+ *      utils/recordLink.ts like every other link — so an answer can link what
+ *      it names without Zen ever making a link up.
+ *
+ * The lookups added later (alerts, approvals, outreach, proformas, a retainer
+ * month, costs, the forecast, history, the brief) are in `zenLookups.ts`.
  */
 
 const CAP = 50;
 const limited = (n: unknown) => Math.min(Number(n) || 25, CAP);
 const money = (v: unknown) => Number(v ?? 0);
 const day = (d: Date | null | undefined) => (d ? d.toISOString().slice(0, 10) : null);
+/**
+ * A client named by the model — by name, or by the id it read off the page
+ * they are on. Matching names alone, a question asked from a client's own page
+ * ("what do they owe us?") came back empty.
+ */
+const clientMatch = (v: unknown) => ({
+  OR: [{ id: String(v) }, { name: { contains: String(v), mode: 'insensitive' as const } }],
+});
 
 /** The shape Gemini is given. Names match the handlers below. */
 export const ZEN_TOOLS = [
@@ -77,10 +95,11 @@ export const ZEN_TOOLS = [
   {
     name: 'getTasks',
     description:
-      'Tasks, with their titles. Filter by client, by person, by month, or by status. Use for "what is on my plate", "what is Janani behind on", "what is late".',
+      'Tasks, with their titles and whether they repeat. Filter by client, by person, by month, or by status. Use for "what is on my plate", "what is Janani behind on", "what is late".',
     parameters: {
       type: 'object',
       properties: {
+        task: { type: 'string', description: 'Part of a task title, or a task id — for one task.' },
         client: { type: 'string' },
         person: { type: 'string', description: 'A team member\'s name.' },
         month: { type: 'string', description: 'As 2026-09.' },
@@ -150,6 +169,7 @@ export const ZEN_TOOLS = [
       },
     },
   },
+  ...ZEN_LOOKUPS,
 ] as const satisfies readonly AiTool[];
 
 export type ZenToolName = (typeof ZEN_TOOLS)[number]['name'];
@@ -195,6 +215,7 @@ export async function runZenTool(
           ...(args.status ? { status: String(args.status) as never } : {}),
         },
         select: {
+          id: true,
           name: true,
           status: true,
           vertical: true,
@@ -210,6 +231,7 @@ export async function runZenTool(
         vertical: c.vertical,
         city: c.city,
         owner: c.owner?.name ?? null,
+        link: companyLink(c.id),
       }));
     }
 
@@ -219,6 +241,7 @@ export async function runZenTool(
       const full = await prisma.company.findUnique({
         where: { id: found.id },
         select: {
+          id: true,
           name: true,
           status: true,
           vertical: true,
@@ -227,9 +250,9 @@ export async function runZenTool(
           owner: { select: { name: true } },
           people: { select: { name: true, role: true, email: true, phone: true } },
           retainers: {
-            select: { monthlyValue: true, startDate: true, termMonths: true, status: true },
+            select: { id: true, monthlyValue: true, startDate: true, termMonths: true, status: true },
           },
-          projects: { select: { name: true, quotedValue: true, status: true, endDate: true } },
+          projects: { where: { deletedAt: null }, select: { id: true, name: true, quotedValue: true, status: true, endDate: true } },
           proposals: {
             where: { deletedAt: null, stage: { notIn: ['WON', 'LOST', 'EXPIRED'] } },
             select: { kind: true, stage: true, versions: { orderBy: { n: 'desc' }, take: 1, select: { value: true } } },
@@ -244,23 +267,33 @@ export async function runZenTool(
         city: full.city,
         website: full.website,
         owner: full.owner?.name ?? null,
-        contacts: full.people.map((p) => ({ name: p.name, role: p.role, email: p.email, phone: p.phone })),
+        link: companyLink(full.id),
+        contacts: full.people.map((p) => ({
+          name: p.name,
+          role: p.role,
+          email: p.email,
+          phone: p.phone,
+          link: companyLink(full.id),
+        })),
         retainers: full.retainers.map((r) => ({
           monthlyFee: money(r.monthlyValue),
           startedOn: day(r.startDate),
           termMonths: r.termMonths,
           status: r.status,
+          link: rawLinkFor('Retainer', r.id),
         })),
         projects: full.projects.map((p) => ({
           name: p.name,
           quoted: money(p.quotedValue),
           status: p.status,
           endsOn: day(p.endDate),
+          link: rawLinkFor('Project', p.id),
         })),
         openProposals: full.proposals.map((p) => ({
           kind: p.kind,
           stage: p.stage,
           value: money(p.versions[0]?.value),
+          link: companyLink(full.id, 'PROPOSALS'),
         })),
       };
     }
@@ -272,8 +305,11 @@ export async function runZenTool(
         select: {
           status: true,
           revenue: true,
+          retainerId: true,
           retainer: { select: { company: { select: { name: true } } } },
-          costs: { select: { amount: true, category: true, vendor: true } },
+          // Nested, so the soft-delete default does not reach it: a cost
+          // somebody deleted must not go on counting here.
+          costs: { where: { deletedAt: null }, select: { amount: true, category: true, vendor: true } },
         },
       });
       const rows = cards.map((c) => {
@@ -286,6 +322,7 @@ export async function runZenTool(
           profit: cost === null ? null : fee - cost,
           marginPercent: cost === null || fee === 0 ? null : Math.round(((fee - cost) / fee) * 1000) / 10,
           monthStatus: c.status,
+          link: retainerMonthLink(c.retainerId, month),
         };
       });
       const fee = rows.reduce((s, r) => s + r.fee, 0);
@@ -300,10 +337,14 @@ export async function runZenTool(
           profit: cost === null ? null : fee - cost,
           marginPercent: cost === null || fee === 0 ? null : Math.round(((fee - cost) / fee) * 1000) / 10,
         },
-        note:
+        note: [
           costed.length === rows.length
-            ? undefined
+            ? null
             : 'Some retainers have no costs entered. Their profit is unknown, not the whole fee.',
+          'Cost here is the costs entered only — people cost (time split × salaries) is not included, so profit can read higher than on Money.',
+        ]
+          .filter(Boolean)
+          .join(' '),
       };
     }
 
@@ -314,11 +355,16 @@ export async function runZenTool(
           organizationId,
           deletedAt: null,
           ...(args.month ? { monthCard: { month: String(args.month) } } : {}),
+          ...(args.task
+            ? { AND: [{ OR: [{ id: String(args.task) }, { title: { contains: String(args.task), mode: 'insensitive' as const } }] }] }
+            : {}),
           ...(args.client
             ? {
                 OR: [
-                  { monthCard: { retainer: { company: { name: { contains: String(args.client), mode: 'insensitive' as const } } } } },
-                  { project: { company: { name: { contains: String(args.client), mode: 'insensitive' as const } } } },
+                  { monthCard: { retainer: { company: clientMatch(args.client) } } },
+                  { project: { company: clientMatch(args.client) } },
+                  // A follow-up belongs to its client without a project or a month.
+                  { company: clientMatch(args.client) },
                 ],
               }
             : {}),
@@ -336,10 +382,12 @@ export async function runZenTool(
             : {}),
         },
         select: {
+          id: true,
           title: true,
           status: true,
           priority: true,
           dueDate: true,
+          repeat: { select: { frequency: true, weekday: true, dayOfMonth: true, stoppedAt: true } },
           monthCard: {
             select: { month: true, retainer: { select: { company: { select: { name: true } } } } },
           },
@@ -360,16 +408,15 @@ export async function runZenTool(
         partOf: t.retainerProject?.name ?? t.project?.name ?? 'Internal',
         month: t.monthCard?.month ?? null,
         assignedTo: t.assignees.map((a) => a.user.name),
+        repeats: t.repeat ? (t.repeat.stoppedAt ? 'stopped repeating' : repeatLabel(t.repeat)) : null,
+        link: taskLink(t.id),
       }));
     }
 
     case 'getPipeline': {
-      const odds: Record<string, number> = {
-        PROPOSAL_SENT: 30,
-        IN_NEGOTIATION: 60,
-        PROFORMA_ISSUED: 85,
-        VERBAL_YES: 90,
-      };
+      // The organisation's own stage weights and each deal's override — the
+      // same figure the Pipeline board shows, not a fixed copy of the defaults.
+      const org = await prisma.organization.findUnique({ where: { id: organizationId }, select: STAGE_PROBABILITY_SELECT });
       const rows = await prisma.proposal.findMany({
         where: {
           organizationId,
@@ -381,7 +428,9 @@ export async function runZenTool(
         select: {
           kind: true,
           stage: true,
+          probabilityOverride: true,
           updatedAt: true,
+          companyId: true,
           company: { select: { name: true } },
           owner: { select: { name: true } },
           versions: { orderBy: { n: 'desc' }, take: 1, select: { value: true, scopeSummary: true } },
@@ -395,9 +444,10 @@ export async function runZenTool(
         stage: p.stage,
         value: money(p.versions[0]?.value),
         scope: p.versions[0]?.scopeSummary ?? null,
-        probability: odds[p.stage] ?? 0,
+        probability: proposalProbability(p, org),
         owner: p.owner?.name ?? null,
         daysSinceItMoved: Math.max(0, Math.ceil((Date.now() - p.updatedAt.getTime()) / 86_400_000)),
+        link: companyLink(p.companyId, 'PROPOSALS'),
       }));
     }
 
@@ -406,16 +456,17 @@ export async function runZenTool(
       const rows = await prisma.invoice.findMany({
         where: {
           organizationId,
-          ...(overdueOnly ? { status: { not: 'PAID' as never }, dueAt: { lt: new Date() } } : {}),
-          ...(args.client
-            ? { company: { name: { contains: String(args.client), mode: 'insensitive' as const } } }
-            : {}),
+          // A cancelled invoice is owed by nobody, so it is never overdue.
+          ...(overdueOnly ? { status: { notIn: ['PAID', 'CANCELLED'] as never }, dueAt: { lt: new Date() } } : {}),
+          ...(args.client ? { company: clientMatch(args.client) } : {}),
         },
         select: {
+          id: true,
           number: true,
           amount: true,
           status: true,
           dueAt: true,
+          companyId: true,
           company: { select: { name: true } },
         },
         orderBy: { dueAt: 'asc' },
@@ -428,6 +479,9 @@ export async function runZenTool(
         status: i.status,
         due: day(i.dueAt),
         daysLate: Math.max(0, Math.ceil((Date.now() - i.dueAt.getTime()) / 86_400_000)),
+        // Money is where a payment is recorded; the client's page lists it with their other documents.
+        link: rawLinkFor('Invoice', i.id),
+        clientLink: companyLink(i.companyId, 'MONEY'),
       }));
     }
 
@@ -441,11 +495,10 @@ export async function runZenTool(
           // phantom row.
           deletedAt: null,
           ...(args.status ? { status: String(args.status) as never } : {}),
-          ...(args.client
-            ? { company: { name: { contains: String(args.client), mode: 'insensitive' as const } } }
-            : {}),
+          ...(args.client ? { company: clientMatch(args.client) } : {}),
         },
         select: {
+          id: true,
           name: true,
           quotedValue: true,
           status: true,
@@ -468,6 +521,7 @@ export async function runZenTool(
         owner: p.owner?.name ?? null,
         milestonesPaid: p.milestones.filter((m) => m.status === 'PAID').length,
         milestones: p.milestones.length,
+        link: rawLinkFor('Project', p.id),
       }));
     }
 
@@ -507,7 +561,7 @@ export async function runZenTool(
         month,
         departments: [...by.entries()]
           .sort(([a], [b]) => order.indexOf(a) - order.indexOf(b))
-          .map(([id, v]) => ({ department: departments.find((d) => d.id === id)?.name ?? 'No department', ...v })),
+          .map(([id, v]) => ({ department: departments.find((d) => d.id === id)?.name ?? 'No department', ...v, link: '/members' })),
       };
     }
 
@@ -518,6 +572,7 @@ export async function runZenTool(
           ...(args.category ? { category: String(args.category).toUpperCase() as never } : {}),
         },
         select: {
+          id: true,
           tag: true,
           name: true,
           category: true,
@@ -537,6 +592,7 @@ export async function runZenTool(
         status: a.status,
         condition: a.condition,
         heldBy: a.currentHolder?.name ?? null,
+        link: rawLinkFor('Asset', a.id),
       }));
       return args.holder
         ? mapped.filter((a) => a.heldBy?.toLowerCase().includes(String(args.holder).toLowerCase()))
@@ -544,6 +600,7 @@ export async function runZenTool(
     }
 
     default:
+      if (isZenLookup(name)) return runZenLookup(name, args, organizationId);
       return { error: `There is no tool called "${name}".` };
   }
 }

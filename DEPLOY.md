@@ -70,3 +70,30 @@ Cloud project owned by the company Workspace. Personal Gmail accounts are not su
 Then each person connects from **Profile → Google Calendar**. Disconnecting there revokes
 Flowzen's access, deletes what Flowzen stored, and deletes the "Flowzen" calendar from
 their Google.
+
+## Phone notifications (one-time setup, optional)
+Approvals, bookings and task changes can reach people's phones as notifications
+(standard Web Push — free, no third-party account). Android works in Chrome; an iPhone
+works only once Flowzen is added to the Home Screen (iOS 16.4+) and opened from there.
+
+1. Generate the keys **once**, on any machine:
+   ```
+   npx web-push generate-vapid-keys
+   ```
+2. **Server env** — add to `/var/www/flowzen/.env`, then Scenario A (rebuild and restart):
+   ```
+   VAPID_PUBLIC_KEY=<the public key>
+   VAPID_PRIVATE_KEY=<the private key>
+   VAPID_SUBJECT=mailto:<an admin email>
+   ```
+   **Never commit the keys.** `.env.example` lists the names with no values.
+3. **Keep the same keys.** Generating new ones later silently invalidates every phone that
+   has already turned notifications on; each person would have to turn them on again.
+   Use the same keys locally and in production only if you accept that a local test
+   device then also works against production.
+4. In Flowzen: **Settings → Integrations** → switch **Phone notifications** on.
+   The switch only appears once the server has all three keys.
+
+Then each person turns them on from **Profile → Phone notifications**, per device, and
+picks which kinds they want. Pushes outside working hours wait for the next working
+morning.

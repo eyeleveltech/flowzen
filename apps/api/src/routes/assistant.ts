@@ -70,8 +70,12 @@ const askSchema = z.object({
    */
   page: z
     .object({
+      path: z.string().max(200).optional(),
+      search: z.string().max(500).optional(),
       route: z.string().max(200).optional(),
       projectId: z.string().max(40).optional(),
+      retainerProjectId: z.string().max(40).optional(),
+      assetId: z.string().max(40).optional(),
       retainerId: z.string().max(40).optional(),
       companyId: z.string().max(40).optional(),
       monthCardId: z.string().max(40).optional(),
@@ -112,7 +116,7 @@ assistantRouter.post('/ask', requireManagement(), async (req: AuthRequest, res: 
     // list; a run of them after a key expires reads as a broken feature.
     opened = thread.isNew ? thread.id : null;
 
-    const { answer, model, provider, used, draft, note } = await askMoneyAssistant({
+    const { answer, model, provider, used, draft, cards, note } = await askMoneyAssistant({
       organizationId: req.user!.organizationId,
       userId: req.user!.userId,
       question: parsed.data.question,
@@ -128,6 +132,7 @@ assistantRouter.post('/ask', requireManagement(), async (req: AuthRequest, res: 
       question: parsed.data.question,
       answer,
       draft,
+      cards,
     });
 
     // `used` says what Zen went and read to answer — useful in the panel and
@@ -143,6 +148,8 @@ assistantRouter.post('/ask', requireManagement(), async (req: AuthRequest, res: 
       month,
       used,
       draft,
+      // Prepared jobs: steps the browser sends on a click, never sent from here.
+      cards,
       // "(Answer cut short.)" when it hit the token ceiling — for showing muted.
       ...(note ? { note } : {}),
       conversationId: thread.id,
@@ -206,7 +213,17 @@ assistantRouter.get('/threads/:id', requireManagement(), async (req: AuthRequest
         title: true,
         messages: {
           orderBy: { createdAt: 'asc' },
-          select: { id: true, role: true, text: true, draft: true, actedAt: true, createdTaskId: true, createdAt: true },
+          select: {
+            id: true,
+            role: true,
+            text: true,
+            draft: true,
+            actedAt: true,
+            createdTaskId: true,
+            cards: true,
+            stepsDone: true,
+            createdAt: true,
+          },
         },
       },
     });
@@ -240,25 +257,47 @@ assistantRouter.delete('/threads/:id', requireManagement(), async (req: AuthRequ
   }
 });
 
-/** Marks the draft on a message as acted on, so reopening does not offer it twice. */
+/**
+ * Marks what was done on a message, so reopening does not offer it twice.
+ *
+ * Without `step`, the task draft was created (`taskId` is what it became).
+ * With `step` — "card.step", as the panel numbers them — one step of a plan
+ * was carried out, and `result` is what came back ("5 moved, 1 refused: …").
+ * Recording is all this does: the change itself was the browser's request to
+ * the real endpoint, made before this was called.
+ */
 assistantRouter.post('/messages/:id/acted', requireManagement(), async (req: AuthRequest, res: Response, next) => {
   try {
     const taskId = typeof req.body?.taskId === 'string' ? req.body.taskId : null;
+    const step = typeof req.body?.step === 'string' && /^\d{1,2}\.\d{1,2}$/.test(req.body.step) ? req.body.step : null;
+    const result = typeof req.body?.result === 'string' ? req.body.result.slice(0, 500) : null;
     const message = await prisma.zenMessage.findFirst({
       where: {
         id: String(req.params.id),
         conversation: { userId: req.user!.userId, organizationId: req.user!.organizationId },
       },
-      select: { id: true },
+      select: { id: true, stepsDone: true },
     });
     if (!message) {
       res.status(404).json({ success: false, error: 'Message not found' });
       return;
     }
-    await prisma.zenMessage.update({
-      where: { id: message.id },
-      data: { actedAt: new Date(), createdTaskId: taskId },
-    });
+    if (typeof req.body?.step === 'string' && !step) {
+      res.status(400).json({ success: false, error: 'That is not a step.' });
+      return;
+    }
+    if (step) {
+      const done = (message.stepsDone && typeof message.stepsDone === 'object' ? message.stepsDone : {}) as Record<string, unknown>;
+      await prisma.zenMessage.update({
+        where: { id: message.id },
+        data: { stepsDone: { ...done, [step]: { at: new Date().toISOString(), result } } },
+      });
+    } else {
+      await prisma.zenMessage.update({
+        where: { id: message.id },
+        data: { actedAt: new Date(), createdTaskId: taskId },
+      });
+    }
     res.json({ success: true });
   } catch (e) {
     next(e);
@@ -387,6 +426,7 @@ assistantRouter.post('/stream', requireManagement(), async (req: AuthRequest, re
   let thread: Awaited<ReturnType<typeof openThread>> | null = null;
   let answered = '';
   let drafted: unknown;
+  const carded: unknown[] = [];
 
   try {
     thread = await openThread({
@@ -423,6 +463,13 @@ assistantRouter.post('/stream', requireManagement(), async (req: AuthRequest, re
       // Cut short at the token ceiling: a muted line under what did come back.
       // Not part of the answer, so it is not stored with it.
       else if (event.kind === 'note') send('note', { text: event.text });
+      // A prepared job — a plan of steps, or a message to send. As with the
+      // draft, nothing has been written: each step is a request the browser
+      // sends to an existing endpoint when it is pressed.
+      else if (event.kind === 'card') {
+        carded.push(event.card);
+        send('card', { card: event.card });
+      }
       // A drafted task, for the panel to show as a card with a Create button.
       // Nothing has been written at this point and nothing will be until that
       // button is pressed — the browser then posts it to `POST /tasks` under
@@ -439,6 +486,7 @@ assistantRouter.post('/stream', requireManagement(), async (req: AuthRequest, re
         question: parsed.data.question,
         answer: answered,
         draft: drafted,
+        cards: carded,
       });
       send('done', { month, conversationId: thread.id, messageId: assistantMessageId });
     } else {

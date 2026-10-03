@@ -1,6 +1,7 @@
 import { Router, type Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
+import { maskInvoiceFigures, maskPaymentFigures } from '../utils/invoiceFigures.js';
 import { changesBetween } from '../utils/activityDiff.js';
 import { authenticate, requirePermission, type AuthRequest, hasPermission } from '../middleware/auth.js';
 import { CompanyStatus, ProjectStatus, MilestoneStatus, Priority } from '@prisma/client';
@@ -312,7 +313,7 @@ projectsRouter.get('/:id', requirePermission('work.all'), async (req: AuthReques
               where: { status: { not: 'CANCELLED' } },
               // `paidAt` is the date the client paid — the one entered on the
               // payment, not the day somebody got round to recording it.
-              select: { id: true, number: true, amount: true, status: true, paidAt: true },
+              select: { id: true, number: true, amount: true, gstAmount: true, status: true, paidAt: true },
               orderBy: { raisedAt: 'desc' },
               take: 1,
             },
@@ -387,12 +388,12 @@ projectsRouter.get('/:id', requirePermission('work.all'), async (req: AuthReques
       ...m,
       amount: canSeeFigures ? m.amount : null,
       // The invoice riding on each milestone carries a figure too.
-      invoices: m.invoices.map((inv) => ({ ...inv, amount: canSeeFigures ? inv.amount : null })),
+      invoices: m.invoices.map((inv) => maskInvoiceFigures(inv, canSeeFigures)),
     }));
+    // Every figure on the row, not just `amount` — its GST and printed totals are the same money.
     const maskedInvoices = project.invoices.map((inv) => ({
-      ...inv,
-      amount: canSeeFigures ? inv.amount : null,
-      payments: inv.payments.map((p) => ({ ...p, amount: canSeeFigures ? p.amount : null })),
+      ...maskInvoiceFigures(inv, canSeeFigures),
+      payments: inv.payments.map((p) => maskPaymentFigures(p, canSeeFigures)),
     }));
 
     res.json({

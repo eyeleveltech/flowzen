@@ -40,11 +40,25 @@ export type UnfulfilledDeal = {
   value: number;
 };
 
+/**
+ * Values to start the form with — what Zen filled in (Zen Plan 4). Applied as
+ * the form opens, after its own defaults; the person still reads and saves it.
+ */
+export type RetainerInitial = {
+  gstPercent?: number;
+  billing?: RetainerBilling;
+  startDate?: string;
+  termMonths?: number;
+  firstProjectName?: string;
+  ownerId?: string;
+};
+
 type Props = {
   open: boolean;
   onClose: () => void;
   onCreated: (id: string) => void;
   prefill?: Prefill;
+  initial?: RetainerInitial;
   /**
    * The won deals this retainer could be coming from.
    *
@@ -57,7 +71,7 @@ type Props = {
   deals?: UnfulfilledDeal[];
 };
 
-export function NewRetainerModal({ open, onClose, onCreated, prefill, deals = [] }: Props) {
+export function NewRetainerModal({ open, onClose, onCreated, prefill, initial, deals = [] }: Props) {
   const [companies, setCompanies] = useState<Company[]>([]);
   const team = useTeamMembers();
   const [companyId, setCompanyId] = useState('');
@@ -91,11 +105,18 @@ export function NewRetainerModal({ open, onClose, onCreated, prefill, deals = []
     setFirstProjectName('');
     setOwnerId('');
     setSourceProposalId(prefill?.sourceProposalId ?? '');
+    // What Zen filled in, over the defaults.
+    if (initial?.gstPercent != null) setGstPercent(String(initial.gstPercent));
+    if (initial?.billing) setBilling(initial.billing);
+    if (initial?.startDate) setStartDate(initial.startDate);
+    if (initial?.termMonths != null) setTermMonths(String(initial.termMonths));
+    if (initial?.firstProjectName) setFirstProjectName(initial.firstProjectName);
+    if (initial?.ownerId) setOwnerId(initial.ownerId);
     setError(null);
     if (!prefill) {
       void api.companies.list().then((res) => setCompanies(res.companies)).catch(() => {});
     }
-  }, [open, prefill]);
+  }, [open, prefill, initial]);
 
   const canSave = Boolean(companyId) && Number(monthlyValue) > 0 && Boolean(startDate);
 

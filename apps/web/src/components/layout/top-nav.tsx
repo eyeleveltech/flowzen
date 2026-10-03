@@ -4,8 +4,6 @@ import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useUIStore, useAuthStore } from '@/stores';
-import { useConfig } from '@/hooks/queries';
-import { ManagementAssistant } from '@/components/work/ManagementAssistant';
 import { api } from '@/lib/api-v2';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useQueryClient } from '@tanstack/react-query';
@@ -85,10 +83,8 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
   const shouldReduceMotion = useReducedMotion();
   const router = useRouter();
   const pathname = usePathname();
-  const { setCommandPaletteOpen, setMobileSidebarOpen, pageTitle, pageSubtitle } = useUIStore();
+  const { setCommandPaletteOpen, setMobileSidebarOpen, setZenOpen, pageTitle, pageSubtitle } = useUIStore();
   const { user, logout } = useAuthStore();
-  const { data: navConfig } = useConfig();
-  const [showAssistant, setShowAssistant] = useState(false);
   /*
    * Management only, and hidden rather than disabled for everybody else.
    *
@@ -147,6 +143,29 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showQuickCreate, setShowQuickCreate] = useState(false);
+
+  /*
+   * `?bell=1` opens the bell — where a phone notification summary ("You have
+   * 6 updates") lands. Taken out of the address once read, so a refresh does
+   * not open it again. A tap while the app is already open arrives as an
+   * event instead (components/providers.tsx).
+   */
+  useEffect(() => {
+    const openBell = () => {
+      setShowNotifications(true);
+      setShowQuickCreate(false);
+      setShowUserMenu(false);
+    };
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('bell') === '1') {
+      openBell();
+      params.delete('bell');
+      const rest = params.toString();
+      router.replace(`${pathname}${rest ? `?${rest}` : ''}`, { scroll: false });
+    }
+    window.addEventListener('flowzen:open-bell', openBell);
+    return () => window.removeEventListener('flowzen:open-bell', openBell);
+  }, [pathname, router]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -265,8 +284,8 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
         {mayAskAssistant && (
           <button
             aria-label="Ask Zen"
-            title="Ask Zen"
-            onClick={() => { setShowAssistant(true); setShowNotifications(false); setShowUserMenu(false); }}
+            title="Ask Zen (Ctrl+J)"
+            onClick={() => { setZenOpen(true); setShowNotifications(false); setShowUserMenu(false); }}
             className="flex h-9 w-9 items-center justify-center rounded-xl border border-border text-secondary hover:bg-surface hover:text-primary transition-colors duration-150 motion-reduce:transition-none outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
           >
             <Sparkles className="h-4 w-4" />
@@ -587,22 +606,6 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
 
     </header>
 
-      {/*
-        Outside the header, deliberately.
-        
-        The header carries `backdrop-blur-xl`, and a backdrop-filter makes an
-        element the containing block for its `fixed` descendants. Rendered
-        inside it, the panel's `fixed inset-0` sized itself to a 56px-tall
-        header instead of the viewport, and its z-50 was trapped under the
-        header's own z-30 stacking context.
-      */}
-      {mayAskAssistant && (
-        <ManagementAssistant
-          open={showAssistant}
-          onClose={() => setShowAssistant(false)}
-          configured={Boolean(navConfig?.organization.aiConfigured)}
-        />
-      )}
     </>
   );
 }

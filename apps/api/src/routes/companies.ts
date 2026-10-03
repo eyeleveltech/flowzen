@@ -1,6 +1,7 @@
 import { Router, type Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
+import { maskInvoiceFigures, maskPaymentFigures } from '../utils/invoiceFigures.js';
 import { changesBetween } from '../utils/activityDiff.js';
 import { canReadActivityType, stripMoney } from '../utils/activityAccess.js';
 import { emitToOrganization } from '../sse.js';
@@ -445,13 +446,11 @@ companiesRouter.get('/:id', requirePermission('company.read'), async (req: AuthR
     // `...company` unmasked, which is the same leak already closed on
     // /retainers and /projects: company.read (which BD holds, without
     // money.figures) is operational visibility, not a right to see a figure.
+    // Every figure on an invoice row, not just `amount` — its GST and printed
+    // totals are the same money in other words.
     const sanitizedInvoices = company.invoices.map((inv) => ({
-      ...inv,
-      amount: canSeeFinancials ? inv.amount : undefined,
-      payments: inv.payments.map((p) => ({
-        ...p,
-        amount: canSeeFinancials ? p.amount : undefined,
-      })),
+      ...maskInvoiceFigures(inv, canSeeFinancials),
+      payments: inv.payments.map((p) => maskPaymentFigures(p, canSeeFinancials)),
     }));
 
     const sanitizedRetainers = company.retainers.map((r) => ({
@@ -460,9 +459,7 @@ companiesRouter.get('/:id', requirePermission('company.read'), async (req: AuthR
       monthCards: r.monthCards.map((m) => ({
         ...m,
         revenue: canSeeFinancials ? m.revenue : null,
-        invoice: m.invoice
-          ? { ...m.invoice, amount: canSeeFinancials ? m.invoice.amount : undefined }
-          : null,
+        invoice: m.invoice ? maskInvoiceFigures(m.invoice, canSeeFinancials) : null,
       })),
     }));
 
@@ -471,7 +468,7 @@ companiesRouter.get('/:id', requirePermission('company.read'), async (req: AuthR
       quotedValue: canSeeFinancials ? p.quotedValue : null,
       estimatedCost: canSeeFinancials ? p.estimatedCost : null,
       milestones: p.milestones.map((m) => ({ ...m, amount: canSeeFinancials ? m.amount : null })),
-      invoices: p.invoices.map((inv) => ({ ...inv, amount: canSeeFinancials ? inv.amount : undefined })),
+      invoices: p.invoices.map((inv) => maskInvoiceFigures(inv, canSeeFinancials)),
     }));
 
     const sanitizedProformas = company.proformas.map((pf) => ({

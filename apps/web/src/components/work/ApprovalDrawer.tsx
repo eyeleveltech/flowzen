@@ -47,7 +47,7 @@ export function ApprovalDrawer({
           {error ? (
             <p className="rounded-xl border border-border bg-subtle/40 px-4 py-3 text-sm text-secondary">
               {error instanceof ApiError && error.status === 404
-                ? 'That task no longer exists.'
+                ? "This task isn't here. It may have been removed."
                 : error instanceof ApiError
                   ? error.message
                   : 'Could not open that task.'}

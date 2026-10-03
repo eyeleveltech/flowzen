@@ -58,7 +58,7 @@ import {
   type CalendarLayer,
 } from '@/lib/api-v2';
 import { usePageHeader } from '@/hooks/usePageHeader';
-import { useConfig, useDepartments, useTeamMembers } from '@/hooks/queries';
+import { useConfig, useDepartments, useScopedTeamMembers, useTeamMembers, useTeamScope } from '@/hooks/queries';
 import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
 import { Drawer } from '@/components/ui/drawer';
@@ -207,8 +207,13 @@ function CalendarScreen() {
   const calendarRef = useRef<FullCalendar>(null);
   const { data: config } = useConfig();
   const team = useTeamMembers();
+  // A Head's own people: team tasks are the departments they lead.
+  const myPeople = useScopedTeamMembers();
   // The one department list, in Settings' order — the team layer filters by id.
   const { departments } = useDepartments();
+  const scope = useTeamScope();
+  const teamDepartments =
+    scope && !scope.all ? departments.filter((d) => scope.departments.some((s) => s.id === d.id)) : departments;
   const confirm = useConfirmStore((st) => st.confirm);
   const me = useAuthStore((st) => st.user);
 
@@ -658,7 +663,10 @@ function CalendarScreen() {
             ...(person !== JUST_ME ? [{ value: JUST_ME, label: 'Just me' }] : []),
             { value: EVERYONE, label: 'Everyone' },
             // Everybody but you — your own calendar is already the default.
-            ...personOptions(team.filter((m) => m.id !== me?.id)),
+            // Meetings and busy time are everybody's to see, so with either on
+            // the search offers everybody; over team tasks alone, a Head's
+            // own people.
+            ...personOptions((eventsOn || busyOn ? team : myPeople).filter((m) => m.id !== me?.id)),
           ]}
           className="w-full"
         />
@@ -682,7 +690,7 @@ function CalendarScreen() {
             onChange={setDept}
             placeholder="Every department"
             ariaLabel="Team tasks from which department"
-            options={[{ value: '', label: 'Every department' }, ...departments.map((d) => ({ value: d.id, label: d.name }))]}
+            options={[{ value: '', label: 'Every department' }, ...teamDepartments.map((d) => ({ value: d.id, label: d.name }))]}
             className="mt-1 w-full"
           />
         )}

@@ -106,8 +106,10 @@ export async function recordExchange(opts: {
   question: string;
   answer: string;
   draft?: unknown;
+  /** The jobs Zen prepared on this turn — plans and messages. */
+  cards?: unknown[];
 }): Promise<{ assistantMessageId: string }> {
-  const { conversationId, question, answer, draft } = opts;
+  const { conversationId, question, answer, draft, cards } = opts;
   await prisma.zenMessage.create({ data: { conversationId, role: 'USER', text: question } });
   const assistant = await prisma.zenMessage.create({
     data: {
@@ -117,6 +119,7 @@ export async function recordExchange(opts: {
       // Kept as it was, rather than rebuilt from the prose later: a draft
       // re-derived from a sentence is a draft that can come back different.
       ...(draft ? { draft: draft as never } : {}),
+      ...(cards && cards.length ? { cards: cards as never } : {}),
     },
     select: { id: true },
   });
@@ -193,18 +196,97 @@ export async function remember(opts: {
 /**
  * Where the person is standing, in words the model can use.
  *
- * The panel sends a small typed context — a route and one or two ids — and
+ * The panel sends a small typed context — the address and the ids in it — and
  * never the page's data. Zen then uses its own tools to read whatever it
  * needs, so what it can see stays governed by the tools rather than by
  * whatever the screen happened to be holding.
+ *
+ * Every screen, not just the four record pages: "what still needs billing
+ * here?" on Money → Retainer billing is as much a question about "here" as
+ * "add a task here" on a project.
  */
 export type PageContext = {
+  /** The address, without the query: `/money`, `/projects/abc`. */
+  path?: string;
+  /** The query, as on the address bar: `?tab=billing`. */
+  search?: string;
+  /** What older panels sent instead of `path`. */
   route?: string;
   projectId?: string;
   retainerId?: string;
+  retainerProjectId?: string;
   companyId?: string;
   monthCardId?: string;
   internalProjectId?: string;
+  assetId?: string;
+};
+
+/** The sidebar's names for its screens. */
+const SCREENS: Record<string, string> = {
+  '/my-work': 'My Work',
+  '/calendar': 'Calendar',
+  '/members': 'Team',
+  '/all-work': 'All tasks',
+  '/companies': 'Companies',
+  '/outreach': 'Outreach list',
+  '/pipeline': 'Pipeline',
+  '/quotations': 'Proposals',
+  '/live-work': 'Live work',
+  '/brief': 'Monday brief',
+  '/money': 'Money',
+  '/forecast': 'Forecast',
+  '/assets': 'Assets',
+  '/allocations': 'Time split',
+  '/settings': 'Settings',
+  '/profile': 'Profile',
+};
+
+/** The tabs and filters a list screen keeps in its address, in the screen's words. */
+const QUERY_WORDS: Record<string, { param: string; words: Record<string, string>; as: (w: string) => string }> = {
+  '/money': {
+    param: 'tab',
+    words: { billing: 'Retainer billing', invoices: 'Invoices', costs: 'Costs', profit: 'Profit & Costs' },
+    as: (w) => ` → ${w} tab`,
+  },
+  '/members': { param: 'tab', words: { team: 'Team', approvals: 'Approvals' }, as: (w) => ` → ${w} tab` },
+  '/live-work': {
+    param: 'tab',
+    words: { retainers: 'Retainers', projects: 'Projects', sample: 'Sample work', internal: 'Internal' },
+    as: (w) => ` → ${w} tab`,
+  },
+  '/outreach': {
+    param: 'status',
+    words: {
+      not_contacted: 'Not contacted',
+      follow_up: 'Follow up',
+      meeting: 'Meeting',
+      interested: 'Interested',
+      dead: 'Dead',
+    },
+    as: (w) => `, filtered to ${w}`,
+  },
+};
+
+/** A record page's tabs, as the page names them. */
+const TAB_WORDS: Record<string, string> = {
+  overview: 'Overview & People',
+  work: 'Work',
+  proposals: 'Proposals',
+  money: 'Invoices & Proformas',
+  audit: 'Audit Trail',
+  projects: 'Projects',
+  costs: 'Costs',
+  allocations: 'Allocations',
+  invoice: 'Invoice',
+  billing: 'Billing',
+  milestones: 'Milestones',
+  tasks: 'Tasks',
+  people: 'People',
+  activity: 'Activity',
+};
+const onTab = (q: URLSearchParams) => {
+  const tab = q.get('tab')?.toLowerCase();
+  return tab && TAB_WORDS[tab] ? `, on its ${TAB_WORDS[tab]} tab` : '';
 };
 
 export async function describeWhereTheyAre(
@@ -212,6 +294,8 @@ export async function describeWhereTheyAre(
   organizationId: string,
 ): Promise<string | null> {
   if (!ctx) return null;
+  const path = ctx.path ?? ctx.route ?? '';
+  const q = new URLSearchParams(ctx.search ?? '');
   try {
     if (ctx.projectId) {
       const p = await prisma.project.findFirst({
@@ -219,17 +303,42 @@ export async function describeWhereTheyAre(
         select: { name: true, isSample: true, company: { select: { name: true } } },
       });
       if (p) {
-        return `They are looking at the ${p.isSample ? 'sample work' : 'project'} "${p.name}" for ${p.company.name} (projectId ${ctx.projectId}). "Here", "this project" and "this" mean that one.`;
+        return `They are looking at the ${p.isSample ? 'sample work' : 'project'} "${p.name}" for ${p.company.name} (projectId ${ctx.projectId})${onTab(q)}. "Here", "this project" and "this" mean that one.`;
+      }
+    }
+    if (ctx.retainerId && ctx.retainerProjectId) {
+      const rp = await prisma.retainerProject.findFirst({
+        where: { id: ctx.retainerProjectId, retainerId: ctx.retainerId, retainer: { organizationId } },
+        select: { name: true, retainer: { select: { company: { select: { name: true } } } } },
+      });
+      if (rp) {
+        return `They are looking at "${rp.name}", a project inside ${rp.retainer.company.name}'s retainer (retainerId ${ctx.retainerId}, retainerProjectId ${ctx.retainerProjectId}). "Here" and "this project" mean that one.`;
       }
     }
     if (ctx.retainerId) {
+      // The month on the page when the address names one; the latest otherwise.
+      const asked = q.get('month');
+      const named = asked && /^\d{4}-\d{2}$/.test(asked) ? asked : null;
       const r = await prisma.retainer.findFirst({
         where: { id: ctx.retainerId, organizationId },
-        select: { company: { select: { name: true } }, monthCards: { orderBy: { month: 'desc' }, take: 1, select: { id: true, month: true } } },
+        select: {
+          company: { select: { name: true } },
+          monthCards: {
+            where: named ? { month: named } : {},
+            orderBy: { month: 'desc' },
+            take: 1,
+            select: { id: true, month: true },
+          },
+        },
       });
       if (r) {
         const card = r.monthCards[0];
-        return `They are looking at ${r.company.name}'s retainer (retainerId ${ctx.retainerId}${card ? `, month ${card.month}, monthCardId ${card.id}` : ''}). "Here" and "this retainer" mean that one.`;
+        const month = card
+          ? `, month ${card.month}, monthCardId ${card.id}`
+          : named
+            ? `, month ${named}, which has no month card`
+            : '';
+        return `They are looking at ${r.company.name}'s retainer (retainerId ${ctx.retainerId}${month})${onTab(q)}. "Here", "this month" and "this retainer" mean that one.`;
       }
     }
     if (ctx.internalProjectId) {
@@ -247,10 +356,42 @@ export async function describeWhereTheyAre(
         select: { name: true, status: true },
       });
       if (c) {
-        return `They are looking at the client ${c.name} (companyId ${ctx.companyId}, ${c.status.toLowerCase()}). "They", "this client" and "here" mean ${c.name}.`;
+        return `They are looking at the client ${c.name} (companyId ${ctx.companyId}, ${c.status.toLowerCase()})${onTab(q)}. "They", "this client" and "here" mean ${c.name}.`;
       }
     }
-    if (ctx.route) return `They are on the ${ctx.route} screen.`;
+    if (ctx.assetId) {
+      const a = await prisma.asset.findFirst({
+        where: { id: ctx.assetId, organizationId },
+        select: { tag: true, name: true },
+      });
+      if (a) return `They are looking at the equipment ${a.tag} · ${a.name} (assetId ${ctx.assetId}). "This" and "here" mean that item.`;
+    }
+
+    const base = '/' + (path.split('/').filter(Boolean)[0] ?? '');
+    const screen = SCREENS[base];
+    if (!screen) return path ? `They are on the ${path} screen.` : null;
+
+    // Something open on top of a list: a task's drawer, an event's.
+    const taskId = base === '/my-work' ? q.get('task') : null;
+    if (taskId) {
+      const t = await prisma.task.findFirst({ where: { id: taskId, organizationId }, select: { title: true } });
+      if (t) return `They are on My Work with the task "${t.title}" open (taskId ${taskId}). "This" and "this task" mean that one.`;
+    }
+    const eventId = base === '/calendar' ? q.get('event') : null;
+    if (eventId) {
+      const e = await prisma.calendarEvent.findFirst({ where: { id: eventId, organizationId }, select: { title: true } });
+      if (e) return `They are on the Calendar with the event "${e.title}" open (eventId ${eventId}). "This" means that event.`;
+    }
+
+    const words = QUERY_WORDS[base];
+    const value = words ? q.get(words.param)?.toLowerCase() : null;
+    const detail =
+      words && value && words.words[value]
+        ? words.as(words.words[value])
+        : base === '/brief' && q.get('week')
+          ? `, showing the week of ${q.get('week')}`
+          : '';
+    return `They are on ${screen}${detail}. "Here", "this" and "these" mean what that screen shows.`;
   } catch (e) {
     // Context is a convenience. Losing it must never lose the answer.
     logger.error(`Zen could not resolve page context: ${e instanceof Error ? e.message : String(e)}`);

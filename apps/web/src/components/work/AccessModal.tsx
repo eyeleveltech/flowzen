@@ -17,7 +17,7 @@ import { api, ApiError } from '@/lib/api-v2';
 import { ROLE_PRESET_PERMISSIONS, type PermissionKey, type RolePreset } from '@flowzen/shared';
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
-import { Field, FieldSelect } from '@/components/ui/field';
+import { FieldSelect } from '@/components/ui/field';
 import { ErrorNote } from '@/components/ui/empty-state';
 
 const PRESET_OPTIONS = [
@@ -30,7 +30,7 @@ const PRESET_OPTIONS = [
 
 const PERMS: { key: PermissionKey; label: string; hint: string }[] = [
   { key: 'work.own', label: 'My Work', hint: 'See and complete work assigned to them' },
-  { key: 'work.team', label: 'Team work', hint: "See and assign their people's work" },
+  { key: 'work.team', label: 'Team work', hint: 'See and manage the people and work of the departments they lead' },
   { key: 'work.all', label: 'All work', hint: 'See every retainer and project' },
   { key: 'company.read', label: 'Companies', hint: 'See companies, people and history' },
   { key: 'company.write', label: 'Edit companies', hint: 'Add and edit companies and people' },
@@ -49,12 +49,11 @@ const PERMS: { key: PermissionKey; label: string; hint: string }[] = [
   { key: 'asset.manage', label: 'Issue equipment', hint: 'Enter kit, hand it over, check it back in, retire it' },
 ];
 
-type Person = { id: string; name: string; dept?: string | null; preset?: string | null; permissions?: string[]; monthlyCost?: number | null };
+type Person = { id: string; name: string; dept?: string | null; preset?: string | null; permissions?: string[] };
 
 export function AccessModal({ person, onClose, onSaved }: { person: Person; onClose: () => void; onSaved: () => void }) {
   const [preset, setPreset] = useState((person.preset as RolePreset) || 'EMPLOYEE');
   const [extra, setExtra] = useState<Set<PermissionKey>>(new Set((person.permissions ?? []) as PermissionKey[]));
-  const [monthlyCost, setMonthlyCost] = useState(person.monthlyCost != null ? String(person.monthlyCost) : '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -77,7 +76,6 @@ export function AccessModal({ person, onClose, onSaved }: { person: Person; onCl
       await api.users.update(person.id, {
         preset,
         permissions: Array.from(extra),
-        monthlyCost: monthlyCost ? Number(monthlyCost) : undefined,
       });
       onSaved();
     } catch (err) {
@@ -99,8 +97,6 @@ export function AccessModal({ person, onClose, onSaved }: { person: Person; onCl
           />
           <p className="mt-1 text-xs text-secondary">A starting point. Anything it doesn&apos;t grant can be added for this one person below.</p>
         </div>
-
-        <Field label="Monthly cost (₹)" value={monthlyCost} onChange={setMonthlyCost} type="number" hint="Salary — visible only to Setup access." />
 
         <div className="space-y-1">
           {PERMS.map((p) => {

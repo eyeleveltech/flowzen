@@ -8,6 +8,7 @@ import { addDays, todayIn } from '../utils/workCalendar.js';
 import { rupees } from '../utils/money.js';
 import { dayStartUtc, localDayAndTime, whenLabel } from '../utils/zonedTime.js';
 import { googleConfigured, queueEventForGoogle } from '../services/googleCalendar.js';
+import { taskInScope, teamScope } from '../services/teamScope.js';
 import {
   afterEventSaved,
   eventLink,
@@ -205,7 +206,8 @@ calendarRouter.get('/', requirePermission('work.own'), async (req: AuthRequest, 
         : [],
       layers.has('team')
         ? prisma.task.findMany({
-            where: {
+            // A Head's team is the departments they lead.
+            where: await taskInScope(user, {
               ...taskBase,
               AND: [
                 ...(person ? [{ assignees: { some: { userId: person } } }] : []),
@@ -213,7 +215,7 @@ calendarRouter.get('/', requirePermission('work.own'), async (req: AuthRequest, 
                 // Shown once: with My tasks on, your own are already there.
                 ...(layers.has('mine') ? [{ NOT: { assignees: { some: { userId: me } } } }] : []),
               ],
-            },
+            }),
             select: taskSelect,
           })
         : [],
@@ -247,7 +249,7 @@ calendarRouter.get('/', requirePermission('work.own'), async (req: AuthRequest, 
           attendees: { select: { userId: true } },
         },
       });
-      const editsAll = hasPermission(user, 'work.team');
+      const edits = await eventEditRule(user);
       for (const ev of events) {
         const s = localDayAndTime(ev.startsAt, timezone);
         const e = localDayAndTime(ev.endsAt, timezone);
@@ -261,7 +263,7 @@ calendarRouter.get('/', requirePermission('work.own'), async (req: AuthRequest, 
           endDate: e.date,
           allDay: ev.allDay,
           link: eventLink(ev.id),
-          draggable: ev.createdById === me || editsAll,
+          draggable: edits({ createdById: ev.createdById, attendeeIds: ev.attendees.map((a) => a.userId) }),
           done: ev.endsAt <= now,
           eventId: ev.id,
           eventKind: ev.kind,
@@ -558,7 +560,24 @@ const clashSchema = z.object({
 const orgTimezone = async (orgId: string) =>
   (await prisma.organization.findUnique({ where: { id: orgId }, select: { timezone: true } }))?.timezone || 'Asia/Kolkata';
 
-const mayEdit = (user: User, ev: { createdById: string }) => ev.createdById === user.userId || hasPermission(user, 'work.team');
+/**
+ * Who may change an event: whoever booked it, Management, or a Head whose
+ * people include whoever booked it or somebody on it. Every event is SEEN by
+ * everybody; this is only about changing one (Departments Plan 3).
+ *
+ * Built once per request, so the calendar's list asks for the scope once
+ * rather than once per event.
+ */
+const eventEditRule = async (user: User): Promise<(ev: { createdById: string; attendeeIds: string[] }) => boolean> => {
+  if (!hasPermission(user, 'work.team')) return (ev) => ev.createdById === user.userId;
+  const scope = await teamScope(user);
+  if (scope.all) return () => true;
+  const mine = new Set(scope.peopleIds);
+  return (ev) => ev.createdById === user.userId || mine.has(ev.createdById) || ev.attendeeIds.some((id) => mine.has(id));
+};
+
+const mayEdit = async (user: User, ev: { createdById: string; attendees: { userId: string }[] }) =>
+  (await eventEditRule(user))({ createdById: ev.createdById, attendeeIds: ev.attendees.map((a) => a.userId) });
 
 type EventFields = {
   kind: EventKind;
@@ -1021,7 +1040,7 @@ calendarRouter.get('/events/:id', requirePermission('work.own'), async (req: Aut
       },
       clashes,
       history,
-      canEdit: mayEdit(user, ev),
+      canEdit: await mayEdit(user, { createdById: ev.createdById, attendees: ev.attendees.map((a) => ({ userId: a.user.id })) }),
     });
   } catch (err) {
     next(err);
@@ -1056,8 +1075,8 @@ calendarRouter.patch('/events/:id', requirePermission('work.own'), async (req: A
       res.status(404).json({ success: false, error: 'That event is not on the calendar.' });
       return;
     }
-    if (!mayEdit(user, existing)) {
-      res.status(403).json({ success: false, error: 'Only whoever booked it, or a Head, can change this.' });
+    if (!(await mayEdit(user, existing))) {
+      res.status(403).json({ success: false, error: 'Only whoever booked it, Management, or the head of somebody on it can change this.' });
       return;
     }
     const timezone = await orgTimezone(orgId);
@@ -1192,8 +1211,8 @@ calendarRouter.delete('/events/:id', requirePermission('work.own'), async (req: 
       res.status(404).json({ success: false, error: 'That event is not on the calendar.' });
       return;
     }
-    if (!mayEdit(user, existing)) {
-      res.status(403).json({ success: false, error: 'Only whoever booked it, or a Head, can cancel this.' });
+    if (!(await mayEdit(user, existing))) {
+      res.status(403).json({ success: false, error: 'Only whoever booked it, Management, or the head of somebody on it can cancel this.' });
       return;
     }
     const timezone = await orgTimezone(orgId);

@@ -5,6 +5,7 @@ import { logger } from '../utils/logger.js';
 import { addDays } from '../utils/workCalendar.js';
 import { dayStartUtc, hoursLabel, localDayAndTime, whenLabel, zonedToUtc } from '../utils/zonedTime.js';
 import { googleConfigured } from './googleCalendar.js';
+import { pushCalendarChange } from './push.js';
 
 /**
  * Meetings, shoots and the gear they reserve — the parts the route, the
@@ -272,6 +273,7 @@ async function mailPeople(
   snapshot: EventSnapshot,
 ): Promise<void> {
   if (userIds.length === 0) return;
+  await pushCalendarChange(organizationId, userIds, snapshot.id, subject, sentence, eventLink(snapshot.id));
   const people = await prisma.user.findMany({
     where: { id: { in: userIds }, organizationId, active: true },
     select: { id: true, name: true, email: true },

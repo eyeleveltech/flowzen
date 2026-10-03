@@ -1,11 +1,12 @@
 import { Router, type Response, type NextFunction } from 'express';
 import { TaskStatus, type Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
-import { authenticate, hasPermission, type AuthRequest } from '../middleware/auth.js';
+import { authenticate, hasPermission, type AuthRequest, type UserSession } from '../middleware/auth.js';
 import type { PermissionKey } from '@flowzen/shared';
 import { approverFor, escalateFor } from '../services/taskApprovals.js';
 import { CHASER_RULES, EVENT_RULES } from '../services/alertRules.js';
 import { linkForUser, taskLink } from '../utils/recordLink.js';
+import { teamScope } from '../services/teamScope.js';
 
 /**
  * The bell.
@@ -179,6 +180,99 @@ export async function peopleAlertClauses(orgId: string, userId: string): Promise
 }
 
 /**
+ * The rules about the team rather than the work. A Head hears them only about
+ * the people of the departments they lead (Departments Plan 3).
+ */
+export const TEAM_RULES = ['TASK_OVERDUE', 'TASK_AGING', 'TASK_WAITING_HOLD', 'MEMBER_OVERALLOCATED'] as const;
+
+/**
+ * Every alert a person should be told about, as the OR of a where clause.
+ *
+ * The bell, "Mark all read", reading one, and the 8am digest all ask this,
+ * so what a person is mailed and what their bell shows are one rule:
+ *
+ *   - the rules their permissions open (RULE_PERMISSION);
+ *   - for a Head, the team rules only about their own people — an overdue task
+ *     somebody in another department is on is that department's business;
+ *   - the task rules about their own tasks, whatever their permissions
+ *     (MINE_REGARDLESS);
+ *   - approvals waiting on them and today's events they are on.
+ *
+ * An empty list means there is nothing this person may be told.
+ */
+export async function alertClausesFor(user: UserSession): Promise<Prisma.AlertWhereInput[]> {
+  const orgId = user.organizationId;
+  const userId = user.userId;
+
+  const allowedRules = Object.keys(RULE_PERMISSION).filter((rule) => {
+    const needed = RULE_PERMISSION[rule];
+    return needed === undefined || hasPermission(user, needed);
+  });
+
+  const scope = await teamScope(user);
+  const isTeamRule = (rule: string) => (TEAM_RULES as readonly string[]).includes(rule);
+  const openRules = scope.all ? allowedRules : allowedRules.filter((r) => !isTeamRule(r));
+
+  /*
+   * A Head's team rules, narrowed to their people (and themselves). Looked up
+   * from the open alerts rather than from every task those people were ever
+   * on, so the list stays the size of what is actually raised.
+   */
+  const scoped: Prisma.AlertWhereInput[] = [];
+  if (!scope.all) {
+    const people = [...scope.peopleIds, userId];
+    const taskRules = allowedRules.filter((r) => isTeamRule(r) && r !== 'MEMBER_OVERALLOCATED');
+    if (taskRules.length > 0) {
+      const raised = await prisma.alert.findMany({
+        where: { organizationId: orgId, resolvedAt: null, rule: { in: taskRules }, entityType: 'Task' },
+        select: { entityId: true },
+      });
+      const theirs =
+        raised.length === 0
+          ? []
+          : await prisma.task.findMany({
+              where: {
+                id: { in: Array.from(new Set(raised.map((a) => a.entityId))) },
+                organizationId: orgId,
+                assignees: { some: { userId: { in: people } } },
+              },
+              select: { id: true },
+            });
+      if (theirs.length > 0) {
+        scoped.push({ rule: { in: taskRules }, entityType: 'Task', entityId: { in: theirs.map((t) => t.id) } });
+      }
+    }
+    if (allowedRules.includes('MEMBER_OVERALLOCATED')) {
+      scoped.push({ rule: 'MEMBER_OVERALLOCATED', entityType: 'User', entityId: { in: people } });
+    }
+  }
+
+  /*
+   * Everything about a task this person is actually on, so the rules above
+   * reach the one person who can do something about them even when the team
+   * view is closed to them. Only asked for when the permission has not
+   * already let those rules through, so nobody pays for a query they do not
+   * need.
+   */
+  const missingTaskRules = MINE_REGARDLESS.filter((r) => !allowedRules.includes(r));
+  const myTaskIds =
+    missingTaskRules.length > 0
+      ? (
+          await prisma.task.findMany({
+            where: { organizationId: orgId, deletedAt: null, assignees: { some: { userId } } },
+            select: { id: true },
+          })
+        ).map((t) => t.id)
+      : [];
+  const mine: Prisma.AlertWhereInput[] =
+    myTaskIds.length > 0 ? [{ rule: { in: [...missingTaskRules] }, entityType: 'Task', entityId: { in: myTaskIds } }] : [];
+
+  const approvals = await peopleAlertClauses(orgId, userId);
+
+  return [...(openRules.length > 0 ? [{ rule: { in: openRules } }] : []), ...scoped, ...mine, ...approvals];
+}
+
+/**
  * What corner of the business a notification is about.
  *
  * The rows said what had happened and never what KIND of thing it was, so a
@@ -237,45 +331,13 @@ notificationsRouter.get('/', async (req: AuthRequest, res: Response, next: NextF
     const orgId = req.user!.organizationId;
     const userId = req.user!.userId;
 
-    const allowedRules = Object.keys(RULE_PERMISSION).filter((rule) => {
-      const needed = RULE_PERMISSION[rule];
-      return needed === undefined || hasPermission(req.user!, needed);
-    });
-
-    /*
-     * Everything about a task this person is actually on, so the rules above
-     * reach the one person who can do something about them even when the team
-     * view is closed to them. Only asked for when the permission has not
-     * already let those rules through, so nobody pays for a query they do not
-     * need.
-     */
-    const missingTaskRules = MINE_REGARDLESS.filter((r) => !allowedRules.includes(r));
-    const myTaskIds =
-      missingTaskRules.length > 0
-        ? (
-            await prisma.task.findMany({
-              where: { organizationId: orgId, deletedAt: null, assignees: { some: { userId } } },
-              select: { id: true },
-            })
-          ).map((t) => t.id)
-        : [];
-
-    const mine =
-      myTaskIds.length > 0
-        ? [{ rule: { in: [...missingTaskRules] }, entityType: 'Task', entityId: { in: myTaskIds } }]
-        : [];
-    const approvals = await peopleAlertClauses(orgId, userId);
-
-    if (allowedRules.length === 0 && mine.length === 0 && approvals.length === 0) {
+    const clauses = await alertClausesFor(req.user!);
+    if (clauses.length === 0) {
       res.json({ success: true, notifications: [], unreadCount: 0, total: 0 });
       return;
     }
 
-    const where: Prisma.AlertWhereInput = {
-      organizationId: orgId,
-      resolvedAt: null,
-      OR: [{ rule: { in: allowedRules } }, ...mine, ...approvals],
-    };
+    const where: Prisma.AlertWhereInput = { organizationId: orgId, resolvedAt: null, OR: clauses };
 
     const [alerts, total, myReads] = await Promise.all([
       prisma.alert.findMany({
@@ -329,22 +391,15 @@ notificationsRouter.patch('/read-all', async (req: AuthRequest, res: Response, n
 
     // Only what this person can see. Marking an alert read that they were
     // never shown would be a strange thing for a button to do.
-    const allowedRules = Object.keys(RULE_PERMISSION).filter((rule) => {
-      const needed = RULE_PERMISSION[rule];
-      return needed === undefined || hasPermission(req.user!, needed);
-    });
+    const clauses = await alertClausesFor(req.user!);
 
-    const approvals = await peopleAlertClauses(orgId, userId);
-
-    const unread = await prisma.alert.findMany({
-      where: {
-        organizationId: orgId,
-        resolvedAt: null,
-        OR: [{ rule: { in: allowedRules } }, ...approvals],
-        reads: { none: { userId } },
-      },
-      select: { id: true },
-    });
+    const unread =
+      clauses.length === 0
+        ? []
+        : await prisma.alert.findMany({
+            where: { organizationId: orgId, resolvedAt: null, OR: clauses, reads: { none: { userId } } },
+            select: { id: true },
+          });
 
     if (unread.length > 0) {
       await prisma.alertRead.createMany({
@@ -377,15 +432,16 @@ notificationsRouter.patch('/:id/read', async (req: AuthRequest, res: Response, n
       return;
     }
 
-    const needed = RULE_PERMISSION[alert.rule];
-    let readable = alert.rule in RULE_PERMISSION && (needed === undefined || hasPermission(req.user!, needed));
-    // An approval or calendar alert is theirs when it reached them — the same
-    // clauses the bell used.
-    if (!readable && [...CHASER_RULES, ...EVENT_RULES].includes(alert.rule)) {
-      const approvals = await peopleAlertClauses(orgId, userId);
-      readable =
-        approvals.length > 0 && (await prisma.alert.count({ where: { id: alert.id, OR: approvals } })) > 0;
-    }
+    // Theirs when it would reach them — the same clauses the bell used. Only
+    // the clauses that name this rule can match it; a clause that is the rule
+    // and nothing else matches outright, the rest are asked of the database.
+    const clauses = (await alertClausesFor(req.user!)).filter((c) => {
+      const rule = c.rule as string | { in: string[] };
+      return typeof rule === 'string' ? rule === alert.rule : rule.in.includes(alert.rule);
+    });
+    const readable =
+      clauses.some((c) => Object.keys(c).length === 1) ||
+      (clauses.length > 0 && (await prisma.alert.count({ where: { id: alert.id, OR: clauses } })) > 0);
     if (!readable) {
       res.status(403).json({ success: false, error: 'Insufficient permissions' });
       return;

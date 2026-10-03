@@ -17,3 +17,7 @@ To preserve database schemas, REST endpoint routes, and CSV import schemas, code
 - DB columns / API fields: `companyName`, `dealValue`, `companySize`, `lostReason`
 - API routes: `/api/lost-deals`, `/api/crm`
 - Form state keys: `companyName`, `dealValue`
+
+## Zen's guide
+
+Changed a screen or a business rule? Update `apps/api/src/services/zen/flowzen-guide.md`.

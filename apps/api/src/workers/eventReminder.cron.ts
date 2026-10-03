@@ -2,7 +2,8 @@ import { prisma } from '../lib/prisma.js';
 import { logger } from '../utils/logger.js';
 import { addDays } from '../utils/workCalendar.js';
 import { dayStartUtc, localDayAndTime } from '../utils/zonedTime.js';
-import { happeningToday, syncTodayAlert, TODAY_SELECT } from '../services/calendarEvents.js';
+import { eventLink, happeningToday, syncTodayAlert, todayMessage, TODAY_SELECT } from '../services/calendarEvents.js';
+import { pushEventToday } from '../services/push.js';
 
 /**
  * The morning-of bell for meetings and shoots, and the tidying of event alerts.
@@ -44,6 +45,7 @@ export async function runEventReminders(
       if (happeningToday(ev, today, timezone, now)) live.add(ev.id);
       const result = await syncTodayAlert(org.id, { ...ev, attendeeCount: ev._count.attendees }, timezone, now);
       if (result === 'created') tally.created++;
+      if (result === 'created') await pushEventToday(org.id, ev, today, todayMessage(ev, today, timezone), eventLink(ev.id));
       if (result === 'updated') tally.updated++;
       if (result === 'resolved') tally.resolved++;
     }

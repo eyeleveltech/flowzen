@@ -1,6 +1,7 @@
 import { Router, type Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
+import { maskInvoiceFigures, maskPaymentFigures } from '../utils/invoiceFigures.js';
 import { authenticate, requirePermission, type AuthRequest, hasPermission } from '../middleware/auth.js';
 import { rollActiveRetainers } from '../workers/monthCard.cron.js';
 import { CompanyStatus, Prisma, RetainerBilling, RetainerStatus, RetainerProjectStatus } from '@prisma/client';
@@ -1043,14 +1044,11 @@ retainersRouter.get('/:id/month-cards/:month', requirePermission('work.all'), as
       ...a,
       user: { ...a.user, monthlyCost: canSeeSalaries ? a.user.monthlyCost : undefined },
     }));
+    // Every figure on the row, not just `amount` — its GST and printed totals are the same money.
     const maskedInvoice = monthCard.invoice
       ? {
-          ...monthCard.invoice,
-          amount: canSeeFigures ? monthCard.invoice.amount : null,
-          payments: monthCard.invoice.payments.map((p) => ({
-            ...p,
-            amount: canSeeFigures ? p.amount : null,
-          })),
+          ...maskInvoiceFigures(monthCard.invoice, canSeeFigures),
+          payments: monthCard.invoice.payments.map((p) => maskPaymentFigures(p, canSeeFigures)),
         }
       : null;
 

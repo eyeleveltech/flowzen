@@ -23,7 +23,8 @@ import { Badge } from '@/components/ui/badge';
 import { presetLabel } from '@/lib/people';
 import { KeyRound, Package, Pencil, Plus, ShieldCheck, UserMinus } from 'lucide-react';
 import { EditMemberModal } from '@/components/work/EditMemberModal';
-import { useDepartments } from '@/hooks/queries';
+import { useDepartments, useTeamScope } from '@/hooks/queries';
+import { TeamScopeLine } from '@/components/work/TeamScopeLine';
 import { Tabs, useTabState, type TabDef } from '@/components/ui/tabs';
 import { ApprovalsReport } from '@/components/work/ApprovalsReport';
 
@@ -58,6 +59,10 @@ export default function MembersPage() {
   const canInvite = useAuthStore((s) => s.user?.permissions?.includes('setup.admin') ?? false);
   // The one list of departments every screen uses, in Settings' order.
   const { departments } = useDepartments();
+  // A Head filters among the departments they lead; the rest are not theirs to see.
+  const scope = useTeamScope();
+  const filterOptions =
+    scope && !scope.all ? departments.filter((d) => scope.departments.some((s) => s.id === d.id)) : departments;
   /** By id — a name with "&" or a comma in it filters as well as any other. */
   const [deptFilter, setDeptFilter] = useState('ALL');
   /** The delivery table as one list, or grouped under each department and its head. */
@@ -101,7 +106,10 @@ export default function MembersPage() {
 
   const members: TeamMember[] = data?.success ? data.members : [];
   const loading = isPending;
-  const filterName = departments.find((d) => d.id === deptFilter)?.name ?? 'All departments';
+  const filterName =
+    departments.find((d) => d.id === deptFilter)?.name ??
+    // "All" for a Head is all of theirs, so the header names them.
+    (scope && !scope.all ? scope.departments.map((d) => d.name).join(', ') : 'All departments');
   // Teams that actually have somebody in them — not every department on the list.
   const teamsWithPeople = new Set(members.map((m) => m.departmentId).filter(Boolean)).size;
 
@@ -180,6 +188,7 @@ export default function MembersPage() {
       )}
       {/* Header */}
       <div className="flex flex-wrap items-center justify-end gap-2 mb-8">
+          <TeamScopeLine className="mr-auto" />
           <div className="flex rounded-lg border border-border bg-white p-0.5 text-sm" role="group" aria-label="How to show the team">
             {[
               { on: !grouped, label: 'List', set: false },
@@ -196,7 +205,7 @@ export default function MembersPage() {
               </button>
             ))}
           </div>
-          {departments.length > 0 && (
+          {filterOptions.length > 1 && (
             <select
               aria-label="Filter the team by department"
               value={deptFilter}
@@ -204,7 +213,7 @@ export default function MembersPage() {
               className="border border-border rounded-lg px-3 py-1.5 text-sm text-body outline-none focus:border-primary bg-white"
             >
               <option value="ALL">All departments</option>
-              {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+              {filterOptions.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           )}
           {/* By id, and encoded: "Video & Production" used to cut the link at the "&" and export nobody. */}

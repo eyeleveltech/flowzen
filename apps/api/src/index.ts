@@ -37,6 +37,7 @@ import { searchRouter } from './routes/search.js';
 import { assetsRouter } from './routes/assets.js';
 import { calendarRouter } from './routes/calendar.js';
 import { googleRouter } from './routes/google.js';
+import { pushRouter } from './routes/push.js';
 import { usageRouter } from './routes/usage.js';
 import { startAgencyHealthScanner } from './workers/scanner.cron.js';
 import { startMonthCardScheduler } from './workers/monthCard.cron.js';
@@ -49,6 +50,7 @@ import { startTaskRepeatScheduler } from './workers/taskRepeat.cron.js';
 import { startEventReminders } from './workers/eventReminder.cron.js';
 import { startGoogleCalendarWorker } from './workers/googleCalendar.cron.js';
 import { startUsageCleanup } from './workers/usageCleanup.cron.js';
+import { startPushWorker } from './workers/push.cron.js';
 
 const app = express();
 
@@ -131,6 +133,7 @@ app.use('/api/internal-projects', internalProjectsRouter);
 app.use('/api/assets', assetsRouter);
 app.use('/api/calendar', calendarRouter);
 app.use('/api/google', googleRouter);
+app.use('/api/push', pushRouter);
 app.use('/api/usage', usageRouter);
 
 // Start background health rules scanner
@@ -164,6 +167,7 @@ startTaskRepeatScheduler();
 startEventReminders();
 startGoogleCalendarWorker();
 startUsageCleanup();
+startPushWorker();
 
 app.use((_req, res) => {
   res.status(404).json({ success: false, error: 'Not found' });

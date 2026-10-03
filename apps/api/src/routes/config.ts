@@ -1,4 +1,5 @@
 import { googleConfigured } from '../services/googleCalendar.js';
+import { pushConfigured } from '../services/push.js';
 import { Router, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import { TaskType, type Prisma } from '@prisma/client';
@@ -127,6 +128,9 @@ configRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction
               // Settings → Integrations, offered only when the server has Google keys.
               googleCalendarConfigured: googleConfigured(),
               googleCalendarEnabled: org.googleCalendarEnabled,
+              // …and phone notifications, offered only when it has VAPID keys.
+              pushConfigured: pushConfigured(),
+              pushEnabled: org.pushEnabled,
             }
           : {}),
       },
@@ -257,6 +261,8 @@ const orgUpdateSchema = z.object({
    */
   /** Settings → Integrations: people may connect Google Calendar. */
   googleCalendarEnabled: z.boolean().optional(),
+  /** Settings → Integrations: phone notifications for everybody who turns them on. */
+  pushEnabled: z.boolean().optional(),
   aiApiKey: z.string().trim().max(200).optional(),
   aiProvider: z.enum(AI_PROVIDER_IDS).optional(),
   aiModel: z.string().trim().min(1).max(100).optional(),
@@ -334,6 +340,7 @@ configRouter.patch('/', requirePermission('setup.admin'), async (req: AuthReques
         ...(data.aiModel !== undefined ? { aiModel: data.aiModel } : {}),
         ...(data.aiBaseUrl !== undefined ? { aiBaseUrl: data.aiBaseUrl || null } : {}),
         ...(data.googleCalendarEnabled !== undefined ? { googleCalendarEnabled: data.googleCalendarEnabled } : {}),
+        ...(data.pushEnabled !== undefined ? { pushEnabled: data.pushEnabled } : {}),
         ...(data.stageProbProposalSent !== undefined ? { stageProbProposalSent: data.stageProbProposalSent } : {}),
         ...(data.stageProbInNegotiation !== undefined ? { stageProbInNegotiation: data.stageProbInNegotiation } : {}),
         ...(data.stageProbProformaIssued !== undefined ? { stageProbProformaIssued: data.stageProbProformaIssued } : {}),

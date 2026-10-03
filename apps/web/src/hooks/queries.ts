@@ -20,7 +20,7 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
-import { api, type Department, type OrgConfig } from '@/lib/api-v2';
+import { api, type Department, type OrgConfig, type TeamScope } from '@/lib/api-v2';
 
 /** Query keys, in one place, so an invalidation elsewhere can find them. */
 export const qk = {
@@ -31,6 +31,8 @@ export const qk = {
   retainers: (status?: string) => ['retainers', status ?? 'all'] as const,
   projects: (status?: string) => ['projects', status ?? 'all'] as const,
   team: ['team'] as const,
+  teamScoped: ['team', 'scoped'] as const,
+  teamScope: ['team', 'scope'] as const,
   departments: ['departments'] as const,
 };
 
@@ -75,6 +77,34 @@ export function useTeamMembers() {
     gcTime: 60 * 60 * 1000,
   });
   return (data?.members ?? []) as TeamMemberOption[];
+}
+
+/**
+ * The roster, narrowed to a Head's own people — for filters over the work they
+ * manage, like the calendar's team layer. Everybody for anyone whose view is
+ * not limited. Pickers that ASSIGN use `useTeamMembers`, which is everybody.
+ */
+export function useScopedTeamMembers() {
+  const { data } = useQuery({
+    queryKey: qk.teamScoped,
+    queryFn: () => api.team.members({ scoped: true }),
+    staleTime: 60 * 60 * 1000,
+    gcTime: 60 * 60 * 1000,
+  });
+  return (data?.members ?? []) as TeamMemberOption[];
+}
+
+/**
+ * Whose people the caller manages — everybody, or the departments they lead.
+ * Null while loading, so a screen says nothing rather than the wrong thing.
+ */
+export function useTeamScope(): TeamScope | null {
+  const { data } = useQuery({
+    queryKey: qk.teamScope,
+    queryFn: () => api.team.scope(),
+    staleTime: 10 * 60 * 1000,
+  });
+  return data?.scope ?? null;
 }
 
 /**

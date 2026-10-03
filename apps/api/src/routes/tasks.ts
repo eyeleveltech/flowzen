@@ -46,6 +46,8 @@ function formatWorkingMinutes(totalMinutes: number): string {
 import { parsePagination } from '../utils/query.js';
 import { toCsv } from '../utils/csv.js';
 import { sendCsv } from '../utils/csvResponse.js';
+import { canSeeTask, taskInScope } from '../services/teamScope.js';
+import { pushReviewDecided, pushReviewSubmitted, pushTaskAssigned, pushTaskEdited } from '../services/push.js';
 
 export const tasksRouter = Router();
 
@@ -799,12 +801,16 @@ tasksRouter.get('/all', requirePermission('work.all'), async (req: AuthRequest, 
     );
     const statusWhere = statuses.length > 0 ? { status: { in: Array.from(new Set(statuses)) } } : {};
 
-    const where: any = {
+    /*
+     * A Head sees the work of the departments they lead — even though the HEAD
+     * preset carries `work.all`, which would otherwise open the whole studio.
+     */
+    const where: any = await taskInScope(req.user!, {
       organizationId: orgId,
       deletedAt: null,
       ...statusWhere,
       ...(and.length > 0 ? { AND: and } : {}),
-    };
+    });
 
     const tasks = await prisma.task.findMany({
       where,
@@ -1501,6 +1507,7 @@ tasksRouter.post('/', requirePermission('work.own'), async (req: AuthRequest, re
         repeatId: series?.id ?? null,
       });
     });
+    await pushTaskAssigned(req.user!, task, people);
 
     // The people on the way back out, in the same shape as every task endpoint.
     res.status(201).json({ success: true, task: withPeople(task) });
@@ -1561,7 +1568,10 @@ tasksRouter.patch('/:id', requirePermission('work.own'), async (req: AuthRequest
 
     const orgId = req.user!.organizationId;
     const id = String(req.params.id);
-    const existing = await prisma.task.findFirst({ where: { id, organizationId: orgId, deletedAt: null } });
+    // Somebody else's task outside a Head's departments is "not found" to them.
+    const existing = await prisma.task.findFirst({
+      where: await taskInScope(req.user!, { id, organizationId: orgId, deletedAt: null }),
+    });
     if (!existing) {
       res.status(404).json({ success: false, error: 'Task not found' });
       return;
@@ -1646,8 +1656,10 @@ tasksRouter.patch('/:id', requirePermission('work.own'), async (req: AuthRequest
      * assignees back untouched when they do — refusing that would lock them
      * out of their own work.
      */
+    let assigneesBefore: string[] | null = null;
     if (people || assignedById) {
       const current = await prisma.taskAssignee.findMany({ where: { taskId: id }, select: { userId: true } });
+      assigneesBefore = people ? (current ?? []).map((a) => a.userId) : null;
       const refusal = assignmentRefusal(req, people, assignedById, (current ?? []).map((a) => a.userId));
       if (refusal) {
         res.status(403).json({ success: false, error: refusal });
@@ -1825,6 +1837,7 @@ tasksRouter.patch('/:id', requirePermission('work.own'), async (req: AuthRequest
         },
       });
     }
+    await pushTaskEdited(req.user!, task, assigneesBefore, changed.dueDate ? String(changed.dueDate.to) : null);
 
     res.json({ success: true, task });
   } catch (error) {
@@ -1865,7 +1878,10 @@ tasksRouter.delete('/:id', requirePermission('work.own'), async (req: AuthReques
     const orgId = req.user!.organizationId;
     const id = String(req.params.id);
 
-    const task = await prisma.task.findFirst({ where: { id, organizationId: orgId, deletedAt: null } });
+    // Somebody else's task outside a Head's departments is "not found" to them.
+    const task = await prisma.task.findFirst({
+      where: await taskInScope(req.user!, { id, organizationId: orgId, deletedAt: null }),
+    });
     if (!task) {
       res.status(404).json({ success: false, error: 'Task not found' });
       return;
@@ -1929,7 +1945,10 @@ tasksRouter.patch('/:id/status', requirePermission('work.own'), async (req: Auth
       return;
     }
 
-    const task = await prisma.task.findFirst({ where: { id, organizationId: orgId, deletedAt: null } });
+    // Somebody else's task outside a Head's departments is "not found" to them.
+    const task = await prisma.task.findFirst({
+      where: await taskInScope(req.user!, { id, organizationId: orgId, deletedAt: null }),
+    });
     if (!task) {
       res.status(404).json({ success: false, error: 'Task not found' });
       return;
@@ -2019,7 +2038,10 @@ tasksRouter.post('/:id/wait', requirePermission('work.own'), async (req: AuthReq
     // Unlike its siblings this update went straight to prisma.task.update by
     // bare id, with no check that the task belongs to the caller's org — a
     // tenant-isolation gap the other four task mutations don't have.
-    const existing = await prisma.task.findFirst({ where: { id, organizationId: orgId, deletedAt: null } });
+    // Somebody else's task outside a Head's departments is "not found" to them.
+    const existing = await prisma.task.findFirst({
+      where: await taskInScope(req.user!, { id, organizationId: orgId, deletedAt: null }),
+    });
     if (!existing) {
       res.status(404).json({ success: false, error: 'Task not found' });
       return;
@@ -2064,7 +2086,10 @@ tasksRouter.post('/:id/resume', requirePermission('work.own'), async (req: AuthR
     const orgId = req.user!.organizationId;
     const id = String(req.params.id);
 
-    const task = await prisma.task.findFirst({ where: { id, organizationId: orgId, deletedAt: null } });
+    // Somebody else's task outside a Head's departments is "not found" to them.
+    const task = await prisma.task.findFirst({
+      where: await taskInScope(req.user!, { id, organizationId: orgId, deletedAt: null }),
+    });
     if (!task) {
       res.status(404).json({ success: false, error: 'Task not found' });
       return;
@@ -2226,6 +2251,7 @@ tasksRouter.post('/:id/submit-review', requirePermission('work.own'), async (req
         payload: { title: task.title, round, ...(link ? { link } : {}) },
       },
     });
+    await pushReviewSubmitted(req.user!, task, review.id);
 
     res.status(201).json({ success: true, status: TaskStatus.IN_REVIEW, review });
   } catch (error) {
@@ -2331,6 +2357,7 @@ async function decideReview(
       payload: { title: task.title, round: open.round, ...(feedback ? { feedback } : {}) },
     },
   });
+  await pushReviewDecided(req.user!, task, open, approved, feedback);
 
   res.json({
     success: true,
@@ -2472,9 +2499,18 @@ tasksRouter.get('/:id/reviews', requirePermission('work.own'), async (req: AuthR
     const isApprover = Boolean(task.taskType && types.includes(task.taskType));
     const isEscalation = Boolean(task.taskType && escalationTypes.includes(task.taskType));
     const onIt = assigneeIds.includes(me);
-    if (!onIt && task.createdById !== me && !isApprover && !isEscalation && !hasPermission(req.user!, 'work.team')) {
-      res.status(403).json({ success: false, error: "You can't see this task." });
-      return;
+    if (!onIt && task.createdById !== me && !isApprover && !isEscalation) {
+      // Approvers see their round whoever's task it is; a Head sees the
+      // reviews of their own departments' work, and outside it the task is
+      // "not found", as everywhere else it is out of their reach.
+      if (!hasPermission(req.user!, 'work.team')) {
+        res.status(403).json({ success: false, error: "You can't see this task." });
+        return;
+      }
+      if (!(await canSeeTask(req.user!, task.id))) {
+        res.status(404).json({ success: false, error: 'Task not found' });
+        return;
+      }
     }
 
     const inReview = task.status === TaskStatus.IN_REVIEW;
