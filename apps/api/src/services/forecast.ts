@@ -41,7 +41,23 @@ export async function composeForecast(orgId: string, assumeWonId: string | null 
     where: { organizationId: orgId, active: true },
     select: { id: true, name: true, designation: true, dept: true, monthlyCost: true },
   });
-  const monthlyPayroll = teamMembers.reduce((acc, m) => acc + Number(m.monthlyCost || 0), 0);
+  const peoplePayroll = teamMembers.reduce((acc, m) => acc + Number(m.monthlyCost || 0), 0);
+  // Nobody can be paid ₹0. A person with no monthly cost entered is a person
+  // this payroll leaves out — said, rather than silently counted as free.
+  const unpaidPeople = teamMembers.filter((m) => !(Number(m.monthlyCost) > 0)).length;
+
+  // 1b. Company costs: overheads (rent, software…) and any salaries entered
+  // as one company cost rather than per person.
+  const company = await monthlyCompanyCosts(orgId, now);
+  const overheads = company.overheads;
+  /*
+   * Salaries are counted once. Per person when entered there — the Salaries
+   * company cost is then the same money and stays out; otherwise the Salaries
+   * company cost, as one total.
+   */
+  const payrollBasis: 'people' | 'companyCost' | 'none' =
+    peoplePayroll > 0 ? 'people' : company.salaries.monthly > 0 ? 'companyCost' : 'none';
+  const monthlyPayroll = payrollBasis === 'people' ? peoplePayroll : company.salaries.monthly;
 
   // 2. Active Retainers (Recurring Base Inflows)
   const retainers = await prisma.retainer.findMany({
@@ -218,7 +234,9 @@ export async function composeForecast(orgId: string, assumeWonId: string | null 
     const directVendorCosts = Math.round(
       retainersInflow * 0.15 + (projectsInflow + assumedWonInflow) * 0.2,
     );
-    const totalOutflows = monthlyPayroll + directVendorCosts;
+    // Overheads were never here: payroll and a vendor estimate were the whole
+    // of "cash out", so rent and software were spent nowhere on this screen.
+    const totalOutflows = monthlyPayroll + overheads.monthly + directVendorCosts;
 
     // The verdict is taken on committed money alone. It is the
     // conservative read and the only one that is a forecast of CASH: when
@@ -246,6 +264,7 @@ export async function composeForecast(orgId: string, assumeWonId: string | null 
       },
       outflows: {
         payroll: monthlyPayroll,
+        overheads: overheads.monthly,
         vendorAndDirect: directVendorCosts,
         total: totalOutflows,
       },
@@ -258,13 +277,50 @@ export async function composeForecast(orgId: string, assumeWonId: string | null 
     };
   });
 
+  /*
+   * What this forecast cannot see, said above it. A surplus worked out with
+   * ₹0 of salaries is not a surplus, and the screen used to report one with
+   * nothing to say why.
+   */
+  const warnings: string[] = [];
+  if (payrollBasis === 'none' && teamMembers.length > 0) {
+    warnings.push(
+      "No one's monthly cost is entered, so payroll is ₹0 and every month here shows more cash than there is. Enter each person's monthly cost on Team.",
+    );
+  } else if (payrollBasis === 'companyCost') {
+    warnings.push(
+      "Payroll is the Salaries company cost, as one total. Enter each person's monthly cost on Team so it can be shared out to clients.",
+    );
+  } else if (unpaidPeople > 0) {
+    warnings.push(
+      `${unpaidPeople} of ${teamMembers.length} people have no monthly cost entered, so payroll leaves them out. Enter it on Team.`,
+    );
+  }
+  if (payrollBasis === 'people' && company.salaries.monthly > 0) {
+    warnings.push(
+      'Salaries are entered per person and as a company cost too. This uses the per-person figures and leaves the Salaries cost out, so they are not counted twice.',
+    );
+  }
+  if (overheads.basis === 'none') {
+    warnings.push(
+      'No company overheads are entered (rent, software, utilities…), so none are taken off. Add them as company costs in Money — mark the monthly ones Recurring.',
+    );
+  }
+
   return {
     summary: {
       currentMrr: retainers.reduce((acc, r) => acc + Number(r.monthlyValue), 0),
       monthlyPayroll,
+      /** Where payroll came from: each person's monthly cost, the Salaries company cost, or nothing entered. */
+      payrollBasis,
+      monthlyOverheads: overheads.monthly,
+      /** Where the overheads figure came from: recurring costs, a 3-month average, or nothing entered. */
+      overheadsBasis: overheads.basis,
+      peopleWithoutCost: unpaidPeople,
       activeRetainersCount: retainers.length,
       activeDealsCount: proposals.length,
     },
+    warnings,
     forecast: forecastMonths,
     deals,
     assumeWon: assumeWonId,
@@ -272,3 +328,41 @@ export async function composeForecast(orgId: string, assumeWonId: string | null 
 }
 
 export type Forecast = Awaited<ReturnType<typeof composeForecast>>;
+
+/** A company cost that is salaries, by its category — "Salaries", "Salary advance"… */
+export const isSalaryCost = (category: string) => /salar/i.test(category);
+
+type Monthly = { monthly: number; basis: 'recurring' | 'average' | 'none' };
+
+/**
+ * A month of company costs, going forward, split into overheads and salaries.
+ *
+ * For each: the recurring company costs, when any are set up — they are what
+ * the next months will actually be charged (the 1st-of-the-month job clones
+ * them). Otherwise the average of the last three complete months, the best
+ * guess there is from one-off entries. Capital spend is not an overhead and is
+ * left out; so are client costs, which the vendor estimate stands for.
+ */
+export async function monthlyCompanyCosts(orgId: string, now: Date): Promise<{ overheads: Monthly; salaries: Monthly }> {
+  const from = new Date(now.getFullYear(), now.getMonth() - 3, 1);
+  const to = new Date(now.getFullYear(), now.getMonth(), 1);
+  const [recurring, recent] = await Promise.all([
+    prisma.cost.findMany({
+      where: { organizationId: orgId, type: 'COMPANY', recurring: true, recurringSourceId: null, deletedAt: null },
+      select: { category: true, amount: true },
+    }),
+    prisma.cost.findMany({
+      where: { organizationId: orgId, type: 'COMPANY', deletedAt: null, incurredAt: { gte: from, lt: to } },
+      select: { category: true, amount: true },
+    }),
+  ]);
+  const sum = (rows: { amount: unknown }[] | undefined) => Math.round((rows ?? []).reduce((acc, r) => acc + Number(r.amount ?? 0), 0));
+  const of = (salary: boolean): Monthly => {
+    const mine = (rows: { category: string; amount: unknown }[] | undefined) => (rows ?? []).filter((r) => isSalaryCost(r.category) === salary);
+    const fixed = sum(mine(recurring));
+    if (fixed > 0) return { monthly: fixed, basis: 'recurring' };
+    const average = Math.round(sum(mine(recent)) / 3);
+    return average > 0 ? { monthly: average, basis: 'average' } : { monthly: 0, basis: 'none' };
+  };
+  return { overheads: of(false), salaries: of(true) };
+}

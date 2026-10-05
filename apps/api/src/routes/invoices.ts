@@ -4,7 +4,10 @@ import { prisma } from '../lib/prisma.js';
 import { authenticate, type AuthRequest, hasPermission, requirePermission } from '../middleware/auth.js';
 import { issueWithRetry } from '../utils/documentNumber.js';
 import { InvoiceStatus, MilestoneStatus, MonthCardStatus, RetainerBilling, TaskWorkType } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 import { parsePagination } from '../utils/query.js';
+import { maskInvoiceFigures } from '../utils/invoiceFigures.js';
+import { rupeesFromPaise, sumPaise, toPaise } from '../utils/paise.js';
 import { toCsv } from '../utils/csv.js';
 import { sendCsv } from '../utils/csvResponse.js';
 import { generateDocumentPdf } from '../services/documentPdf.js';
@@ -78,9 +81,9 @@ invoicesRouter.get('/', requirePermission('money.status'), async (req: AuthReque
     const todayStr = now.toISOString().slice(0, 10);
 
     const data = invoices.map((inv) => {
-      const totalPaid = inv.payments.reduce((acc, p) => acc + Number(p.amount), 0);
+      const totalPaid = sumPaise(inv.payments) / 100;
       const invoiceAmount = Number(inv.amount);
-      const balanceDue = Math.max(0, invoiceAmount - totalPaid);
+      const balanceDue = Math.max(0, toPaise(inv.amount) - sumPaise(inv.payments)) / 100;
       const isOverdue = inv.status !== 'PAID' && inv.status !== 'CANCELLED' && inv.dueAt.toISOString().slice(0, 10) < todayStr;
       
       const dueDaysDiff = Math.floor((now.getTime() - new Date(inv.dueAt).getTime()) / (1000 * 3600 * 24));
@@ -449,8 +452,13 @@ invoicesRouter.get('/awaiting', requirePermission('money.figures'), async (req: 
 
 /**
  * GET /api/invoices/:id — Single invoice detail
+ *
+ * `money.status`, like the list: this route had no gate at all, and it spreads
+ * the proforma, the month card and the project behind the invoice — so any
+ * signed-in employee could read a proforma's total and a month's revenue by
+ * id. Every figure, nested ones included, is masked without `money.figures`.
  */
-invoicesRouter.get('/:id', async (req: AuthRequest, res: Response, next: NextFunction) => {
+invoicesRouter.get('/:id', requirePermission('money.status'), async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const id = String(req.params.id);
     const orgId = req.user!.organizationId;
@@ -473,9 +481,9 @@ invoicesRouter.get('/:id', async (req: AuthRequest, res: Response, next: NextFun
       return;
     }
 
-    const totalPaid = invoice.payments.reduce((acc, p) => acc + Number(p.amount), 0);
+    const totalPaid = sumPaise(invoice.payments) / 100;
     const invoiceAmount = Number(invoice.amount);
-    const balanceDue = Math.max(0, invoiceAmount - totalPaid);
+    const balanceDue = Math.max(0, toPaise(invoice.amount) - sumPaise(invoice.payments)) / 100;
 
     /*
      * CR-02 added a subtotal, a tax breakdown, a total and a table of priced
@@ -491,6 +499,19 @@ invoicesRouter.get('/:id', async (req: AuthRequest, res: Response, next: NextFun
 
     const data = {
       ...invoice,
+      // What the invoice hangs off carries figures of its own: a proforma's
+      // totals, a month's revenue, a project's quote and estimate.
+      proforma: invoice.proforma ? maskInvoiceFigures(invoice.proforma, canSeeFigures) : null,
+      monthCard: invoice.monthCard
+        ? { ...invoice.monthCard, revenue: canSeeFigures ? invoice.monthCard.revenue : null }
+        : null,
+      project: invoice.project
+        ? {
+            ...invoice.project,
+            quotedValue: canSeeFigures ? invoice.project.quotedValue : null,
+            estimatedCost: canSeeFigures ? invoice.project.estimatedCost : null,
+          }
+        : null,
       amount: canSeeFigures ? invoiceAmount : null,
       gstAmount: invoice.gstAmount === null ? null : money(invoice.gstAmount),
       totalPaid: canSeeFigures ? totalPaid : null,
@@ -844,80 +865,84 @@ invoicesRouter.post(
 
       const invoice = await prisma.invoice.findFirst({
         where: { id, organizationId: orgId },
-        include: { payments: true, company: true },
+        select: { id: true, number: true, status: true, company: { select: { name: true } } },
       });
 
       if (!invoice) {
         res.status(404).json({ success: false, error: 'Invoice not found' });
         return;
       }
-
-      const receivedDate = parsed.data.receivedAt ? new Date(parsed.data.receivedAt) : new Date();
-
-      const payment = await prisma.payment.create({
-        data: {
-          invoiceId: id,
-          amount: parsed.data.amount,
-          ...(paymentGst != null ? { gstAmount: paymentGst } : {}),
-          receivedAt: receivedDate,
-          mode: parsed.data.mode,
-          reference: parsed.data.reference || undefined,
-        },
-      });
-
-      // Calculate total paid including this new payment
-      const totalPaid =
-        invoice.payments.reduce((acc, p) => acc + Number(p.amount), 0) + Number(parsed.data.amount);
-      const isFullySettled = totalPaid >= Number(invoice.amount);
-
-      let updatedInvoice: any = invoice;
-      if (isFullySettled) {
-        updatedInvoice = await prisma.invoice.update({
-          where: { id },
-          data: {
-            status: InvoiceStatus.PAID,
-            paidAt: receivedDate,
-          },
-          include: { payments: true, company: true },
-        });
-
-        /*
-         * The milestone follows the money, not somebody's finger.
-         *
-         * Recording a payment used to leave the milestone alone entirely, so
-         * the only way to show a milestone as Paid was to say so — which is
-         * how eleven of them came to sit at Paid with no document at all. Now
-         * the last rung is settled by the same event that settles the invoice.
-         */
-        if (invoice.milestoneId) {
-          await prisma.milestone.update({
-            where: { id: invoice.milestoneId },
-            data: { status: MilestoneStatus.PAID },
-          });
-        }
-
-        // And the proforma that asked for it. Paid was a status nothing ever
-        // set, so every proforma read Unpaid for ever, settled or not.
-        if (invoice.proformaId) {
-          await prisma.proforma.updateMany({
-            where: { id: invoice.proformaId, organizationId: orgId, status: { not: 'CANCELLED' } },
-            data: { status: 'PAID' },
-          });
-        }
+      if (invoice.status === InvoiceStatus.CANCELLED) {
+        res.status(400).json({ success: false, error: 'This invoice is cancelled.' });
+        return;
       }
 
-      // Log payment activity
+      const receivedDate = parsed.data.receivedAt ? new Date(parsed.data.receivedAt) : new Date();
+      const paymentPaise = toPaise(parsed.data.amount);
+
+      /*
+       * One transaction, with the invoice row locked for its length.
+       *
+       * The insert, the settlement and the milestone and proforma that follow
+       * it were four separate writes: a failure part way left a payment with
+       * no settlement, and two payments arriving together each read the
+       * balance before the other existed — so two halves that together paid
+       * the bill left it unpaid, or both passed an overpayment check. Now the
+       * second waits for the first, then sees it.
+       */
+      let outcome;
+      try {
+        outcome = await prisma.$transaction(async (tx) => {
+          await lockInvoice(tx, id);
+          const fresh = await tx.invoice.findUnique({
+            where: { id },
+            select: { amount: true, status: true, payments: { select: { amount: true } } },
+          });
+          if (!fresh || fresh.status === InvoiceStatus.CANCELLED) throw new MoneyRefusal('This invoice is cancelled.');
+          const owedPaise = toPaise(fresh.amount) - sumPaise(fresh.payments);
+          if (paymentPaise > owedPaise) {
+            // Advances come in a later plan; until then, nothing over the balance.
+            throw new MoneyRefusal(
+              owedPaise > 0 ? `That's more than the ${rupeesFromPaise(owedPaise)} still owed.` : 'This invoice is already fully paid.',
+            );
+          }
+          const payment = await tx.payment.create({
+            data: {
+              invoiceId: id,
+              amount: parsed.data.amount,
+              ...(paymentGst != null ? { gstAmount: paymentGst } : {}),
+              receivedAt: receivedDate,
+              mode: parsed.data.mode,
+              reference: parsed.data.reference || undefined,
+            },
+          });
+          // The invoice, its milestone and its proforma follow the money.
+          const settlement = await resettle(tx, id);
+          const updatedInvoice = await tx.invoice.findUnique({ where: { id }, include: { payments: true, company: true } });
+          return { payment, settlement, updatedInvoice };
+        });
+      } catch (e) {
+        if (e instanceof MoneyRefusal) {
+          res.status(400).json({ success: false, error: e.message });
+          return;
+        }
+        throw e;
+      }
+      const { payment, settlement, updatedInvoice } = outcome;
+      const isFullySettled = settlement.settled;
+
+      // Log payment activity — "fully paid" exactly once, on the payment that settled it.
       await prisma.activity.create({
         data: {
           organizationId: orgId,
           actorId: req.user!.userId,
           entityType: 'Invoice',
           entityId: id,
-          verb: isFullySettled ? 'fully_paid' : 'payment_received',
+          verb: settlement.becamePaid ? 'fully_paid' : 'payment_received',
           payload: {
             paymentAmount: parsed.data.amount,
             ...(paymentGst != null ? { paymentGst } : {}),
-            totalPaid,
+            totalPaid: settlement.receivedPaise / 100,
             invoiceNumber: invoice.number,
             companyName: invoice.company.name,
             mode: parsed.data.mode,
@@ -937,53 +962,254 @@ invoicesRouter.post(
   },
 );
 
-const statusSchema = z.object({
-  status: z.nativeEnum(InvoiceStatus),
-});
+// ── Correcting, and going back a stage ───────────────────────────────────────
+//
+// Every step forward on an invoice could be taken and none could be taken
+// back. A typo in the amount, a payment recorded twice or against the wrong
+// invoice, an invoice entered against the wrong month: each stayed for ever,
+// and the milestone screen told people to "cancel that one first" with no way
+// to. These four routes are the way back. Each works out what follows from
+// the money (paid or not, the milestone, the proforma) rather than taking a
+// status from a click.
 
 /**
- * PATCH /api/invoices/:id/status — Update invoice status
+ * An invoice's status brought into line with its payments, and the milestone
+ * and proforma behind it with the invoice: the forward rules of
+ * POST /:id/payments, run in both directions.
+ */
+type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+
+export type Settlement = {
+  /** Received in total now, in paise. */
+  receivedPaise: number;
+  /** Covers the invoice now. */
+  settled: boolean;
+  /** This change is the one that settled it — so "fully paid" is said once. */
+  becamePaid: boolean;
+  /** This change unsettled it: owed again. */
+  becameOwed: boolean;
+};
+
+async function resettle(tx: Tx, invoiceId: string): Promise<Settlement> {
+  const inv = await tx.invoice.findUnique({
+    where: { id: invoiceId },
+    select: {
+      id: true,
+      amount: true,
+      status: true,
+      milestoneId: true,
+      proformaId: true,
+      payments: { select: { amount: true, receivedAt: true } },
+    },
+  });
+  const none = { receivedPaise: 0, settled: false, becamePaid: false, becameOwed: false };
+  if (!inv || inv.status === InvoiceStatus.CANCELLED) return none;
+  // Whole paise: a float sum can fall a fraction short of a bill paid to the paisa.
+  const receivedPaise = sumPaise(inv.payments);
+  const settled = receivedPaise > 0 && receivedPaise >= toPaise(inv.amount);
+  const wasPaid = inv.status === InvoiceStatus.PAID;
+
+  if (settled) {
+    // The day the last of the money arrived, whichever payment that was.
+    const paidAt = inv.payments.reduce((d, p) => (p.receivedAt > d ? p.receivedAt : d), inv.payments[0].receivedAt);
+    await tx.invoice.update({ where: { id: inv.id }, data: { status: InvoiceStatus.PAID, paidAt } });
+    if (!wasPaid) {
+      if (inv.milestoneId) {
+        await tx.milestone.update({ where: { id: inv.milestoneId }, data: { status: MilestoneStatus.PAID } });
+      }
+      if (inv.proformaId) {
+        await tx.proforma.updateMany({ where: { id: inv.proformaId, status: { not: 'CANCELLED' } }, data: { status: 'PAID' } });
+      }
+    }
+    return { receivedPaise, settled, becamePaid: !wasPaid, becameOwed: false };
+  }
+  if (wasPaid) {
+    // No longer settled: back to owed, and everything that followed it too.
+    await tx.invoice.update({ where: { id: inv.id }, data: { status: InvoiceStatus.RAISED, paidAt: null } });
+    if (inv.milestoneId) {
+      await tx.milestone.updateMany({
+        where: { id: inv.milestoneId, status: MilestoneStatus.PAID },
+        data: { status: MilestoneStatus.INVOICED },
+      });
+    }
+    if (inv.proformaId) {
+      await tx.proforma.updateMany({ where: { id: inv.proformaId, status: 'PAID' }, data: { status: 'UNPAID' } });
+    }
+    return { receivedPaise, settled, becamePaid: false, becameOwed: true };
+  }
+  return { receivedPaise, settled, becamePaid: false, becameOwed: false };
+}
+
+/**
+ * Hold the invoice row until this transaction ends, so a second payment (or
+ * correction) against the same invoice waits for this one and then reads its
+ * result, instead of both reading the balance before either was written.
+ */
+async function lockInvoice(tx: Tx, invoiceId: string): Promise<void> {
+  await tx.$queryRaw`SELECT id FROM "invoices" WHERE id = ${invoiceId} FOR UPDATE`;
+}
+
+/** A refusal found inside a transaction: rolls it back, and becomes a 400 with this message. */
+class MoneyRefusal extends Error {}
+
+/**
+ * A paid invoice is locked. Its number, dates and document are what the
+ * client was sent and what they paid against; only `setup.admin` may change
+ * them, and only by saying why — the reason goes on the record with the edit.
+ * Null when the change may go ahead.
+ */
+function paidLockRefusal(
+  req: AuthRequest,
+  status: InvoiceStatus,
+  reason: string | undefined,
+): { status: number; error: string } | null {
+  if (status !== InvoiceStatus.PAID) return null;
+  if (!hasPermission(req.user!, 'setup.admin')) {
+    return { status: 403, error: 'This invoice is paid, so it is locked. Ask an admin if it really needs to change.' };
+  }
+  if (!reason || reason.trim().length < 3) {
+    return { status: 400, error: 'This invoice is paid. Say why it needs to change — the reason is kept with the edit.' };
+  }
+  return null;
+}
+
+const dayOf = (d: Date | null | undefined) => (d ? d.toISOString().slice(0, 10) : null);
+
+const editInvoiceSchema = z
+  .object({
+    /** The number Tally gave it. */
+    number: z.string().trim().min(1, 'The invoice number is required').max(60).optional(),
+    /** The payable total, GST included. */
+    amount: z.number().positive().optional(),
+    /** The GST inside `amount`. Null: not recorded. */
+    gstAmount: z.number().min(0).nullable().optional(),
+    raisedAt: z.string().min(1).optional(),
+    dueAt: z.string().min(1).optional(),
+    /** Required, from an admin, to change a paid invoice. */
+    reason: z.string().trim().max(500).optional(),
+  })
+  .refine((v) => Object.keys(v).some((k) => k !== 'reason'), { message: 'Nothing to change' });
+
+/**
+ * PATCH /api/invoices/:id — correct what was entered: the number, the amount
+ * and its GST, the dates.
+ *
+ * Not below what has already been received (that would read as overpaid —
+ * change the payment instead), and not the amount of an invoice with a printed
+ * document, whose amount is worked out from its lines (Edit document).
  */
 invoicesRouter.patch(
-  '/:id/status',
+  '/:id',
   requirePermission('money.figures'),
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-      const id = String(req.params.id);
-      const orgId = req.user!.organizationId;
-
-      const parsed = statusSchema.safeParse(req.body);
+      const parsed = editInvoiceSchema.safeParse(req.body);
       if (!parsed.success) {
         res.status(400).json({ success: false, error: parsed.error.issues[0].message });
         return;
       }
-
+      const orgId = req.user!.organizationId;
+      const id = String(req.params.id);
       const invoice = await prisma.invoice.findFirst({
         where: { id, organizationId: orgId },
+        include: { payments: { select: { amount: true } } },
       });
-
       if (!invoice) {
         res.status(404).json({ success: false, error: 'Invoice not found' });
         return;
       }
+      if (invoice.status === InvoiceStatus.CANCELLED) {
+        res.status(400).json({ success: false, error: 'This invoice is cancelled. Enter a new one rather than changing it.' });
+        return;
+      }
+      const locked = paidLockRefusal(req, invoice.status, parsed.data.reason);
+      if (locked) {
+        res.status(locked.status).json({ success: false, error: locked.error });
+        return;
+      }
 
-      const updated = await prisma.invoice.update({
-        where: { id },
-        data: {
-          status: parsed.data.status,
-          paidAt: parsed.data.status === InvoiceStatus.PAID ? (invoice.paidAt || new Date()) : invoice.paidAt,
-        },
-      });
+      const { number, amount, gstAmount, raisedAt, dueAt, reason } = parsed.data;
+      const wasAmount = Number(invoice.amount);
+      const wasGst = invoice.gstAmount === null ? null : Number(invoice.gstAmount);
+      const nextAmount = amount ?? wasAmount;
+      const nextGst = gstAmount !== undefined ? gstAmount : wasGst;
+      const moneyMoves = nextAmount !== wasAmount || nextGst !== wasGst;
 
-      if (invoice.status !== updated.status) {
+      if (moneyMoves && invoice.subtotal !== null) {
+        res.status(400).json({
+          success: false,
+          error: 'This invoice has a printed document, so its amount comes from the document. Change it with Edit document.',
+        });
+        return;
+      }
+      if (nextGst != null && nextGst >= nextAmount) {
+        res.status(400).json({ success: false, error: 'The GST has to be less than the invoice total.' });
+        return;
+      }
+      const receivedPaise = sumPaise(invoice.payments);
+      if (toPaise(nextAmount) < receivedPaise) {
+        res.status(400).json({
+          success: false,
+          error: `${rupeesFromPaise(receivedPaise)} has already been received against this invoice, so the total can't be less. Change or remove a payment first.`,
+        });
+        return;
+      }
+      const nextRaised = raisedAt ? new Date(raisedAt) : invoice.raisedAt;
+      const nextDue = dueAt ? new Date(dueAt) : invoice.dueAt;
+      if (Number.isNaN(nextRaised.getTime()) || Number.isNaN(nextDue.getTime())) {
+        res.status(400).json({ success: false, error: 'That is not a date.' });
+        return;
+      }
+      if (nextDue < nextRaised) {
+        res.status(400).json({ success: false, error: "The due date can't be before the invoice date." });
+        return;
+      }
+
+      let updated;
+      try {
+        updated = await prisma.$transaction(async (tx) => {
+          await tx.invoice.update({
+            where: { id },
+            data: {
+              ...(number !== undefined ? { number } : {}),
+              ...(amount !== undefined ? { amount } : {}),
+              ...(gstAmount !== undefined ? { gstAmount, gstApplicable: (gstAmount ?? 0) > 0 } : {}),
+              raisedAt: nextRaised,
+              dueAt: nextDue,
+            },
+          });
+          // A smaller total can settle it; a bigger one can unsettle it.
+          await resettle(tx, id);
+          return tx.invoice.findUnique({ where: { id } });
+        });
+      } catch (e) {
+        if ((e as { code?: string }).code === 'P2002') {
+          res.status(409).json({ success: false, error: `Invoice number ${number} is already used by another invoice.` });
+          return;
+        }
+        throw e;
+      }
+
+      const changed: Record<string, { from: unknown; to: unknown }> = {};
+      if (number !== undefined && number !== invoice.number) changed.number = { from: invoice.number, to: number };
+      if (nextAmount !== wasAmount) changed.amount = { from: wasAmount, to: nextAmount };
+      if (nextGst !== wasGst) changed.gstAmount = { from: wasGst, to: nextGst };
+      if (dayOf(nextRaised) !== dayOf(invoice.raisedAt)) changed.raisedAt = { from: dayOf(invoice.raisedAt), to: dayOf(nextRaised) };
+      if (dayOf(nextDue) !== dayOf(invoice.dueAt)) changed.dueAt = { from: dayOf(invoice.dueAt), to: dayOf(nextDue) };
+      if (Object.keys(changed).length) {
         await prisma.activity.create({
           data: {
             organizationId: orgId,
+            actorId: req.user!.userId,
             entityType: 'Invoice',
             entityId: id,
-            actorId: req.user!.userId,
-            verb: 'invoice_status_changed',
-            payload: { number: invoice.number, from: invoice.status, to: updated.status },
+            verb: 'invoice_edited',
+            payload: {
+              number: updated?.number ?? invoice.number,
+              changed,
+              // A paid invoice changes only with a reason, and the reason stays with it.
+              ...(invoice.status === InvoiceStatus.PAID ? { wasPaid: true, reason: reason!.trim() } : {}),
+            } as Prisma.InputJsonValue,
           },
         });
       }
@@ -994,6 +1220,251 @@ invoicesRouter.patch(
     }
   },
 );
+
+const paymentEditSchema = z
+  .object({
+    amount: z.number().positive().optional(),
+    gstAmount: z.number().min(0).nullable().optional(),
+    receivedAt: z.string().min(1).optional(),
+    mode: z.enum(['NEFT', 'RTGS', 'UPI', 'CHEQUE', 'BANK_TRANSFER', 'CASH']).optional(),
+    reference: z.string().max(200).nullable().optional(),
+  })
+  .refine((v) => Object.keys(v).length > 0, { message: 'Nothing to change' });
+
+/** The payment, if it is on this invoice and the invoice is in this organisation. */
+const findPayment = (orgId: string, invoiceId: string, paymentId: string) =>
+  prisma.payment.findFirst({
+    where: { id: paymentId, invoiceId, invoice: { organizationId: orgId } },
+    include: { invoice: { select: { id: true, number: true, status: true, company: { select: { name: true } } } } },
+  });
+
+/**
+ * PATCH /api/invoices/:id/payments/:paymentId — correct a payment: the amount
+ * and its GST, the date, how it came in, the reference. The invoice follows:
+ * settled if it now covers the total, owed again if it no longer does.
+ */
+invoicesRouter.patch(
+  '/:id/payments/:paymentId',
+  requirePermission('money.figures'),
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const parsed = paymentEditSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({ success: false, error: parsed.error.issues[0].message });
+        return;
+      }
+      const orgId = req.user!.organizationId;
+      const id = String(req.params.id);
+      const payment = await findPayment(orgId, id, String(req.params.paymentId));
+      if (!payment) {
+        res.status(404).json({ success: false, error: 'That payment is not on this invoice.' });
+        return;
+      }
+      if (payment.invoice.status === InvoiceStatus.CANCELLED) {
+        res.status(400).json({ success: false, error: 'This invoice is cancelled.' });
+        return;
+      }
+      const { amount, gstAmount, receivedAt, mode, reference } = parsed.data;
+      const nextAmount = amount ?? Number(payment.amount);
+      const nextGst = gstAmount !== undefined ? gstAmount : payment.gstAmount === null ? null : Number(payment.gstAmount);
+      if (nextGst != null && nextGst >= nextAmount) {
+        res.status(400).json({ success: false, error: 'The GST has to be less than the amount received.' });
+        return;
+      }
+      const nextReceived = receivedAt ? new Date(receivedAt) : payment.receivedAt;
+      if (Number.isNaN(nextReceived.getTime())) {
+        res.status(400).json({ success: false, error: 'That is not a date.' });
+        return;
+      }
+
+      let updated;
+      try {
+        updated = await prisma.$transaction(async (tx) => {
+        await lockInvoice(tx, id);
+        const fresh = await tx.invoice.findUnique({
+          where: { id },
+          select: { amount: true, payments: { select: { id: true, amount: true } } },
+        });
+        const othersPaise = sumPaise((fresh?.payments ?? []).filter((x) => x.id !== payment.id));
+        const roomPaise = toPaise(fresh?.amount ?? 0) - othersPaise;
+        if (toPaise(nextAmount) > roomPaise) {
+          throw new MoneyRefusal(`That's more than the ${rupeesFromPaise(Math.max(0, roomPaise))} still owed.`);
+        }
+        const p = await tx.payment.update({
+          where: { id: payment.id },
+          data: {
+            ...(amount !== undefined ? { amount } : {}),
+            ...(gstAmount !== undefined ? { gstAmount } : {}),
+            receivedAt: nextReceived,
+            ...(mode !== undefined ? { mode } : {}),
+            ...(reference !== undefined ? { reference: reference?.trim() || null } : {}),
+          },
+        });
+        await resettle(tx, id);
+        return p;
+        });
+      } catch (e) {
+        if (e instanceof MoneyRefusal) {
+          res.status(400).json({ success: false, error: e.message });
+          return;
+        }
+        throw e;
+      }
+
+      await prisma.activity.create({
+        data: {
+          organizationId: orgId,
+          actorId: req.user!.userId,
+          entityType: 'Invoice',
+          entityId: id,
+          verb: 'payment_edited',
+          payload: {
+            invoiceNumber: payment.invoice.number,
+            companyName: payment.invoice.company.name,
+            amountWas: Number(payment.amount),
+            amountNow: nextAmount,
+            ...(nextGst != null ? { gstNow: nextGst } : {}),
+          },
+        },
+      });
+      const invoice = await prisma.invoice.findUnique({ where: { id }, select: { id: true, status: true, paidAt: true } });
+      res.json({ success: true, payment: updated, invoice });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+/**
+ * DELETE /api/invoices/:id/payments/:paymentId — a payment recorded by
+ * mistake. If it was what settled the invoice, the invoice is owed again, and
+ * its milestone and proforma step back with it.
+ */
+invoicesRouter.delete(
+  '/:id/payments/:paymentId',
+  requirePermission('money.figures'),
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const orgId = req.user!.organizationId;
+      const id = String(req.params.id);
+      const payment = await findPayment(orgId, id, String(req.params.paymentId));
+      if (!payment) {
+        res.status(404).json({ success: false, error: 'That payment is not on this invoice.' });
+        return;
+      }
+      await prisma.$transaction(async (tx) => {
+        await lockInvoice(tx, id);
+        await tx.payment.delete({ where: { id: payment.id } });
+        await resettle(tx, id);
+      });
+      await prisma.activity.create({
+        data: {
+          organizationId: orgId,
+          actorId: req.user!.userId,
+          entityType: 'Invoice',
+          entityId: id,
+          verb: 'payment_removed',
+          payload: {
+            invoiceNumber: payment.invoice.number,
+            companyName: payment.invoice.company.name,
+            amount: Number(payment.amount),
+            receivedAt: dayOf(payment.receivedAt),
+            mode: payment.mode,
+          },
+        },
+      });
+      const invoice = await prisma.invoice.findUnique({ where: { id }, select: { id: true, status: true, paidAt: true } });
+      res.json({ success: true, invoice });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+/**
+ * POST /api/invoices/:id/cancel — the invoice should not be here at all (the
+ * wrong month, the wrong client, cancelled in Tally). It stays on the record
+ * as Cancelled, and everything it moved forward steps back:
+ *
+ *   · the retainer month is free for an invoice again;
+ *   · the proforma it settled is live again, so the right invoice can be
+ *     entered against it;
+ *   · the milestone goes back to Proforma raised, or to Pending.
+ *
+ * Refused while money is recorded against it — remove the payments first, so
+ * nothing received is ever hidden inside a cancelled invoice. The number stays
+ * with the cancelled invoice, as it does in Tally.
+ */
+invoicesRouter.post(
+  '/:id/cancel',
+  requirePermission('money.figures'),
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const orgId = req.user!.organizationId;
+      const id = String(req.params.id);
+      const invoice = await prisma.invoice.findFirst({
+        where: { id, organizationId: orgId },
+        include: { payments: { select: { id: true } }, company: { select: { name: true } } },
+      });
+      if (!invoice) {
+        res.status(404).json({ success: false, error: 'Invoice not found' });
+        return;
+      }
+      if (invoice.status === InvoiceStatus.CANCELLED) {
+        res.status(400).json({ success: false, error: 'This invoice is already cancelled.' });
+        return;
+      }
+      if (invoice.payments.length > 0) {
+        res.status(400).json({
+          success: false,
+          error: `Money is recorded against this invoice. Remove its ${invoice.payments.length === 1 ? 'payment' : `${invoice.payments.length} payments`} first, then cancel it.`,
+        });
+        return;
+      }
+
+      await prisma.$transaction(async (tx) => {
+        await tx.invoice.update({
+          where: { id },
+          // The proforma link is a unique key: it has to come off, or the
+          // right invoice could never be entered against that proforma.
+          data: { status: InvoiceStatus.CANCELLED, paidAt: null, proformaId: null },
+        });
+        await tx.monthCard.updateMany({ where: { invoiceId: id }, data: { invoiceId: null } });
+        await tx.proforma.updateMany({ where: { invoiceId: id }, data: { invoiceId: null } });
+        if (invoice.milestoneId) {
+          const liveProformas = await tx.proforma.count({
+            where: { milestoneId: invoice.milestoneId, status: { not: 'CANCELLED' } },
+          });
+          await tx.milestone.update({
+            where: { id: invoice.milestoneId },
+            data: { status: liveProformas > 0 ? MilestoneStatus.PROFORMA_RAISED : MilestoneStatus.PENDING },
+          });
+        }
+      });
+
+      await prisma.activity.create({
+        data: {
+          organizationId: orgId,
+          actorId: req.user!.userId,
+          entityType: 'Invoice',
+          entityId: id,
+          verb: 'invoice_cancelled',
+          payload: { number: invoice.number, amount: Number(invoice.amount), companyName: invoice.company.name, statusWas: invoice.status },
+        },
+      });
+      res.json({ success: true, invoice: { id, status: InvoiceStatus.CANCELLED } });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+/*
+ * PATCH /api/invoices/:id/status used to sit here and set any status at all:
+ * PAID with no payment recorded, CANCELLED without unlinking the month,
+ * proforma or milestone. Nothing called it. Paid now happens only by
+ * recording payments, and cancelled only through POST /:id/cancel.
+ */
 
 // ── The printed document (CR-02) ────────────────────────────────────────────
 //
@@ -1020,6 +1491,8 @@ const invoiceDocumentSchema = z.object({
   terms: z.string().optional().nullable(),
   ...documentFieldsSchema,
   lineItems: z.array(lineItemSchema).min(1, 'A document needs at least one line item').max(200),
+  /** Required, from an admin, to rewrite a paid invoice's document. */
+  reason: z.string().trim().max(500).optional(),
 });
 
 /**
@@ -1061,6 +1534,11 @@ invoicesRouter.put(
         });
         return;
       }
+      const locked = paidLockRefusal(req, invoice.status, parsed.data.reason);
+      if (locked) {
+        res.status(locked.status).json({ success: false, error: locked.error });
+        return;
+      }
 
       const org = await prisma.organization.findUnique({ where: { id: orgId }, select: ORG_DOCUMENT_SELECT });
       if (!org) {
@@ -1090,11 +1568,11 @@ invoicesRouter.put(
       // allowed to fall below money already received: that would leave the
       // invoice reading as overpaid, and it means either the document or the
       // receipt is wrong, which is a person's problem, not a rounding one.
-      const received = invoice.payments.reduce((sum, p) => sum + Number(p.amount), 0);
-      if (snapshot.total < received) {
+      const receivedPaise = sumPaise(invoice.payments);
+      if (toPaise(snapshot.total) < receivedPaise) {
         res.status(400).json({
           success: false,
-          error: `This document totals ₹${snapshot.total.toLocaleString('en-IN')}, which is less than the ₹${received.toLocaleString('en-IN')} already received against this invoice.`,
+          error: `This document totals ${rupeesFromPaise(toPaise(snapshot.total))}, which is less than the ${rupeesFromPaise(receivedPaise)} already received against this invoice.`,
         });
         return;
       }
@@ -1108,27 +1586,15 @@ invoicesRouter.put(
        * balance would never have appeared anywhere again. Only CANCELLED was
        * refused before this; everything else was rewritable in silence.
        */
-      const settled = received > 0 && received >= snapshot.total;
-      const wasPaid = invoice.status === InvoiceStatus.PAID;
-      const nextStatus = settled
-        ? InvoiceStatus.PAID
-        : wasPaid
-          ? InvoiceStatus.RAISED
-          : invoice.status;
-
       const updated = await prisma.$transaction(async (tx) => {
         await tx.documentLineItem.deleteMany({ where: { invoiceId: id } });
-        return tx.invoice.update({
+        await tx.invoice.update({
           where: { id },
           data: {
             amount: snapshot.total,
             gstAmount: parsed.data.gstApplicable
               ? Math.round((snapshot.cgstAmount + snapshot.sgstAmount + snapshot.igstAmount) * 100) / 100
               : 0,
-            status: nextStatus,
-            // Cleared when it stops being settled, so the date on the row is
-            // never a payment date for a bill that is not paid.
-            paidAt: settled ? (invoice.paidAt ?? new Date()) : null,
             gstApplicable: parsed.data.gstApplicable,
             gstRatePercent: parsed.data.gstRatePercent,
             poNumber: parsed.data.poNumber || null,
@@ -1155,8 +1621,15 @@ invoicesRouter.put(
             amountInWords: snapshot.amountInWords,
             lineItems: { create: snapshot.lines },
           },
-          include: { lineItems: { orderBy: { serialNo: 'asc' } } },
         });
+        /*
+         * Whether it is settled follows the new total, not the old one — worked
+         * out from the payments, like every other change of status: a higher
+         * total makes a paid invoice owed again, a lower one can settle it, and
+         * the milestone and proforma follow either way.
+         */
+        await resettle(tx, id);
+        return tx.invoice.findUnique({ where: { id }, include: { lineItems: { orderBy: { serialNo: 'asc' } } } });
       });
 
       await prisma.activity.create({
@@ -1171,9 +1644,11 @@ invoicesRouter.put(
             amountWas: Number(invoice.amount),
             amountNow: snapshot.total,
             lines: snapshot.lines.length,
-            ...(nextStatus !== invoice.status
-              ? { statusWas: invoice.status, statusNow: nextStatus }
+            ...(updated && updated.status !== invoice.status
+              ? { statusWas: invoice.status, statusNow: updated.status }
               : {}),
+            // A paid invoice's document is rewritten only with a reason, and the reason stays with it.
+            ...(invoice.status === InvoiceStatus.PAID ? { wasPaid: true, reason: parsed.data.reason!.trim() } : {}),
           },
         },
       });

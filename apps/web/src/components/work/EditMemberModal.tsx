@@ -26,8 +26,16 @@ import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Field, FieldSelect } from '@/components/ui/field';
 import { ErrorNote } from '@/components/ui/empty-state';
+import { useIsAdmin } from '@/components/work/PaidInvoiceLock';
 
-type Member = { id: string; name: string; email?: string | null; departmentId?: string | null };
+type Member = {
+  id: string;
+  name: string;
+  email?: string | null;
+  departmentId?: string | null;
+  /** Sent to admins only; absent for everybody else. */
+  monthlyCost?: number | string | null;
+};
 
 export function EditMemberModal({
   member,
@@ -41,6 +49,14 @@ export function EditMemberModal({
   const [name, setName] = useState(member.name ?? '');
   const [email, setEmail] = useState(member.email ?? '');
   const [departmentId, setDepartmentId] = useState(member.departmentId ?? '');
+  /*
+   * What this person costs the company a month. There was nowhere to enter it:
+   * everybody was invited at ₹0, so payroll, the Forecast and profit all
+   * counted the team as free. Admins only, like the figure itself.
+   */
+  const admin = useIsAdmin();
+  const startCost = Number(member.monthlyCost ?? 0);
+  const [monthlyCost, setMonthlyCost] = useState(startCost > 0 ? String(startCost) : '');
   // The department records, by id — a rename in Settings shows here at once.
   const { departments } = useDepartments();
   const [busy, setBusy] = useState(false);
@@ -52,7 +68,9 @@ export function EditMemberModal({
    */
   const options = departments.map((d) => ({ value: d.id, label: d.name }));
 
-  const canSave = Boolean(name.trim()) && Boolean(email.trim()) && Boolean(departmentId) && !busy;
+  const costValue = monthlyCost.trim() === '' ? 0 : Number(monthlyCost);
+  const costValid = Number.isFinite(costValue) && costValue >= 0;
+  const canSave = Boolean(name.trim()) && Boolean(email.trim()) && Boolean(departmentId) && costValid && !busy;
 
   const save = async () => {
     if (!canSave) return;
@@ -63,6 +81,8 @@ export function EditMemberModal({
         name: name.trim(),
         email: email.trim(),
         departmentId,
+        // Only when an admin changed it — never a 0 written over a figure they cannot see.
+        ...(admin && costValue !== startCost ? { monthlyCost: costValue } : {}),
       } as never);
       toast.success(`${name.trim()} updated`);
       onConfirm();
@@ -102,6 +122,17 @@ export function EditMemberModal({
             disabled={busy}
             required
           />
+          {admin && (
+            <Field
+              label="Monthly cost to the company (₹)"
+              type="number"
+              value={monthlyCost}
+              onChange={setMonthlyCost}
+              disabled={busy}
+              placeholder="e.g. 45000"
+              hint="Salary and anything else they cost a month (yearly CTC ÷ 12). Only admins see it. Payroll, the Forecast and profit use it."
+            />
+          )}
         </ModalBody>
 
         <ModalFooter>

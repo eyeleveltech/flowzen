@@ -196,6 +196,21 @@ describe('Phase 4: Financials & Intelligence Engine', () => {
 
     (prisma.activity.create as any).mockResolvedValue({ id: 'act-1' });
 
+    // Recorded in one transaction (Money Plan 1): the locked balance, then the
+    // settle step's read with the new payment in it, then the answer.
+    (prisma.$transaction as any).mockImplementation(async (fn: any) => fn(prisma));
+    (prisma.invoice.findUnique as any)
+      .mockResolvedValueOnce({ amount: 50000, status: InvoiceStatus.RAISED, payments: [] })
+      .mockResolvedValueOnce({
+        id: 'inv-1',
+        amount: 50000,
+        status: InvoiceStatus.RAISED,
+        milestoneId: null,
+        proformaId: null,
+        payments: [{ amount: 50000, receivedAt: new Date() }],
+      })
+      .mockResolvedValueOnce({ id: 'inv-1', status: InvoiceStatus.PAID, payments: [], company: { name: 'Acme Corp' } });
+
     const payRes = await request(app)
       .post('/api/invoices/inv-1/payments')
       .set('Authorization', `Bearer ${adminToken}`)

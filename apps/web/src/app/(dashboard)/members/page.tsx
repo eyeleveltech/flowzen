@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { TableRowsSkeleton } from '@/components/ui/skeleton-loaders';
-import { ErrorNote } from '@/components/ui/empty-state';
+import { ErrorNote, Note } from '@/components/ui/empty-state';
 import { api, fileUrl } from '@/lib/api-v2';
 import { getInitials, getAvatarColor } from '@/lib/utils';
 import { AssignTaskModal } from '@/components/work/AssignTaskModal';
@@ -158,6 +158,9 @@ export default function MembersPage() {
    * per person, each one a number you can click into and see the tasks behind.
    */
   const overdueOnPeople = members.filter((m) => m.overdueTasksCount > 0).length;
+  // Admins see each person's monthly cost; anyone at ₹0 is counted as free by
+  // payroll, the Forecast and profit, so say how many before they are trusted.
+  const noCost = canInvite ? members.filter((m) => !(Number(m.monthlyCost) > 0)).length : 0;
 
   /*
    * What is on screen, not whoever happens to sort first.
@@ -184,6 +187,16 @@ export default function MembersPage() {
             like "you have nothing yet".
           */}
           <ErrorNote onDismiss={() => queryClient.resetQueries({ queryKey: ['team'] })}>{loadError}</ErrorNote>
+        </div>
+      )}
+      {noCost > 0 && (
+        <div className="mb-6">
+          <Note tone="warn">
+            {noCost === members.length
+              ? 'Nobody has a monthly cost entered'
+              : `${noCost} of ${members.length} people have no monthly cost entered`}
+            , so payroll, the Forecast and profit count them as free. Open Edit on each person to add it.
+          </Note>
         </div>
       )}
       {/* Header */}

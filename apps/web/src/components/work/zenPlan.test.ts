@@ -87,6 +87,9 @@ describe('a grouped step’s result', () => {
 describe('what a card may send', () => {
   it('only the endpoints a prepared job uses', () => {
     expect(zenRequestAllowed({ method: 'PATCH', path: '/tasks/t1' })).toBe(true);
+    // A new task, from a card of several.
+    expect(zenRequestAllowed({ method: 'POST', path: '/tasks' })).toBe(true);
+    expect(zenRequestAllowed({ method: 'POST', path: '/tasks/bulk' })).toBe(false);
     expect(zenRequestAllowed({ method: 'POST', path: '/tasks/t1/approve' })).toBe(true);
     expect(zenRequestAllowed({ method: 'POST', path: '/calendar/events' })).toBe(true);
     expect(zenRequestAllowed({ method: 'POST', path: '/proposals/p1/win' })).toBe(true);

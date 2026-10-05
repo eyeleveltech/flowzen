@@ -34,6 +34,8 @@ const auth = () =>
   ] as const;
 
 let written: { invoice?: any; company?: any; org?: any };
+/** The invoice as the transaction sees it: the fixture, then every update on top. */
+let row: any;
 
 beforeEach(() => {
   written = {};
@@ -53,11 +55,16 @@ beforeEach(() => {
     fn({
       invoice: {
         update: vi.fn(async ({ data }: any) => {
-          written.invoice = data;
-          return { id: 'inv-1', ...data };
+          // The document write first, then whatever the settle step changes.
+          written.invoice = { ...(written.invoice ?? {}), ...data };
+          row = { ...row, ...data };
+          return row;
         }),
+        findUnique: vi.fn(async () => row),
       },
       documentLineItem: { deleteMany: vi.fn(async () => ({ count: 0 })) },
+      milestone: { update: vi.fn(), updateMany: vi.fn() },
+      proforma: { updateMany: vi.fn() },
     }),
   );
 });
@@ -99,7 +106,9 @@ const INVOICE = {
   status: 'PAID',
   paidAt: new Date('2026-09-20'),
   company: { billingAddress: null, gstin: null, stateName: 'Tamil Nadu', stateCode: '33' },
-  payments: [{ amount: 35400 }],
+  payments: [{ amount: 35400, receivedAt: new Date('2026-09-20') }],
+  milestoneId: null,
+  proformaId: null,
 };
 
 const ORG = {
@@ -124,10 +133,12 @@ const ORG = {
 const saveDocument = (lineItems: unknown[], invoice: Record<string, unknown> = {}) => {
   (prisma.organization.findUnique as any).mockResolvedValue(ORG);
   (prisma.invoice.findFirst as any).mockResolvedValue({ ...INVOICE, ...invoice });
+  row = { ...INVOICE, ...invoice };
   return request(app)
     .put('/api/invoices/inv-1/document')
     .set(...auth())
-    .send({ billingName: 'Client Pvt Ltd', lineItems, placeOfSupply: { code: '33' } });
+    // A paid invoice is locked (Money Plan 1): an admin rewrites it only with a reason.
+    .send({ billingName: 'Client Pvt Ltd', lineItems, placeOfSupply: { code: '33' }, reason: 'Buyer address was wrong' });
 };
 
 describe('rewriting the document on an invoice that is already paid', () => {
@@ -139,8 +150,8 @@ describe('rewriting the document on an invoice that is already paid', () => {
     const res = await saveDocument([{ particulars: 'Retainer', units: 1, unitCost: 50000 }]);
     expect(res.status).toBe(200);
     expect(written.invoice.amount).toBe(59000);
-    expect(written.invoice.status).toBe('RAISED');
-    expect(written.invoice.paidAt).toBeNull();
+    expect(res.body.data.status).toBe('RAISED');
+    expect(res.body.data.paidAt).toBeNull();
   });
 
   it('stays PAID when the total does not change', async () => {
@@ -149,20 +160,20 @@ describe('rewriting the document on an invoice that is already paid', () => {
     const res = await saveDocument([{ particulars: 'Retainer', units: 1, unitCost: 30000 }]);
     expect(res.status).toBe(200);
     expect(written.invoice.amount).toBe(35400);
-    expect(written.invoice.status).toBe('PAID');
+    expect(res.body.data.status).toBe('PAID');
     // The original payment date, not today's — it did not get paid again.
-    expect(written.invoice.paidAt).toEqual(new Date('2026-09-20'));
+    expect(res.body.data.paidAt).toBe(new Date('2026-09-20').toISOString());
   });
 
   it('becomes PAID when a document is priced down to what was already received', async () => {
     const res = await saveDocument([{ particulars: 'Retainer', units: 1, unitCost: 20000 }], {
       status: 'RAISED',
       paidAt: null,
-      payments: [{ amount: 23600 }],
+      payments: [{ amount: 23600, receivedAt: new Date('2026-09-25') }],
     });
     expect(res.status).toBe(200);
-    expect(written.invoice.status).toBe('PAID');
-    expect(written.invoice.paidAt).toBeInstanceOf(Date);
+    expect(res.body.data.status).toBe('PAID');
+    expect(res.body.data.paidAt).toBe(new Date('2026-09-25').toISOString());
   });
 
   it('leaves an unpaid invoice alone', async () => {
@@ -172,7 +183,7 @@ describe('rewriting the document on an invoice that is already paid', () => {
       payments: [],
     });
     expect(res.status).toBe(200);
-    expect(written.invoice.status).toBe('RAISED');
+    expect(res.body.data.status).toBe('RAISED');
   });
 
   it('still refuses to drop the total below money already received', async () => {

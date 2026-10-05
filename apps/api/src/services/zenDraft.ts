@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma.js';
 import type { AiTool } from './ai/types.js';
+import { findOpenTwin, twinDay, twinStatus } from './taskDuplicates.js';
 
 /**
  * What Zen may propose, and why it never writes.
@@ -84,6 +85,12 @@ export type TaskDraft = {
     assigneeId: string;
     priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
     notes?: string;
+    /**
+     * Refuse at Create if the same task (title, person, due day) has gone up
+     * since this was drafted — a card pressed twice, the same ask in another
+     * chat. Off when the person was already shown the twin and creates anyway.
+     */
+    duplicateCheck?: boolean;
   };
   /** The same thing in words, for the card the asker reads before confirming. */
   shows: {
@@ -95,6 +102,8 @@ export type TaskDraft = {
     priority: string;
     notes: string | null;
   };
+  /** An open task like this one already on the board — shown on the card as a warning. */
+  duplicateOf?: { title: string; due: string; people: string; status: string };
 };
 
 type DraftOutcome =
@@ -109,6 +118,8 @@ export type DraftArgs = {
   assignee?: string;
   priority?: string;
   notes?: string;
+  /** They were told it is already on the board and want another anyway. */
+  allowDuplicate?: boolean;
 };
 
 /**
@@ -121,6 +132,13 @@ const DRAFTED =
   'Draft prepared and shown to the asker for confirmation. It is NOT created yet. ' +
   'Say briefly what you have drafted and that it is waiting for them to press Create. ' +
   'Do not say it is done, saved or created.';
+
+/** And when the same task is already on the board: say so first, and let them decide. */
+const DRAFTED_TWIN =
+  'Draft prepared, but the SAME task is already on the board and still open (see alreadyOnTheBoard). ' +
+  'Say that first — its title, who it is for, when it is due — and ask whether they want a second one. ' +
+  'The card shows the warning; pressing Create makes another task. If they only meant the one that exists, ' +
+  'tell them to press Discard. Do not say anything is created.';
 
 /**
  * Turn a sentence's worth of intent into a form somebody can check.
@@ -200,6 +218,34 @@ export async function draftTask(
   };
   if (args.notes?.trim()) body.notes = args.notes.trim();
 
+  /*
+   * Already on the board? The same title, still open, with this person on it
+   * — whatever its date: asking for "the Diwali reel" again a day later is
+   * still the same reel. Skipped when they have been told and want another.
+   */
+  const twin = args.allowDuplicate
+    ? null
+    : await findOpenTwin(organizationId, { title: body.title, assigneeIds: [assignee.id] });
+  const finish = (): DraftOutcome => ({
+    draft: {
+      // Shown the twin, pressing Create is a decision; otherwise Create still
+      // refuses a copy that went up after this was drafted.
+      body: { ...body, duplicateCheck: !twin },
+      shows,
+      ...(twin
+        ? {
+            duplicateOf: {
+              title: twin.title,
+              due: twinDay(twin.dueDate),
+              people: twin.people.join(', '),
+              status: twinStatus(twin.status),
+            },
+          }
+        : {}),
+    },
+    note: twin ? DRAFTED_TWIN : DRAFTED,
+  });
+
   const shows: TaskDraft['shows'] = {
     title: body.title,
     client: null,
@@ -210,7 +256,7 @@ export async function draftTask(
     notes: body.notes ?? null,
   };
 
-  if (!args.client?.trim()) return { draft: { body, shows }, note: DRAFTED };
+  if (!args.client?.trim()) return finish();
 
   /* ── which client ───────────────────────────────────────────────────────── */
   const companies = await prisma.company.findMany({
@@ -310,7 +356,7 @@ export async function draftTask(
     body.monthCardId = card.id;
     if (stream) body.retainerProjectId = stream.id;
     shows.belongsTo = stream ? `${stream.name} — ${month}` : `Retainer — ${month}`;
-    return { draft: { body, shows }, note: DRAFTED };
+    return finish();
   }
 
   /* ── or a one-off project ───────────────────────────────────────────────── */
@@ -350,7 +396,7 @@ export async function draftTask(
   body.workId = project.id;
   body.projectId = project.id;
   shows.belongsTo = project.name;
-  return { draft: { body, shows }, note: DRAFTED };
+  return finish();
 }
 
 /** The one write-shaped thing Zen may call. */
@@ -379,6 +425,10 @@ export const ZEN_DRAFT_TOOLS: AiTool[] = [
         assignee: { type: 'string', description: 'Who is doing it. Defaults to the person asking.' },
         priority: { type: 'string', enum: ['LOW', 'MEDIUM', 'HIGH', 'URGENT'] },
         notes: { type: 'string', description: 'Anything the person doing it needs to know.' },
+        allowDuplicate: {
+          type: 'boolean',
+          description: 'Only after you told them the same task is already on the board and they said they want another.',
+        },
       },
       required: [],
     },

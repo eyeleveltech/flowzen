@@ -7,6 +7,7 @@ import { resolveMailConfig } from '../utils/mailer.js';
 import { whenLabel } from '../utils/zonedTime.js';
 import { addDays, loadWorkCalendar, nextWorkingDay } from '../utils/workCalendar.js';
 import { companyLink, retainerMonthLink, taskLink } from '../utils/recordLink.js';
+import { draftTask, type DraftArgs, type TaskDraft } from './zenDraft.js';
 
 /**
  * Whole jobs Zen prepares and a person carries out (Zen Plan 4).
@@ -186,6 +187,39 @@ const andList = (names: string[]) =>
 
 export const ZEN_JOB_TOOLS = [
   {
+    name: 'prepareTasks',
+    description:
+      'Prepare SEVERAL new tasks at once, as one card — use this whenever they give two or more tasks in one message ' +
+      '("add these 10 tasks…", a list, a pasted checklist). Put every task in `tasks`, each with its own title and due date ' +
+      '(work real dates out yourself); client, workstream, assignee, priority and notes work as in draftTask. A detail said ' +
+      'once for all of them ("all for Brigade, due Friday, for Ramya") goes on every task. Nothing is created until they press ' +
+      `the card's button, and they can leave any task out first. If some cannot be drafted yet it says which and why: ask about ` +
+      `those, then call again with the whole list. At most ${25} tasks per card.`,
+    parameters: {
+      type: 'object',
+      properties: {
+        tasks: {
+          type: 'array',
+          description: 'Every task, in the order they gave them.',
+          items: {
+            type: 'object',
+            properties: {
+              title: { type: 'string', description: 'What needs doing, as it should read on the board.' },
+              dueDate: { type: 'string', description: 'YYYY-MM-DD.' },
+              client: { type: 'string', description: 'Leave out for internal work with no client.' },
+              workstream: { type: 'string', description: "Which piece of that client's work. Leave out for the default." },
+              assignee: { type: 'string', description: 'Who is doing it. Defaults to the person asking.' },
+              priority: { type: 'string', enum: ['LOW', 'MEDIUM', 'HIGH', 'URGENT'] },
+              notes: { type: 'string' },
+            },
+            required: ['title', 'dueDate'],
+          },
+        },
+      },
+      required: ['tasks'],
+    },
+  },
+  {
     name: 'prepareTaskChanges',
     description:
       'Prepare changes to existing tasks for the asker to carry out: move the due date, reassign, set status (done, cancelled, in progress, to do), set priority, or start/stop a repeat. ' +
@@ -314,6 +348,8 @@ export async function runZenJob(
   now = new Date(),
 ): Promise<JobOutcome> {
   switch (name) {
+    case 'prepareTasks':
+      return prepareTasks(args, organizationId, askerId, now);
     case 'prepareTaskChanges':
       return prepareTaskChanges(args, organizationId, askerId, now);
     case 'prepareApproval':
@@ -327,6 +363,141 @@ export async function runZenJob(
     case 'prepareEvent':
       return prepareEvent(args, organizationId, askerId, now);
   }
+}
+
+/* ─── 0. Several new tasks at once ───────────────────────────────────────── */
+
+/** How many tasks one card may carry: a list longer than this is a plan, not a message. */
+export const MAX_NEW_TASKS = 25;
+
+/**
+ * Several new tasks from one message, as one card.
+ *
+ * Each task is resolved exactly as `draftTask` resolves one — the same names,
+ * clients, months and workstreams, the same refusals — and goes up as one
+ * item of a single step: "Add" or "Leave out" each, one button for the lot.
+ * The browser sends each through `POST /tasks` on the asker's own session, so
+ * assigning other people, closed months and filing are all decided where they
+ * always are, item by item, and a refusal is said against its own task.
+ *
+ * Nothing goes up half-drafted: if any task needs an answer, the model is told
+ * which and why (with the real options, once, not per task) and asks.
+ */
+async function prepareTasks(args: Record<string, unknown>, orgId: string, askerId: string, now: Date): Promise<JobOutcome> {
+  const list = Array.isArray(args.tasks) ? (args.tasks as DraftArgs[]) : [];
+  if (list.length === 0) {
+    return asks({ needs: ['tasks'], because: 'Which tasks? Each needs something to do and a day to do it by.', candidates: {} });
+  }
+  if (list.length > MAX_NEW_TASKS) {
+    return says({
+      prepared: false,
+      why: `That is ${list.length} tasks; one card takes at most ${MAX_NEW_TASKS}. Offer to do them in groups of ${MAX_NEW_TASKS}.`,
+    });
+  }
+
+  const drafts: TaskDraft[] = [];
+  const problems: { task: number; title: string; needs: string[]; because: string }[] = [];
+  const candidates: Record<string, unknown> = {};
+  for (const [i, t] of list.entries()) {
+    const out = await draftTask(t ?? {}, orgId, askerId, now);
+    if ('draft' in out) {
+      drafts.push(out.draft);
+      continue;
+    }
+    problems.push({ task: i + 1, title: String(t?.title ?? '').trim() || '(no title)', needs: out.needs, because: out.because });
+    // The options once, not once per task: ten tasks for an unknown person
+    // would otherwise repeat the whole team ten times.
+    for (const [k, v] of Object.entries(out.candidates)) if (!(k in candidates)) candidates[k] = v;
+  }
+
+  if (problems.length > 0) {
+    return {
+      result: {
+        needs: ['tasks'],
+        because: `${plural(problems.length, 'task')} of the ${list.length} need an answer before they can be drafted.`,
+        problems,
+        candidates,
+        ready: drafts.length,
+        note: 'Ask about these, then call prepareTasks again with the WHOLE list, answers included.',
+      },
+    };
+  }
+
+  /*
+   * What is already there starts on Leave out: a task already on the board
+   * (open, same title, same person), or one that appears twice in this list.
+   * Switching it to Add is a decision taken with the warning in view, so that
+   * request goes without the Create-time duplicate check.
+   */
+  const seen = new Set<string>();
+  const items = drafts.map((d) => {
+    const key = `${d.shows.title.trim().toLowerCase()}|${d.body.assigneeId}`;
+    const repeated = seen.has(key);
+    seen.add(key);
+    const twin = d.duplicateOf;
+    const already = twin
+      ? `Already on the board for ${twin.people}, due ${twin.due} (${twin.status})`
+      : repeated
+        ? 'Same as a task above on this card'
+        : null;
+    return {
+      label: d.shows.title,
+      detail: [
+        already,
+        [
+          firstName(d.shows.assignedTo.split(' — ')[0]),
+          `due ${dayLabel(d.shows.due)}`,
+          d.shows.client ? `${d.shows.client} · ${d.shows.belongsTo}` : d.shows.belongsTo,
+          d.shows.priority !== 'MEDIUM' ? `${d.shows.priority.toLowerCase()} priority` : null,
+        ]
+          .filter(Boolean)
+          .join(' · '),
+      ]
+        .filter(Boolean)
+        .join(' — '),
+      options: [
+        {
+          label: 'Add',
+          request: {
+            method: 'POST' as const,
+            path: '/tasks',
+            body: already ? { ...d.body, duplicateCheck: false } : d.body,
+          },
+        },
+        { label: 'Leave out', request: null },
+      ],
+      choice: already ? 1 : 0,
+      already: Boolean(already),
+    };
+  });
+  const flagged = items.filter((i) => i.already);
+  const adding = items.length - flagged.length;
+
+  const c: ZenCard = {
+    type: 'plan',
+    title: plural(drafts.length, 'new task'),
+    summary: ["Each is created as if you'd filled in the New task form. Set any to Leave out before adding."],
+    ...(flagged.length
+      ? {
+          warnings: [
+            `${plural(flagged.length, 'task')} ${flagged.length === 1 ? 'is' : 'are'} already on the board, so ${flagged.length === 1 ? 'it starts' : 'they start'} on Leave out. Switch to Add only if you want another.`,
+          ],
+        }
+      : {}),
+    steps: [
+      {
+        kind: 'post',
+        label: adding === items.length ? `Add ${plural(items.length, 'task')}` : 'Add the chosen tasks',
+        items: items.map(({ already: _already, ...item }) => item),
+        doneText: 'added',
+      },
+    ],
+  };
+  // In words for the model, so what it says matches the card line for line.
+  return card(c, {
+    tasks: drafts.map((d) => d.shows),
+    ...(flagged.length ? { alreadyOnTheBoard: flagged.map((i) => i.label), startOnLeaveOut: true } : {}),
+  });
 }
 
 /* ─── 1. Task changes ────────────────────────────────────────────────────── */

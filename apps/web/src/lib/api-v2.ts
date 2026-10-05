@@ -123,6 +123,8 @@ async function request<T>(
  * delete, not a cost, not a document.
  */
 const ZEN_ALLOWED: [ZenRequest['method'], RegExp][] = [
+  // A new task, from a card of several (prepareTasks) — the New task form's own route.
+  ['POST', /^\/tasks$/],
   ['PATCH', /^\/tasks\/[\w-]+$/],
   ['PATCH', /^\/tasks\/[\w-]+\/status$/],
   ['POST', /^\/tasks\/[\w-]+\/(approve|request-changes|submit-review)$/],
@@ -227,6 +229,8 @@ export type TaskDraft = {
     assigneeId: string;
     priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
     notes?: string;
+    /** Create refuses a copy that went up since this was drafted. */
+    duplicateCheck?: boolean;
   };
   shows: {
     title: string;
@@ -237,6 +241,8 @@ export type TaskDraft = {
     priority: string;
     notes: string | null;
   };
+  /** The same task, already on the board and still open. */
+  duplicateOf?: { title: string; due: string; people: string; status: string };
 };
 
 /**
@@ -2008,8 +2014,21 @@ export const api = {
       get<{
         success: boolean;
         month: string;
-        rows: { companyId: string; companyName: string; revenue: number; externalCost: number; peopleCost: number; profit: number; marginPercent: number }[];
-        totals: { revenue: number; externalCost: number; peopleCost: number; profit: number; marginPercent: number };
+        /** `costed: false` — nothing put against the month yet, so its profit is unknown. */
+        rows: { companyId: string; companyName: string; revenue: number; externalCost: number; peopleCost: number; profit: number; marginPercent: number; costed: boolean }[];
+        /** Profit and margin over the costed months only; the rest are counted apart. */
+        totals: {
+          revenue: number;
+          externalCost: number;
+          peopleCost: number;
+          profit: number;
+          marginPercent: number;
+          costedRevenue: number;
+          uncostedCount: number;
+          uncostedRevenue: number;
+        };
+        /** What this profit cannot see: missing salaries, an unconfirmed time split. */
+        warnings?: string[];
       }>(`/retainers/profitability${month ? `?month=${month}` : ''}`),
     create: (body: Record<string, unknown>) =>
       post<{ success: boolean; retainer: any }>('/retainers', body),
@@ -2309,6 +2328,23 @@ export const api = {
       post<{ success: boolean; invoice: any }>('/invoices', body),
     recordPayment: (id: string, body: Record<string, unknown>) =>
       post<{ success: boolean; payment: any; invoice: any; isFullySettled: boolean }>(`/invoices/${id}/payments`, body),
+    /** Correct what was entered — number, amount and GST, dates. Not below what has been received. */
+    update: (
+      id: string,
+      body: { number?: string; amount?: number; gstAmount?: number | null; raisedAt?: string; dueAt?: string; reason?: string },
+    ) => patch<Record<string, any>>(`/invoices/${id}`, body),
+    /** Correct a payment. The invoice follows: settled, or owed again. */
+    updatePayment: (id: string, paymentId: string, body: Record<string, unknown>) =>
+      patch<{ success: boolean; payment: any; invoice: { id: string; status: string } }>(`/invoices/${id}/payments/${paymentId}`, body),
+    /** A payment recorded by mistake. If it settled the invoice, the invoice is owed again. */
+    removePayment: (id: string, paymentId: string) =>
+      del<{ success: boolean; invoice: { id: string; status: string } }>(`/invoices/${id}/payments/${paymentId}`),
+    /**
+     * The invoice should not be here at all. Kept as Cancelled; the month,
+     * proforma or milestone it was entered against goes back a step. Refused
+     * while payments are recorded against it.
+     */
+    cancel: (id: string) => post<{ success: boolean }>(`/invoices/${id}/cancel`),
     /**
      * One invoice, with its document and line items.
      *

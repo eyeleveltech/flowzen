@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { TableRowsSkeleton } from '@/components/ui/skeleton-loaders';
-import { ErrorNote } from '@/components/ui/empty-state';
+import { ErrorNote, Note } from '@/components/ui/empty-state';
 import { plural } from '@/lib/utils';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -13,6 +13,8 @@ import { api, apiGet, fileUrl, formatMoney, type ProjectProfitRow, type ProjectP
 import { NewInvoiceModal } from '@/components/work/NewInvoiceModal';
 import { NewCostModal } from '@/components/work/NewCostModal';
 import { RecordPaymentModal } from '@/components/work/RecordPaymentModal';
+import { InvoiceActions } from '@/components/work/InvoiceActions';
+import { useIsAdmin } from '@/components/work/PaidInvoiceLock';
 import { InvoiceDocumentModal } from '@/components/work/InvoiceDocumentModal';
 import { RetainerBillingBoard, retainerBillingKey } from '@/components/work/RetainerBillingBoard';
 import { SendDocumentModal } from '@/components/documents/SendDocumentModal';
@@ -41,6 +43,8 @@ interface Invoice {
   agingDays: number;
   balanceDue: number | null;
   totalPaid: number | null;
+  /** How many payments are recorded against it. */
+  paymentsCount?: number;
   /** CR-02 — whether there is a printable document behind this row yet. */
   hasDocument: boolean;
   amountMasked?: never;
@@ -70,6 +74,11 @@ interface ProfitRow {
   peopleCost: number;
   profit: number;
   marginPercent: number;
+  /** False: nothing put against the month yet, so its profit is unknown — not the whole fee. */
+  costed?: boolean;
+  /** Totals only. */
+  uncostedCount?: number;
+  uncostedRevenue?: number;
 }
 
 const STATUS_STYLE: Record<string, string> = {
@@ -101,6 +110,8 @@ export default function MoneyPage() {
   const [creatingInvoice, setCreatingInvoice] = useState(false);
   const [creatingCost, setCreatingCost] = useState(false);
   const [payingInvoice, setPayingInvoice] = useState<Invoice | null>(null);
+  // A paid invoice's document is locked; only an admin, with a reason, may rewrite it.
+  const isAdmin = useIsAdmin();
   const [documentInvoice, setDocumentInvoice] = useState<Invoice | null>(null);
   const [emailingInvoice, setEmailingInvoice] = useState<Invoice | null>(null);
   /*
@@ -218,6 +229,7 @@ export default function MoneyPage() {
         profitRows: pl.success ? pl.rows : [],
         profitTotals: pl.success ? ({ companyId: '', companyName: '', ...pl.totals } as ProfitRow) : null,
         profitMonth: pl.success ? pl.month : '',
+        profitWarnings: pl.success ? (pl.warnings ?? []) : [],
         overheads: (Array.isArray(ov) ? ov : []) as CostRow[],
         capital: (Array.isArray(cap) ? cap : []) as CostRow[],
       };
@@ -228,13 +240,25 @@ export default function MoneyPage() {
   const profitRows: ProfitRow[] = profitData?.profitRows ?? [];
   const profitTotals: ProfitRow | null = profitData?.profitTotals ?? null;
   const profitMonth = profitData?.profitMonth ?? '';
+  const profitWarnings: string[] = profitData?.profitWarnings ?? [];
+  // Nothing costed at all: there is no profit figure to show, only fees.
+  const nothingCosted = profitRows.length > 0 && profitRows.every((r) => r.costed === false);
   const overheads: CostRow[] = profitData?.overheads ?? [];
   const capital: CostRow[] = profitData?.capital ?? [];
   // Only "loading" while the tab is actually open and waiting.
   const loadingProfit = tab === 'PROFIT' && profitPending;
 
   const totalCosts = costs.reduce((s, c) => s + (c.amount || 0), 0);
-  const overheadsTotal = overheads.reduce((s, c) => s + (c.amount || 0), 0);
+  const overheadsAll = overheads.reduce((s, c) => s + (c.amount || 0), 0);
+  /*
+   * Salaries, once (§8). When the time split has shared salaries out to
+   * clients as people cost, a "Salaries" company cost is the same money a
+   * second time, so it is left out here; with no people cost it is the only
+   * place salaries appear, so it stays.
+   */
+  const salaryOverheads = overheads.filter((c) => /salar/i.test(c.category ?? '')).reduce((s, c) => s + (c.amount || 0), 0);
+  const salariesInPeopleCost = (profitTotals?.peopleCost ?? 0) > 0 && salaryOverheads > 0;
+  const overheadsTotal = salariesInPeopleCost ? overheadsAll - salaryOverheads : overheadsAll;
   const companyProfit = (profitTotals?.profit ?? 0) - overheadsTotal;
   const costAgainst = (c: CostRow) => c.monthCard?.retainer.company.name ?? (c.project ? `${c.project.company.name} — ${c.project.name}` : '—');
   const COST_TYPE_STYLE: Record<string, string> = {
@@ -431,7 +455,7 @@ export default function MoneyPage() {
                             PDF blocked
                           </span>
                         )}
-                        {inv.status !== 'CANCELLED' && (
+                        {inv.status !== 'CANCELLED' && (inv.status !== 'PAID' || isAdmin) && (
                           <button
                             onClick={(e) => { e.stopPropagation(); setDocumentInvoice(inv); }}
                             className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-body transition-colors hover:bg-subtle"
@@ -447,6 +471,8 @@ export default function MoneyPage() {
                             Record payment
                           </button>
                         )}
+                        {/* Correct it, its payments, or take it back a stage. */}
+                        <InvoiceActions invoice={inv} hasPayments={(inv.paymentsCount ?? 0) > 0} onChanged={() => void load()} />
                       </div>
                     </td>
                   </tr>
@@ -549,6 +575,16 @@ export default function MoneyPage() {
               jobs. Never added twice." Every ingredient was already being
               fetched on this screen (profitTotals, overheads) — just never
               combined into the one figure the brief actually asks for. */}
+          {!loadingProfit && profitWarnings.length > 0 && (
+            <div className="space-y-2">
+              {profitWarnings.map((w) => (
+                <Note key={w} tone="warn">
+                  {w}
+                </Note>
+              ))}
+            </div>
+          )}
+
           <StatRow>
             <StatTile
               label="Revenue"
@@ -562,12 +598,20 @@ export default function MoneyPage() {
                   : formatMoney((profitTotals?.externalCost ?? 0) + (profitTotals?.peopleCost ?? 0))
               }
             />
-            <StatTile label="Overheads" value={loadingProfit ? '—' : formatMoney(overheadsTotal)} />
+            <StatTile
+              label="Overheads"
+              value={loadingProfit ? '—' : formatMoney(overheadsTotal)}
+              note={salariesInPeopleCost ? 'Salaries left out — already in people cost' : undefined}
+            />
             <StatTile
               label="Company profit"
-              value={loadingProfit ? '—' : formatMoney(companyProfit)}
-              note={`Retainers only, ${profitMonth ? new Date(`${profitMonth}-01`).toLocaleString('en-IN', { month: 'long', year: 'numeric' }) : 'this month'}`}
-              tone={loadingProfit ? 'default' : companyProfit >= 0 ? 'success' : 'danger'}
+              value={loadingProfit || nothingCosted ? '—' : formatMoney(companyProfit)}
+              note={
+                nothingCosted
+                  ? 'Not costed yet — no costs or people cost entered'
+                  : `${profitTotals?.uncostedCount ? 'Costed retainers only' : 'Retainers only'}, ${profitMonth ? new Date(`${profitMonth}-01`).toLocaleString('en-IN', { month: 'long', year: 'numeric' }) : 'this month'}`
+              }
+              tone={loadingProfit || nothingCosted ? 'default' : companyProfit >= 0 ? 'success' : 'danger'}
             />
           </StatRow>
 
@@ -603,12 +647,21 @@ export default function MoneyPage() {
                         <td className="text-body text-right">{formatMoney(r.revenue)}</td>
                         <td className="text-secondary text-right">{formatMoney(r.externalCost)}</td>
                         <td className="text-secondary text-right">{formatMoney(r.peopleCost)}</td>
-                        <td className={`font-semibold text-right ${r.profit >= 0 ? 'text-success' : 'text-danger'}`}>
-                          {formatMoney(r.profit)}
-                        </td>
-                        <td className={`font-medium text-right ${r.marginPercent >= 0 ? 'text-body' : 'text-danger'}`}>
-                          {r.marginPercent}%
-                        </td>
+                        {r.costed === false ? (
+                          <>
+                            <td className="text-right text-micro text-secondary">Not costed yet</td>
+                            <td className="text-right text-secondary">—</td>
+                          </>
+                        ) : (
+                          <>
+                            <td className={`font-semibold text-right ${r.profit >= 0 ? 'text-success' : 'text-danger'}`}>
+                              {formatMoney(r.profit)}
+                            </td>
+                            <td className={`font-medium text-right ${r.marginPercent >= 0 ? 'text-body' : 'text-danger'}`}>
+                              {r.marginPercent}%
+                            </td>
+                          </>
+                        )}
                       </tr>
                     ))}
                     {profitTotals && (
@@ -617,12 +670,20 @@ export default function MoneyPage() {
                         <td className="font-bold text-primary text-right">{formatMoney(profitTotals.revenue)}</td>
                         <td className="font-bold text-primary text-right">{formatMoney(profitTotals.externalCost)}</td>
                         <td className="font-bold text-primary text-right">{formatMoney(profitTotals.peopleCost)}</td>
-                        <td className={`font-bold text-right ${profitTotals.profit >= 0 ? 'text-success' : 'text-danger'}`}>
-                          {formatMoney(profitTotals.profit)}
+                        <td className={`font-bold text-right ${nothingCosted ? 'text-secondary' : profitTotals.profit >= 0 ? 'text-success' : 'text-danger'}`}>
+                          {nothingCosted ? '—' : formatMoney(profitTotals.profit)}
                         </td>
-                        <td className="font-bold text-primary text-right">{profitTotals.marginPercent}%</td>
+                        <td className="font-bold text-primary text-right">{nothingCosted ? '—' : `${profitTotals.marginPercent}%`}</td>
                       </tr>
                     )}
+                    {profitTotals?.uncostedCount ? (
+                      <tr>
+                        <td colSpan={6} className="text-micro text-secondary">
+                          {profitTotals.uncostedCount} {profitTotals.uncostedCount === 1 ? 'retainer is' : 'retainers are'} not costed yet (
+                          {formatMoney(profitTotals.uncostedRevenue ?? 0)} of fees), so {profitTotals.uncostedCount === 1 ? 'it is' : 'they are'} left out of profit until a cost or a time split with salaries is entered.
+                        </td>
+                      </tr>
+                    ) : null}
                   </>
                 )}
               </tbody>

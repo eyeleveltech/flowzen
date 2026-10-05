@@ -2,8 +2,9 @@ import { Router, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, type AuthRequest, hasPermission, requirePermission } from '../middleware/auth.js';
-import { TaskWorkType } from '@prisma/client';
-import { peopleInScope } from '../services/teamScope.js';
+import { MonthCardStatus, TaskWorkType } from '@prisma/client';
+import { canSeePerson, peopleInScope } from '../services/teamScope.js';
+import { monthCardRefusal } from '../utils/monthCardOpen.js';
 
 export const allocationsRouter = Router();
 
@@ -139,8 +140,54 @@ const bulkAllocationSchema = z.object({
   ),
 });
 
+type BulkItem = z.infer<typeof bulkAllocationSchema>['allocations'][number];
+
+/** The month card an allocation is against, if it is against one. */
+const cardOf = (a: { workType: string; workId: string; monthCardId?: string | null }) =>
+  a.monthCardId || (a.workType === TaskWorkType.MONTH_CARD ? a.workId : null);
+
+/**
+ * Every piece of work named is this organisation's.
+ *
+ * The ids were written exactly as they arrived, so a split could be pointed at
+ * another organisation's retainer month or project — and the time split is
+ * what people's cost is apportioned by.
+ */
+async function workRefusal(orgId: string, items: BulkItem[]): Promise<string | null> {
+  const cards = new Set<string>();
+  const projects = new Set<string>();
+  const internal = new Set<string>();
+  for (const item of items) {
+    if (item.workType === TaskWorkType.MONTH_CARD) cards.add(item.workId);
+    else if (item.workType === TaskWorkType.PROJECT) projects.add(item.workId);
+    else internal.add(item.workId);
+    if (item.monthCardId) cards.add(item.monthCardId);
+    if (item.projectId) projects.add(item.projectId);
+  }
+  const [cardCount, projectCount, internalCount] = await Promise.all([
+    cards.size
+      ? prisma.monthCard.count({ where: { id: { in: [...cards] }, retainer: { organizationId: orgId } } })
+      : 0,
+    projects.size
+      ? prisma.project.count({ where: { id: { in: [...projects] }, organizationId: orgId, deletedAt: null } })
+      : 0,
+    internal.size
+      ? prisma.internalProject.count({ where: { id: { in: [...internal] }, organizationId: orgId } })
+      : 0,
+  ]);
+  if (cardCount !== cards.size || projectCount !== projects.size || internalCount !== internal.size) {
+    return 'One of those pieces of work is not one of yours.';
+  }
+  return null;
+}
+
 /**
  * POST /api/allocations/bulk — Save monthly allocations for a member
+ *
+ * Three refusals this used to lack: work from outside the organisation; a
+ * Head changing the split of somebody outside the departments they lead (the
+ * confirm route below already refused that); and a closed month, whose profit
+ * has been reported — the same lock costs have (utils/monthCardOpen).
  */
 allocationsRouter.post(
   '/bulk',
@@ -165,14 +212,73 @@ allocationsRouter.post(
         return;
       }
 
+      // A Head: only the people of the departments they lead (and themselves).
+      if (!(await canSeePerson(req.user!, userId))) {
+        res.status(403).json({
+          success: false,
+          error: 'You can change the split only for people in the departments you lead.',
+        });
+        return;
+      }
+
+      const badWork = await workRefusal(orgId, allocations);
+      if (badWork) {
+        res.status(400).json({ success: false, error: badWork });
+        return;
+      }
+
+      /*
+       * A closed month stays as it was reported.
+       *
+       * The form posts the person's whole split, closed months included, so
+       * a closed month's rows that come back unchanged are left exactly as
+       * they are (confirmation and all) rather than deleted and written again;
+       * any change to one is refused.
+       */
+      const existing = await prisma.peopleAllocation.findMany({
+        where: { userId, month },
+        select: { id: true, workType: true, workId: true, monthCardId: true, percent: true, proposedPercent: true },
+      });
+      const touchedCards = [
+        ...new Set([...existing.map(cardOf), ...allocations.map(cardOf)].filter((c): c is string => Boolean(c))),
+      ];
+      const closedCards = touchedCards.length
+        ? (
+            await prisma.monthCard.findMany({
+              where: { id: { in: touchedCards }, status: MonthCardStatus.CLOSED },
+              select: { id: true },
+            })
+          ).map((c) => c.id)
+        : [];
+      const signature = (rows: { workId: string; percent: number; proposedPercent?: number | null }[]) =>
+        rows
+          .map((r) => `${r.workId}:${r.percent}:${r.proposedPercent ?? r.percent}`)
+          .sort()
+          .join('|');
+      const keep: string[] = [];
+      for (const cardId of closedCards) {
+        const before = existing.filter((a) => cardOf(a) === cardId);
+        const after = allocations.filter((a) => cardOf(a) === cardId);
+        if (signature(before) !== signature(after)) {
+          const closed = await monthCardRefusal(cardId, 'Changing these allocations');
+          res.status(400).json({ success: false, error: closed });
+          return;
+        }
+        keep.push(...before.map((a) => a.id));
+      }
+      const open = allocations.filter((a) => {
+        const card = cardOf(a);
+        return !card || !closedCards.includes(card);
+      });
+
       // Atomically replace user's allocations for this month
       await prisma.$transaction(async (tx) => {
         await tx.peopleAllocation.deleteMany({
-          where: { userId, month },
+          where: { userId, month, ...(keep.length ? { id: { notIn: keep } } : {}) },
         });
 
-        if (allocations.length > 0) {
-          for (const item of allocations) {
+        if (open.length > 0) {
+          for (const item of open) {
             await tx.peopleAllocation.create({
               data: {
                 userId,

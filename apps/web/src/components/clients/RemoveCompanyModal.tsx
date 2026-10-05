@@ -97,6 +97,8 @@ export function RemoveCompanyModal({
   }, [companyId]);
 
   const line = holdings ? holdingsLine(holdings) : 'its record';
+  // Money is never hard-deleted: any invoice or proforma, cancelled ones included.
+  const hasBilling = Boolean(holdings && (holdings.invoices > 0 || holdings.proformas > 0));
   const alreadyPast = status === 'PAST';
   const nameMatches = typed.trim() === companyName;
   const canGo = choice === 'PAST' ? !alreadyPast && !busy : nameMatches && !busy;
@@ -151,10 +153,12 @@ export function RemoveCompanyModal({
             title="Delete permanently"
             tone="danger"
             selected={choice === 'PERMANENT'}
+            disabled={hasBilling}
             onSelect={() => setChoice('PERMANENT')}
           >
-            The company and everything on it — {line} — is destroyed. There is no undo, and it is
-            not in Trash afterwards. For a company entered twice, or one that was never real.
+            {hasBilling
+              ? 'This client has billing history, so it can\u2019t be deleted. Make them a past client instead — that keeps everything.'
+              : `The company and everything on it — ${line} — is destroyed. There is no undo, and it is not in Trash afterwards. For a company entered twice, or one that was never real.`}
           </Option>
         )}
 

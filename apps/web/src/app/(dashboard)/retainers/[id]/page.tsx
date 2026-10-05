@@ -543,6 +543,8 @@ export default function RetainerMonthCardPage() {
           number: inv.number,
           status: inv.status,
           amount: Number(inv.amount ?? 0),
+          // So Record payment starts split in the invoice's own GST ratio.
+          gstAmount: inv.gstAmount == null ? null : Number(inv.gstAmount),
           dueAt: inv.dueAt,
           paid: inv.payments.reduce((a, x) => a + Number(x.amount ?? 0), 0),
         }

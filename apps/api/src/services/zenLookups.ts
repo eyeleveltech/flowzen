@@ -669,6 +669,9 @@ export async function runZenLookup(name: ZenLookupName, args: Record<string, unk
         currentMonthlyRetainers: f.summary.currentMrr,
         // The team's total only, as the screen shows it — never one person's.
         monthlyPayrollTotal: f.summary.monthlyPayroll,
+        monthlyOverheads: f.summary.monthlyOverheads,
+        // Say these before any surplus: a forecast without salaries or overheads overstates cash.
+        caveats: f.warnings,
         activeRetainers: f.summary.activeRetainersCount,
         openDeals: f.summary.activeDealsCount,
         assumedWon: assumeWonId ? String(args.assumeWonClient) : null,
@@ -680,6 +683,7 @@ export async function runZenLookup(name: ZenLookupName, args: Record<string, unk
           fromAssumedWonDeal: m.inflows.assumedWon,
           pipelineWeightedNotCounted: m.inflows.pipelineWeighted,
           payroll: m.outflows.payroll,
+          overheads: m.outflows.overheads,
           vendorAndDirect: m.outflows.vendorAndDirect,
           netCashFlow: m.netCashFlow,
           netCashFlowIfPipelineLands: m.netCashFlowWithPipeline,

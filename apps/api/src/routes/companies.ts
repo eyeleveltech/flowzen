@@ -1463,14 +1463,20 @@ companiesRouter.post('/:id/delete-permanently', requirePermission('setup.admin')
 
     const holdings = await companyHoldings(orgId, id);
 
-    if (holdings.paidInvoices > 0) {
+    /*
+     * Money is never hard-deleted.
+     *
+     * This refused only invoices with a payment on them, so an unpaid tax
+     * invoice -- a document that went to a client, with a number Tally issued
+     * -- was destroyed along with its trail, and so was every proforma.
+     * Any invoice, payment or proforma, cancelled ones included, is billing
+     * history; archiving keeps it.
+     */
+    if (holdings.invoices > 0 || holdings.proformas > 0) {
       res.status(400).json({
         success: false,
-        error:
-          `${company.name} has ${holdings.paidInvoices} invoice${holdings.paidInvoices === 1 ? '' : 's'} with a payment recorded against ` +
-          `${holdings.paidInvoices === 1 ? 'it' : 'them'}. Money that came in is a record this app does not destroy -- ` +
-          `mark them a past client instead, which keeps all of it and takes them out of the active lists.`,
-        code: 'HAS_PAYMENTS',
+        error: 'This client has billing history. Archive it instead.',
+        code: 'HAS_BILLING',
       });
       return;
     }

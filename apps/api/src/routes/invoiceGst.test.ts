@@ -161,8 +161,23 @@ describe('POST /api/invoices/:id/payments — GST', () => {
       payments: [],
       company: { id: 'comp-1', name: 'Brigade' },
     });
-    (prisma.payment.create as any).mockImplementation(async ({ data }: any) => ({ id: 'pay-1', ...data }));
-    (prisma.invoice.update as any).mockResolvedValue({ id: 'inv-1', status: InvoiceStatus.PAID, payments: [], company: { name: 'Brigade' } });
+    // One invoice the whole transaction reads: what has been paid so far grows
+    // as payments are written, and the settle step sees the new one.
+    const paid: { amount: number; receivedAt: Date }[] = [];
+    (prisma.payment.create as any).mockImplementation(async ({ data }: any) => {
+      paid.push({ amount: data.amount, receivedAt: data.receivedAt });
+      return { id: 'pay-1', ...data };
+    });
+    (prisma.invoice.findUnique as any).mockImplementation(async () => ({
+      id: 'inv-1',
+      amount: 118000,
+      status: InvoiceStatus.RAISED,
+      milestoneId: null,
+      proformaId: null,
+      payments: [...paid],
+      company: { name: 'Brigade' },
+    }));
+    (prisma.invoice.update as any).mockResolvedValue({ id: 'inv-1' });
   });
   const pay = (body: Record<string, unknown>) =>
     request(app).post('/api/invoices/inv-1/payments').set('Authorization', `Bearer ${token(ADMIN)}`).send({ mode: 'NEFT', ...body });

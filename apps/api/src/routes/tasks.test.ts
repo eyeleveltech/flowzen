@@ -230,6 +230,51 @@ describe('a deleted task is gone from every list that reads one', () => {
   });
 });
 
+describe("a Zen draft never goes up twice", () => {
+  const TWIN = {
+    id: 'task-old',
+    title: 'Reel cutdowns',
+    dueDate: new Date('2026-09-09T00:00:00Z'),
+    status: 'TODO',
+    assignees: [{ user: { name: 'Designer' } }],
+  };
+  const send = (body: Record<string, unknown>) =>
+    request(app)
+      .post('/api/tasks')
+      .set(...auth('head'))
+      .send({ title: 'Reel cutdowns', dueDate: '2026-09-09', assigneeIds: ['usr-des'], ...body });
+
+  it('refuses a copy of a task already on the board — same title, person and day, still open', async () => {
+    (prisma.task.findFirst as any).mockResolvedValueOnce(TWIN);
+    (prisma.task.create as any).mockClear();
+    const res = await send({ title: '  reel CUTDOWNS ', duplicateCheck: true });
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({ code: 'DUPLICATE_TASK', existingTaskId: 'task-old' });
+    expect(res.body.error).toBe('Already on the board: "Reel cutdowns" for Designer, due Wed 9 Sept (to do).');
+    expect(prisma.task.create).not.toHaveBeenCalled();
+    const where = (prisma.task.findFirst as any).mock.calls.at(-1)[0].where;
+    expect(where).toMatchObject({
+      title: { equals: 'reel CUTDOWNS', mode: 'insensitive' },
+      deletedAt: null,
+      status: { in: ['TODO', 'IN_PROGRESS', 'IN_REVIEW', 'ON_HOLD'] },
+      assignees: { some: { userId: { in: ['usr-des'] } } },
+      dueDate: new Date('2026-09-09T00:00:00Z'),
+    });
+  });
+
+  it('goes up when there is no copy', async () => {
+    (prisma.task.findFirst as any).mockResolvedValueOnce(null);
+    expect((await send({ duplicateCheck: true })).status).toBe(201);
+  });
+
+  it('the forms do not ask, so a task typed by hand is never refused for it', async () => {
+    (prisma.task.findFirst as any).mockClear();
+    expect((await send({})).status).toBe(201);
+    const asked = (prisma.task.findFirst as any).mock.calls.some((c: any[]) => c[0]?.where?.title);
+    expect(asked).toBe(false);
+  });
+});
+
 describe('several people on one task', () => {
   it('puts everybody on it, and makes the first the lead', async () => {
     /*

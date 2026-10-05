@@ -410,6 +410,7 @@ const ACTION: Record<string, string> = {
   'Company.person_added': 'added a contact at',
   'Company.person_updated': 'edited a contact at',
   'Company.status_derived_past': 'moved to past clients',
+  'Company.status_derived_back': 'took out of past clients, as it has an open deal:',
   'Company.outreach_promoted': 'promoted the lead to a company:',
   'OutreachEntry.outreach_added': 'added the lead',
   'OutreachEntry.outreach_edited': 'edited the lead',

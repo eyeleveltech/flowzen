@@ -70,6 +70,12 @@ retainersRouter.get('/profitability', requirePermission('money.figures'), async 
       const externalCost = mc.costs.reduce((acc, c) => acc + Number(c.amount), 0);
       const peopleCost = allocationCost(mc.allocations);
       const profit = revenue - externalCost - peopleCost;
+      /*
+       * Costed: something has been put against the month — a cost, or people
+       * time with a salary behind it. A month with neither is not 100% profit;
+       * its profit is unknown, and the whole fee was being reported as profit.
+       */
+      const costed = externalCost > 0 || peopleCost > 0;
       return {
         companyId: mc.retainer.company.id,
         companyName: mc.retainer.company.name,
@@ -78,19 +84,57 @@ retainersRouter.get('/profitability', requirePermission('money.figures'), async 
         peopleCost,
         profit,
         marginPercent: revenue > 0 ? Math.round((profit / revenue) * 1000) / 10 : 0,
+        costed,
       };
     });
 
+    // Profit and its margin are summed over the costed months only; the rest
+    // are counted separately so the screen can say what is left out.
     const totals = rows.reduce(
-      (acc, r) => ({ revenue: acc.revenue + r.revenue, externalCost: acc.externalCost + r.externalCost, peopleCost: acc.peopleCost + r.peopleCost, profit: acc.profit + r.profit }),
-      { revenue: 0, externalCost: 0, peopleCost: 0, profit: 0 },
+      (acc, r) => ({
+        revenue: acc.revenue + r.revenue,
+        externalCost: acc.externalCost + r.externalCost,
+        peopleCost: acc.peopleCost + r.peopleCost,
+        profit: acc.profit + (r.costed ? r.profit : 0),
+        costedRevenue: acc.costedRevenue + (r.costed ? r.revenue : 0),
+        uncostedCount: acc.uncostedCount + (r.costed ? 0 : 1),
+        uncostedRevenue: acc.uncostedRevenue + (r.costed ? 0 : r.revenue),
+      }),
+      { revenue: 0, externalCost: 0, peopleCost: 0, profit: 0, costedRevenue: 0, uncostedCount: 0, uncostedRevenue: 0 },
     );
+
+    /*
+     * What this profit cannot see, said above it: people with no monthly cost
+     * (their time costs ₹0 here) and a time split nobody has confirmed (people
+     * cost is then shared out on the proposed split, or not at all).
+     */
+    const [team, noCost, splitRows, splitConfirmed] = await Promise.all([
+      prisma.user.count({ where: { organizationId: orgId, active: true } }),
+      prisma.user.count({ where: { organizationId: orgId, active: true, monthlyCost: { lte: 0 } } }),
+      prisma.peopleAllocation.count({ where: { month, user: { organizationId: orgId } } }),
+      prisma.peopleAllocation.count({ where: { month, user: { organizationId: orgId }, confirmedAt: { not: null } } }),
+    ]);
+    const warnings: string[] = [];
+    if (team > 0 && noCost === team) {
+      warnings.push("No one's monthly cost is entered, so people cost is ₹0 and every profit here is too high. Enter each person's monthly cost on Team.");
+    } else if (noCost > 0) {
+      warnings.push(`${noCost} of ${team} people have no monthly cost entered, so their time costs nothing here. Enter it on Team.`);
+    }
+    if (splitRows === 0) {
+      warnings.push('No time split for this month, so no people cost is shared out to retainers.');
+    } else if (splitConfirmed < splitRows) {
+      warnings.push(`The time split is not confirmed (${splitConfirmed} of ${splitRows}), so people cost uses the proposed split.`);
+    }
 
     res.json({
       success: true,
       month,
-      rows: rows.sort((a, b) => b.profit - a.profit),
-      totals: { ...totals, marginPercent: totals.revenue > 0 ? Math.round((totals.profit / totals.revenue) * 1000) / 10 : 0 },
+      rows: rows.sort((a, b) => Number(b.costed) - Number(a.costed) || b.profit - a.profit),
+      totals: {
+        ...totals,
+        marginPercent: totals.costedRevenue > 0 ? Math.round((totals.profit / totals.costedRevenue) * 1000) / 10 : 0,
+      },
+      warnings,
     });
   } catch (error) {
     next(error);

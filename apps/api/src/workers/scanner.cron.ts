@@ -696,21 +696,47 @@ export async function evaluateAgencyHealthRules(organizationId: string): Promise
  * hand. Deliberately impure (writes), so it's kept out of the pure
  * evaluator above and called alongside it instead.
  */
-async function applyCompanyStatusDerivation(organizationId: string): Promise<void> {
+/** A deal still being worked: not won, lost or expired, and not deleted. */
+const OPEN_DEAL = { deletedAt: null, outcome: null, stage: { notIn: ['WON', 'LOST', 'EXPIRED'] as ('WON' | 'LOST' | 'EXPIRED')[] } };
+
+/*
+ * Two things this rule used to miss, which is how a client with a live deal
+ * on the Pipeline board ended up filed under Past:
+ *
+ *   · an open deal was never looked at — only an active retainer or a live
+ *     project kept a company current;
+ *   · only activity on the company itself counted, so a proposal being
+ *     written, revised and chased for weeks left the company looking
+ *     untouched.
+ *
+ * Both now keep it current, and a company this rule moved to Past that has an
+ * open deal again is moved back (restorePastWithOpenDeals).
+ */
+export async function applyCompanyStatusDerivation(organizationId: string): Promise<void> {
   const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 3600 * 1000);
   const candidates = await prisma.company.findMany({
     where: { organizationId, status: { in: ['PROSPECT', 'CLIENT'] } },
     include: {
       retainers: { where: { status: 'ACTIVE' }, select: { id: true } },
       projects: { where: { status: 'LIVE' }, select: { id: true } },
+      proposals: { where: { deletedAt: null }, select: { id: true, outcome: true, stage: true } },
     },
   });
 
   for (const c of candidates) {
     if (c.retainers.length > 0 || c.projects.length > 0) continue;
+    // A deal still being worked keeps a client current, however quiet its own record is.
+    if (c.proposals.some((p) => p.outcome === null && !['WON', 'LOST', 'EXPIRED'].includes(p.stage))) continue;
 
     const lastActivity = await prisma.activity.findFirst({
-      where: { organizationId, entityType: 'Company', entityId: c.id },
+      where: {
+        organizationId,
+        OR: [
+          { entityType: 'Company', entityId: c.id },
+          // Work on its proposals is contact with the client too.
+          ...(c.proposals.length ? [{ entityType: 'Proposal', entityId: { in: c.proposals.map((p) => p.id) } }] : []),
+        ],
+      },
       orderBy: { at: 'desc' },
       select: { at: true },
     });
@@ -726,6 +752,55 @@ async function applyCompanyStatusDerivation(organizationId: string): Promise<voi
         actorId: null,
         verb: 'status_derived_past',
         payload: { reason: 'no active work, no contact in 90 days' },
+      },
+    });
+  }
+
+  await restorePastWithOpenDeals(organizationId);
+}
+
+/**
+ * Put back what the rule above moved to Past wrongly: a company with an open
+ * deal whose last status change was this rule's, not a person's. One a person
+ * filed under Past by hand stays there. It goes back to Client if it ever had
+ * work with us (a won deal, a retainer or a project), otherwise to Prospect.
+ */
+async function restorePastWithOpenDeals(organizationId: string): Promise<void> {
+  const past = await prisma.company.findMany({
+    where: { organizationId, status: 'PAST', proposals: { some: OPEN_DEAL } },
+    select: {
+      id: true,
+      proposals: { select: { outcome: true } },
+      retainers: { select: { id: true } },
+      projects: { select: { id: true } },
+    },
+  });
+
+  for (const c of past) {
+    const changes = await prisma.activity.findMany({
+      where: { organizationId, entityType: 'Company', entityId: c.id, verb: { in: ['status_derived_past', 'company_updated'] } },
+      orderBy: { at: 'desc' },
+      take: 25,
+      select: { verb: true, payload: true },
+    });
+    const lastStatusChange = changes.find(
+      (a) =>
+        a.verb === 'status_derived_past' ||
+        Boolean((a.payload as { changed?: Record<string, unknown> } | null)?.changed?.status),
+    );
+    if (lastStatusChange?.verb !== 'status_derived_past') continue;
+
+    const hadWork = c.retainers.length > 0 || c.projects.length > 0 || c.proposals.some((p) => p.outcome === 'WON');
+    const status = hadWork ? 'CLIENT' : 'PROSPECT';
+    await prisma.company.update({ where: { id: c.id }, data: { status } });
+    await prisma.activity.create({
+      data: {
+        organizationId,
+        entityType: 'Company',
+        entityId: c.id,
+        actorId: null,
+        verb: 'status_derived_back',
+        payload: { reason: 'an open deal on the pipeline', status },
       },
     });
   }

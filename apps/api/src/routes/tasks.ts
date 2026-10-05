@@ -47,6 +47,7 @@ import { parsePagination } from '../utils/query.js';
 import { toCsv } from '../utils/csv.js';
 import { sendCsv } from '../utils/csvResponse.js';
 import { canSeeTask, taskInScope } from '../services/teamScope.js';
+import { findOpenTwin, twinDay, twinStatus } from '../services/taskDuplicates.js';
 import { pushReviewDecided, pushReviewSubmitted, pushTaskAssigned, pushTaskEdited } from '../services/push.js';
 
 export const tasksRouter = Router();
@@ -1224,6 +1225,13 @@ const taskCreateSchema = z.object({
    * due date (services/taskRepeat). Null or absent is "doesn't repeat".
    */
   repeat: z.nativeEnum(RepeatFrequency).nullable().optional(),
+  /**
+   * Refuse a copy of a task that is already on the board — the same title,
+   * one of the same people, the same due day, still open. Sent by Zen's
+   * drafts (services/zenDraft), so a card pressed twice or the same ask in a
+   * second chat does not put the task up twice. The forms do not send it.
+   */
+  duplicateCheck: z.boolean().optional(),
 });
 
 /**
@@ -1308,7 +1316,7 @@ tasksRouter.post('/', requirePermission('work.own'), async (req: AuthRequest, re
     }
 
     const orgId = req.user!.organizationId;
-    const { title, workType, workId, monthCardId, projectId, retainerProjectId, internalProjectId, companyId, assigneeId, assigneeIds, assignedById, reviewerId, taskType, needsApproval, dueDate, dueTime, priority, notes, repeat } =
+    const { title, workType, workId, monthCardId, projectId, retainerProjectId, internalProjectId, companyId, assigneeId, assigneeIds, assignedById, reviewerId, taskType, needsApproval, dueDate, dueTime, priority, notes, repeat, duplicateCheck } =
       parsed.data;
 
     // Approval needs somebody to approve it. No type picked is fine: the task
@@ -1473,6 +1481,19 @@ tasksRouter.post('/', requirePermission('work.own'), async (req: AuthRequest, re
      * "Assigned by" is nobody unless somebody was named; `createdById` always
      * records who typed it, and the drawer falls back to it.
      */
+    if (duplicateCheck) {
+      const twin = await findOpenTwin(orgId, { title, assigneeIds: people, dueDate });
+      if (twin) {
+        res.status(409).json({
+          success: false,
+          code: 'DUPLICATE_TASK',
+          error: `Already on the board: "${twin.title}" for ${twin.people.join(', ')}, due ${twinDay(twin.dueDate)} (${twinStatus(twin.status)}).`,
+          existingTaskId: twin.id,
+        });
+        return;
+      }
+    }
+
     const task = await prisma.$transaction(async (tx) => {
       const series = repeat
         ? await tx.taskRepeat.create({

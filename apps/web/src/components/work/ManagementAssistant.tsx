@@ -48,6 +48,7 @@ import {
   Minimize2,
   Copy,
   Check,
+  TriangleAlert,
 } from 'lucide-react';
 import { api, ApiError, type TaskDraft, type ZenCard, type ZenStepsDone } from '@/lib/api-v2';
 import { cn } from '@/lib/utils';
@@ -161,6 +162,7 @@ const ACTIVITY: Record<string, string> = {
   getTeamLoad: 'Checking who is carrying what…',
   getAssets: 'Checking equipment…',
   draftTask: 'Filling in the task…',
+  prepareTasks: 'Filling in the tasks…',
   rememberThis: 'Noting that down…',
   getAlerts: 'Checking the alerts…',
   getApprovals: 'Checking approvals…',
@@ -729,6 +731,17 @@ export function ManagementAssistant({
                       ))}
                     </dl>
 
+                    {/* The same task is already on the board: said before the button, not after it. */}
+                    {m.proposed.duplicateOf && m.outcome?.created !== true && (
+                      <p className="flex items-start gap-1.5 border-t border-border px-3.5 py-2.5 text-micro text-warning-ink">
+                        <TriangleAlert className="mt-px h-3 w-3 shrink-0" aria-hidden="true" />
+                        <span>
+                          Already on the board: &ldquo;{m.proposed.duplicateOf.title}&rdquo; for {m.proposed.duplicateOf.people}, due{' '}
+                          {m.proposed.duplicateOf.due} ({m.proposed.duplicateOf.status}). Create makes a second one.
+                        </span>
+                      </p>
+                    )}
+
                     {m.outcome?.created === true ? (
                       <p className="border-t border-border px-3.5 py-2.5 text-micro text-success">
                         Created. It is on the board.
@@ -751,7 +764,7 @@ export function ManagementAssistant({
                           disabled={creating === m.id}
                           className="rounded-lg bg-primary px-3 py-1.5 text-micro font-medium text-white hover:bg-primary-hover disabled:opacity-60"
                         >
-                          {creating === m.id ? 'Creating…' : 'Create'}
+                          {creating === m.id ? 'Creating…' : m.proposed.duplicateOf ? 'Create another' : 'Create'}
                         </button>
                       </div>
                     )}

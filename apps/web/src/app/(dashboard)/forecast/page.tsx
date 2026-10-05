@@ -5,6 +5,7 @@ import { apiGet, formatMoney } from '@/lib/api-v2';
 import { Select } from '@/components/ui/select';
 import { usePageHeader } from '@/hooks/usePageHeader';
 import { StatTile, StatRow } from '@/components/ui/stat-tile';
+import { Note } from '@/components/ui/empty-state';
 
 interface ForecastMonth {
   monthKey: string;
@@ -19,7 +20,7 @@ interface ForecastMonth {
     pipelineWeighted: number;
     total: number;
   };
-  outflows: { payroll: number; vendorAndDirect: number; total: number };
+  outflows: { payroll: number; overheads: number; vendorAndDirect: number; total: number };
   /** Committed cash, less payroll and vendors. The figure the verdict uses. */
   netCashFlow: number;
   /** The same month if every weighted deal lands. Shown beside, never as. */
@@ -33,6 +34,10 @@ interface ForecastMonth {
 interface Summary {
   currentMrr: number;
   monthlyPayroll: number;
+  /** Company overheads a month: the recurring ones, or a 3-month average. */
+  monthlyOverheads: number;
+  overheadsBasis: 'recurring' | 'average' | 'none';
+  peopleWithoutCost: number;
   activeRetainersCount: number;
   activeDealsCount: number;
 }
@@ -43,6 +48,8 @@ export default function ForecastPage() {
   const [forecast, setForecast] = useState<ForecastMonth[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [deals, setDeals] = useState<Deal[]>([]);
+  /** What this forecast cannot see — no salaries, no overheads — said above it. */
+  const [warnings, setWarnings] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -62,6 +69,7 @@ export default function ForecastPage() {
         setForecast(res.forecast);
         setSummary(res.summary);
         setDeals(res.deals ?? []);
+        setWarnings(res.warnings ?? []);
       }
     } catch (e: any) {
       setError(e.message ?? 'Failed to load forecast');
@@ -91,6 +99,16 @@ export default function ForecastPage() {
 
   return (
     <div className="page-shell">
+      {warnings.length > 0 && (
+        <div className="mb-6 space-y-2">
+          {warnings.map((w) => (
+            <Note key={w} tone="warn">
+              {w}
+            </Note>
+          ))}
+        </div>
+      )}
+
       {/* Summary stats */}
       {summary && (
         <StatRow className="mb-8">
@@ -102,13 +120,20 @@ export default function ForecastPage() {
           <StatTile
             label="Monthly Payroll"
             value={formatMoney(summary.monthlyPayroll)}
-            note="fixed monthly cost"
+            note={summary.peopleWithoutCost > 0 ? `${summary.peopleWithoutCost} people have no cost entered` : 'fixed monthly cost'}
+            tone={summary.peopleWithoutCost > 0 ? 'danger' : undefined}
           />
           <StatTile
-            label="MRR − Payroll"
-            value={formatMoney(summary.currentMrr - summary.monthlyPayroll)}
-            note="contribution margin"
-            tone={summary.currentMrr - summary.monthlyPayroll >= 0 ? 'success' : 'danger'}
+            label="MRR − Payroll − Overheads"
+            value={formatMoney(summary.currentMrr - summary.monthlyPayroll - summary.monthlyOverheads)}
+            note={
+              summary.overheadsBasis === 'recurring'
+                ? `overheads ${formatMoney(summary.monthlyOverheads)}/month, recurring`
+                : summary.overheadsBasis === 'average'
+                  ? `overheads ${formatMoney(summary.monthlyOverheads)}/month, 3-month average`
+                  : 'no overheads entered'
+            }
+            tone={summary.currentMrr - summary.monthlyPayroll - summary.monthlyOverheads >= 0 ? 'success' : 'danger'}
           />
           <StatTile label="Active Deals" value={summary.activeDealsCount} note="in pipeline" />
         </StatRow>
@@ -248,6 +273,10 @@ export default function ForecastPage() {
                     <div className="flex justify-between">
                       <span className="text-sm text-secondary">Payroll</span>
                       <span className="text-sm font-semibold text-primary">{formatMoney(m.outflows.payroll)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-secondary">Overheads</span>
+                      <span className="text-sm font-semibold text-primary">{formatMoney(m.outflows.overheads ?? 0)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-sm text-secondary">Vendor & Direct</span>

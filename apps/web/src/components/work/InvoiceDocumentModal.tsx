@@ -26,6 +26,7 @@ import { Modal, ScrollingModalBody, ModalFooter } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Field, FieldCheckbox, FieldSelect } from '@/components/ui/field';
 import { ErrorNote } from '@/components/ui/empty-state';
+import { PaidInvoiceLock, reasonGiven, useIsAdmin } from '@/components/work/PaidInvoiceLock';
 import {
   LineItemsEditor,
   blankLineItem,
@@ -49,6 +50,8 @@ type InvoiceRow = {
   amount: number | null;
   company?: { id: string; name: string } | null;
   hasDocument?: boolean;
+  /** PAID locks the document: an admin may still rewrite it, with a reason. */
+  status?: string;
 };
 
 type Props = {
@@ -60,6 +63,9 @@ type Props = {
 export function InvoiceDocumentModal({ invoice, onSaved, onClose }: Props) {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const admin = useIsAdmin();
+  const paid = invoice.status === 'PAID';
+  const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
   const { data: config } = useConfig();
   const sellerStateCode = config?.documentSettings?.gstStateCode ?? null;
@@ -175,7 +181,7 @@ export function InvoiceDocumentModal({ invoice, onSaved, onClose }: Props) {
   const parsedGstRate = Number(gstRatePercent);
   const gstRateValid = !gstApplicable || (Number.isFinite(parsedGstRate) && parsedGstRate >= 0 && parsedGstRate <= 28);
   const canSave =
-    Boolean(billingName.trim()) && linesAreValid(lines) && subtotal > 0 && gstRateValid && !busy && !loading;
+    Boolean(billingName.trim()) && linesAreValid(lines) && subtotal > 0 && gstRateValid && !busy && !loading && (!paid || (admin && reasonGiven(reason)));
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -198,6 +204,7 @@ export function InvoiceDocumentModal({ invoice, onSaved, onClose }: Props) {
         poDate: poDate || null,
         terms: terms.trim() || null,
         notes: notes.trim() || null,
+        ...(paid ? { reason: reason.trim() } : {}),
       });
       toast.success('Document saved');
       onSaved();
@@ -223,6 +230,7 @@ export function InvoiceDocumentModal({ invoice, onSaved, onClose }: Props) {
       <form className="flex h-full flex-col" onSubmit={submit}>
         <ScrollingModalBody className="space-y-5">
           {error && <ErrorNote onDismiss={() => setError(null)}>{error}</ErrorNote>}
+          {paid && <PaidInvoiceLock admin={admin} reason={reason} onReason={setReason} disabled={busy} />}
 
           <section className="space-y-2">
             <h3 className="eyebrow">Billed to</h3>

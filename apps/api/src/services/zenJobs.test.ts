@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { prisma } from '../lib/prisma.js';
 import { runZenJob, type ZenCard } from './zenJobs.js';
+import { draftTask } from './zenDraft.js';
 
 /*
  * The clash check and the approver rule are tested where they live; here they
@@ -343,5 +344,149 @@ describe('meetings and shoots', () => {
   it('asks when a shoot ends', async () => {
     const out = await run('prepareEvent', { action: 'BOOK', kind: 'SHOOT', title: 'Zeta shoot', date: '2026-10-10', start: '09:00' });
     expect(out.result).toMatchObject({ needs: ['end'] });
+  });
+});
+
+describe('several new tasks at once', () => {
+  const ACME = {
+    id: 'co-1',
+    name: 'Acme',
+    retainers: [{ id: 'r1', projects: [{ id: 'rp-social', name: 'Social', isDefault: true, status: 'ACTIVE' }] }],
+    projects: [],
+  };
+
+  it('puts every task on one card — one item each, Add or Leave out, one button — and writes nothing', async () => {
+    // The client lookup, then the list of clients there is somewhere to file work for.
+    p.company.findMany.mockImplementation(async ({ where }: any) => (where.name ? [ACME] : [{ name: 'Acme' }]));
+    p.monthCard.findFirst.mockResolvedValue({ id: 'mc-oct', status: 'OPEN' });
+    const out = await run('prepareTasks', {
+      tasks: [
+        { title: 'Shoot plan for Diwali', dueDate: '2026-10-06', assignee: 'Janani' },
+        { title: 'Order props', dueDate: '2026-10-07' },
+        { title: 'Edit the Diwali reel', dueDate: '2026-10-09', client: 'Acme', assignee: 'Ravi Kumar', priority: 'HIGH' },
+      ],
+    });
+    const c = plan(out);
+    expect(c.title).toBe('3 new tasks');
+    expect(c.steps).toHaveLength(1);
+    const step = c.steps[0] as Extract<(typeof c.steps)[number], { kind: 'post' }>;
+    expect(step.label).toBe('Add 3 tasks');
+    expect(step.items.map((i) => i.label)).toEqual(['Shoot plan for Diwali', 'Order props', 'Edit the Diwali reel']);
+    // Each item is the New task form's own request, on the asker's session — or nothing.
+    expect(step.items[0].options![0].request).toEqual({
+      method: 'POST',
+      path: '/tasks',
+      // Checked again at Create, in case the same task went up since.
+      body: { title: 'Shoot plan for Diwali', dueDate: '2026-10-06', workType: 'INTERNAL', assigneeId: 'u-janani', priority: 'MEDIUM', duplicateCheck: true },
+    });
+    expect(step.items[1].options![0].request!.body).toMatchObject({ assigneeId: 'u-boss', workType: 'INTERNAL' });
+    expect(step.items[2].options![0].request!.body).toMatchObject({
+      workType: 'MONTH_CARD',
+      monthCardId: 'mc-oct',
+      retainerProjectId: 'rp-social',
+      assigneeId: 'u-ravik',
+      priority: 'HIGH',
+    });
+    expect(step.items[2].detail).toBe('Ravi · due Fri 9 Oct · Acme · Social — 2026-10 · high priority');
+    for (const item of step.items) {
+      expect(item.options![1]).toEqual({ label: 'Leave out', request: null });
+      expect(item.choice).toBe(0);
+    }
+    expect(out.result).toMatchObject({ prepared: true });
+    noWrites();
+  });
+
+  it('asks about the tasks it cannot draft yet — which and why, with the real options once — and puts nothing up', async () => {
+    const out = await run('prepareTasks', {
+      tasks: [
+        { title: 'Order props', dueDate: '2026-10-07' },
+        { title: 'Colour grade', dueDate: '2026-10-08', assignee: 'Zoe' },
+        { title: 'Thumbnail', dueDate: '2026-10-08', assignee: 'Priyanka' },
+        { title: 'Captions' },
+      ],
+    });
+    expect(out.cards).toBeUndefined();
+    const r = out.result as any;
+    expect(r.needs).toEqual(['tasks']);
+    expect(r.ready).toBe(1);
+    expect(r.problems.map((x: any) => [x.task, x.needs])).toEqual([
+      [2, ['assignee']],
+      [3, ['assignee']],
+      [4, ['dueDate']],
+    ]);
+    // The team once, however many tasks named somebody unknown.
+    expect(r.candidates.team).toEqual(['Akmal — Management', 'Janani — Design', 'Ravi — Video', 'Ravi Kumar — Video']);
+    noWrites();
+  });
+
+  it('takes at most 25 on one card, and asks for a list when given none', async () => {
+    const many = Array.from({ length: 26 }, (_, i) => ({ title: `Task ${i + 1}`, dueDate: '2026-10-07' }));
+    const tooMany = await run('prepareTasks', { tasks: many });
+    expect(tooMany.cards).toBeUndefined();
+    expect(tooMany.result).toMatchObject({ prepared: false });
+    expect(String((tooMany.result as any).why)).toMatch(/at most 25/);
+    expect((await run('prepareTasks', { tasks: [] })).result).toMatchObject({ needs: ['tasks'] });
+    const ok = await run('prepareTasks', { tasks: many.slice(0, 25) });
+    expect((plan(ok).steps[0] as any).items).toHaveLength(25);
+  });
+});
+
+describe('the same task, already on the board', () => {
+  const TWIN = {
+    id: 't-old',
+    title: 'Order props',
+    dueDate: new Date('2026-10-07T00:00:00Z'),
+    status: 'IN_PROGRESS',
+    assignees: [{ user: { name: 'Akmal' } }],
+  };
+
+  it('a single draft says so, and its Create is then a decision — no second check', async () => {
+    p.task.findFirst.mockResolvedValue(TWIN);
+    const out = await draftTask({ title: 'order props', dueDate: '2026-10-09' }, ORG, ME, NOW);
+    if (!('draft' in out)) throw new Error('expected a draft');
+    expect(out.draft.duplicateOf).toEqual({ title: 'Order props', due: 'Wed 7 Oct', people: 'Akmal', status: 'in progress' });
+    expect(out.draft.body.duplicateCheck).toBe(false);
+    expect(out.note).toMatch(/SAME task is already on the board/);
+    // Any date: asking for it again on another day is still the same task.
+    expect(p.task.findFirst.mock.calls[0][0].where).not.toHaveProperty('dueDate');
+  });
+
+  it('a draft with nothing like it on the board is checked again at Create', async () => {
+    p.task.findFirst.mockResolvedValue(null);
+    const out = await draftTask({ title: 'Order props', dueDate: '2026-10-09' }, ORG, ME, NOW);
+    if (!('draft' in out)) throw new Error('expected a draft');
+    expect(out.draft.duplicateOf).toBeUndefined();
+    expect(out.draft.body.duplicateCheck).toBe(true);
+  });
+
+  it('once they say they want another, it does not look', async () => {
+    p.task.findFirst.mockResolvedValue(TWIN);
+    const out = await draftTask({ title: 'Order props', dueDate: '2026-10-09', allowDuplicate: true }, ORG, ME, NOW);
+    if (!('draft' in out)) throw new Error('expected a draft');
+    expect(out.draft.duplicateOf).toBeUndefined();
+    expect(p.task.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('on a card of several, what is already there — or twice on the card — starts on Leave out', async () => {
+    p.task.findFirst.mockImplementation(async ({ where }: any) => (where.title.equals.toLowerCase() === 'order props' ? TWIN : null));
+    const out = await run('prepareTasks', {
+      tasks: [
+        { title: 'Order props', dueDate: '2026-10-07' },
+        { title: 'Book the studio', dueDate: '2026-10-07' },
+        { title: 'book the studio', dueDate: '2026-10-08' },
+      ],
+    });
+    const c = plan(out);
+    const step = c.steps[0] as Extract<(typeof c.steps)[number], { kind: 'post' }>;
+    expect(step.items.map((i) => i.choice)).toEqual([1, 0, 1]);
+    expect(step.items[0].detail).toMatch(/^Already on the board for Akmal, due Wed 7 Oct \(in progress\)/);
+    expect(step.items[2].detail).toMatch(/^Same as a task above on this card/);
+    // Switched to Add, the warning has been seen: no second check. The new one keeps it.
+    expect(step.items[0].options![0].request!.body).toMatchObject({ duplicateCheck: false });
+    expect(step.items[1].options![0].request!.body).toMatchObject({ duplicateCheck: true });
+    expect(step.label).toBe('Add the chosen tasks');
+    expect(c.warnings?.[0]).toMatch(/^2 tasks are already on the board/);
+    expect(out.result).toMatchObject({ alreadyOnTheBoard: ['Order props', 'book the studio'] });
+    noWrites();
   });
 });

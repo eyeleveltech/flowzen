@@ -141,6 +141,12 @@ describe('Phase 5: Direct Costs, Allocations & The 12 Health Rules Scanner', () 
       });
     });
 
+    // The work is this organisation's, nothing is split yet, no month is closed (Money Plan 1).
+    (prisma.monthCard.count as any).mockResolvedValue(1);
+    (prisma.project.count as any).mockResolvedValue(1);
+    (prisma.peopleAllocation.findMany as any).mockResolvedValue([]);
+    (prisma.monthCard.findMany as any).mockResolvedValue([]);
+
     // Head saves 50% / 50% split for designer
     const allocRes = await request(app)
       .post('/api/allocations/bulk')

@@ -119,6 +119,8 @@ beforeEach(() => {
           written.invoice = data;
           return { id: 'inv-1', ...data };
         }),
+        // What the settle step and the answer read back: the row as written, nothing paid.
+        findUnique: vi.fn(async () => ({ id: 'inv-1', status: 'RAISED', milestoneId: null, proformaId: null, payments: [], ...written.invoice })),
       },
       documentLineItem: {
         deleteMany: vi.fn(async ({ where }: any) => {

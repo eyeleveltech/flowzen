@@ -167,6 +167,16 @@ export async function issueProforma(orgId: string, actorId: string, input: Profo
     }
   }
 
+  // A proposal: this organisation's. It was read and then updated by bare id,
+  // so a proforma raised here could move another organisation's deal.
+  if (sourceType === ProformaSourceType.PROPOSAL) {
+    const proposal = await prisma.proposal.findFirst({
+      where: { id: sourceId, organizationId: orgId },
+      select: { id: true },
+    });
+    if (!proposal) throw new ProformaRefusal(404, 'Proposal not found');
+  }
+
   // A retainer month: in this client's retainer, not already invoiced, and
   // not already asked for.
   let month: string | null = null;
@@ -284,12 +294,19 @@ export async function issueProforma(orgId: string, actorId: string, input: Profo
         // and the trail should say where it moved FROM. Nothing recorded that,
         // so the one stage change nobody performs by hand was also the one
         // with no history.
-        const source = await tx.proposal.findUnique({ where: { id: sourceId }, select: { stage: true } });
-        stageFrom = source?.stage ?? null;
-        await tx.proposal.update({
-          where: { id: sourceId },
-          data: { stage: 'PROFORMA_ISSUED' },
+        const source = await tx.proposal.findFirst({
+          where: { id: sourceId, organizationId: orgId },
+          select: { stage: true },
         });
+        // A WON deal stays won: a proforma raised for it afterwards (a second
+        // instalment, say) is billing, not the deal moving backwards.
+        if (source && source.stage !== 'WON' && source.stage !== 'PROFORMA_ISSUED') {
+          stageFrom = source.stage;
+          await tx.proposal.updateMany({
+            where: { id: sourceId, organizationId: orgId, stage: { not: 'WON' } },
+            data: { stage: 'PROFORMA_ISSUED' },
+          });
+        }
       }
 
       // A milestone's status is derived from what's actually been raised

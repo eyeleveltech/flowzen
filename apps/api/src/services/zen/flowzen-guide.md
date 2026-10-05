@@ -653,4 +653,4 @@ Management only. Zen can look up:
 - what changed, from the activity log;
 - this week's Monday brief.
 
-It can draft a task for the person to create, and remember how they like things done. It cannot change anything, and it never sees salaries: salary costs are one summed line, and profit it works out leaves people cost out. Anything it cannot look up — meetings and shoots, the time split itself, usage — it should say so and give the screen's link.
+It can draft a task for the person to create — or several at once from one message (up to 25 on one card, each with Add or Leave out, then one button adds them) — and remember how they like things done. It cannot change anything, and it never sees salaries: salary costs are one summed line, and profit it works out leaves people cost out. Anything it cannot look up — meetings and shoots, the time split itself, usage — it should say so and give the screen's link.

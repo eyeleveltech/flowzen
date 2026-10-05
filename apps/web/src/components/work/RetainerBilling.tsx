@@ -25,6 +25,7 @@ import { NewProformaModal } from '@/components/clients/NewProformaModal';
 import { SendDocumentModal } from '@/components/documents/SendDocumentModal';
 import { RecordPaymentModal } from '@/components/work/RecordPaymentModal';
 import { EnterInvoiceModal } from '@/components/work/EnterInvoiceModal';
+import { InvoiceActions } from '@/components/work/InvoiceActions';
 import { BILLING_LABEL, billableFrom, isLiveProforma, monthLabel } from '@/lib/retainerBilling';
 
 /** What billing a month needs to know — a board row, or one built from the retainer page. */
@@ -120,6 +121,15 @@ export function BillingNext({
         </span>
       )}
       {step === 'NOT_YET' && <span className="text-xs text-secondary">Billable from {billableFrom(subject.month)}</span>}
+
+      {/* The invoice's: correct it or a payment, or cancel it and go back a step. */}
+      {invoice && (
+        <InvoiceActions
+          invoice={{ id: invoice.id, number: invoice.number, status: invoice.status }}
+          hasPayments={invoice.paid > 0}
+          onChanged={onChanged}
+        />
+      )}
 
       {/* The proforma's own actions, whichever step the month is on. */}
       {proforma && (
