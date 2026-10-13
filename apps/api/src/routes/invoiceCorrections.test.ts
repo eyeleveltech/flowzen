@@ -121,6 +121,7 @@ describe('payments — correct or remove, and the invoice follows', () => {
     (prisma.payment.findFirst as any).mockResolvedValue(payment());
     // After the delete, what resettle reads: paid status, no money.
     (prisma.invoice.findUnique as any).mockResolvedValue(invoiceRow({ status: InvoiceStatus.PAID, payments: [] }));
+    (prisma.proforma.updateMany as any).mockResolvedValue({ count: 1 });
     const res = await request(app).delete('/api/invoices/inv-1/payments/pay-1').set(as(ADMIN));
     expect(res.status).toBe(200);
     expect(prisma.payment.delete).toHaveBeenCalledWith({ where: { id: 'pay-1' } });
@@ -130,7 +131,14 @@ describe('payments — correct or remove, and the invoice follows', () => {
       data: { status: MilestoneStatus.INVOICED },
     });
     expect(prisma.proforma.updateMany).toHaveBeenCalledWith({ where: { id: 'pf-1', status: 'PAID' }, data: { status: 'UNPAID' } });
-    expect((prisma.activity.create as any).mock.calls[0][0].data.verb).toBe('payment_removed');
+    const verbs = (prisma.activity.create as any).mock.calls.map((c: any[]) => c[0].data);
+    expect(verbs.map((d: any) => d.verb)).toContain('payment_removed');
+    // The proforma's move back is on the record too (Money Plan 2, decision 14).
+    expect(verbs.find((d: any) => d.verb === 'proforma_status_changed')).toMatchObject({
+      entityType: 'Proforma',
+      entityId: 'pf-1',
+      payload: { from: 'PAID', to: 'UNPAID' },
+    });
   });
 
   it('correcting a part payment up to the full amount settles it', async () => {

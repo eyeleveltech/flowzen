@@ -43,6 +43,48 @@ export function EmptyState({
   );
 }
 
+/**
+ * A section that could not load — said in place of its figures, never as ₹0.
+ *
+ * A failed load used to show zeros, or a note blaming permissions for every
+ * failure. This names what did not load, says why when the server said (your
+ * role, or the server), and offers to try again.
+ */
+export function LoadError({
+  what,
+  error,
+  onRetry,
+  className,
+}: {
+  /** "the forecast", "this month's profit"… */
+  what: string;
+  error: unknown;
+  onRetry?: () => void;
+  className?: string;
+}) {
+  const status = (error as { status?: number } | null)?.status;
+  const message = error instanceof Error ? error.message : null;
+  const why =
+    status === 403
+      ? 'Your role does not include these figures.'
+      : status === 401
+        ? 'You have been signed out. Sign in again.'
+        : message || 'The server did not answer.';
+  return (
+    <div role="alert" className={cn('flex items-start gap-3 rounded-xl border border-danger/30 bg-danger-tint px-4 py-3', className)}>
+      <div className="flex-1">
+        <p className="text-sm font-semibold text-danger">Could not load {what}.</p>
+        <p className="mt-0.5 text-xs text-secondary">{why}</p>
+      </div>
+      {onRetry && status !== 403 && (
+        <button onClick={onRetry} className="shrink-0 rounded-lg border border-danger/30 px-3 py-1.5 text-xs font-medium text-danger hover:bg-white/60">
+          Try again
+        </button>
+      )}
+    </div>
+  );
+}
+
 /** An inline problem, not a page-level failure. */
 export function ErrorNote({
   children,

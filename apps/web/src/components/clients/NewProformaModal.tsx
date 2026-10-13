@@ -222,7 +222,7 @@ export function NewProformaModal({
 
           <section className="space-y-2">
             <h3 className="eyebrow">Items</h3>
-            <LineItemsEditor rows={lines} onChange={setLines} sacCodes={sacCodes} disabled={busy} />
+            <LineItemsEditor rows={lines} onChange={setLines} sacCodes={sacCodes} disabled={busy} documentRate={parsedGstRate || 0} />
           </section>
 
           <section className="space-y-3">
@@ -258,6 +258,7 @@ export function NewProformaModal({
               subtotal={subtotal}
               gstApplicable={gstApplicable}
               gstRatePercent={parsedGstRate || 0}
+              lines={lines}
               interState={Boolean(placeOfSupplyCode && sellerStateCode && placeOfSupplyCode !== sellerStateCode)}
             />
           </section>

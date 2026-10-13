@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { TableRowsSkeleton } from '@/components/ui/skeleton-loaders';
-import { ErrorNote } from '@/components/ui/empty-state';
+import { financialYearStart, todayIn } from '@/lib/money';
+import { ErrorNote, LoadError } from '@/components/ui/empty-state';
 import { plural } from '@/lib/utils';
 import Link from 'next/link';
 import { api, fileUrl, formatMoney, formatDate } from '@/lib/api-v2';
@@ -73,6 +74,8 @@ interface ProposalItem {
   owner?: { id: string; name: string } | null;
   versions: { n: number; value: number; createdAt: string }[];
   wonVersion?: { n: number; value: number } | null;
+  /** When it was won — what puts its discount in a financial year. */
+  wonAt?: string | null;
   proformas: { id: string; number: string; status: string; amount: number }[];
   createdAt: string;
   updatedAt: string;
@@ -188,7 +191,7 @@ export default function ProposalsPage() {
    * counted without them. The export button on this same tab reads the real
    * list, so the screen showed 3 and the file it exported had 4.
    */
-  const { data: proformaData } = useQuery({
+  const { data: proformaData, isPending: proformasLoading, error: proformasError, refetch: refetchProformas } = useQuery({
     queryKey: ['proformas', 'all'],
     queryFn: () => api.proformas.list(),
   });
@@ -199,8 +202,13 @@ export default function ProposalsPage() {
   // against what the deal actually closed at, won proposals only — this used
   // to just re-sum every proposal's v1 value regardless of outcome, which is
   // a first-ask total, not a discount.
+  //
+  // This financial year only, as the tile says (Money Plan 2, decision 15) —
+  // it summed every deal ever won, so "this year" grew for ever.
+  const tz = config?.organization.timezone ?? 'Asia/Kolkata';
+  const fyFrom = financialYearStart(todayIn(tz), config?.organization.fiscalYearStart ?? 4);
   const givenAwayValue = proposals
-    .filter((p) => p.outcome === 'WON' && p.wonVersion)
+    .filter((p) => p.outcome === 'WON' && p.wonVersion && p.wonAt && todayIn(tz, new Date(p.wonAt)) >= fyFrom)
     .reduce((s, p) => {
       const v1 = p.versions[p.versions.length - 1];
       const won = p.wonVersion;
@@ -266,7 +274,7 @@ export default function ProposalsPage() {
         <StatTile
           label="Given Away This Year"
           value={formatMoney(givenAwayValue)}
-          note="first ask against closed value"
+          note="first ask against what it closed at, this financial year"
           tone="warning"
         />
         <StatTile
@@ -352,7 +360,15 @@ export default function ProposalsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {proformas.length === 0 ? (
+              {proformasLoading ? (
+                <TableRowsSkeleton cols={7} />
+              ) : proformasError ? (
+                <tr>
+                  <td colSpan={7} className="p-4">
+                    <LoadError what="the proformas" error={proformasError} onRetry={() => void refetchProformas()} />
+                  </td>
+                </tr>
+              ) : proformas.length === 0 ? (
                 <tr><td colSpan={7} className="px-5 py-12 text-center text-sm text-secondary">No proformas.</td></tr>
               ) : proformas.map(pf => (
                 <tr key={pf.id} className="hover:bg-subtle transition-colors">

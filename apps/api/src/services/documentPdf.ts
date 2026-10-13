@@ -19,6 +19,7 @@ import path from 'node:path';
 import puppeteer from 'puppeteer';
 import { SupplyType } from '@prisma/client';
 import { gstStateName } from '@flowzen/shared';
+import { taxByRate, type RateTax } from '../utils/documentTotals.js';
 import {
   loadRenderableDocument,
   type DocumentKind,
@@ -150,15 +151,41 @@ export function renderDocumentHtml(doc: RenderableDocument): string {
    */
   const taxRows: [string, number][] = [];
   if (doc.gstApplicable) {
-    const totalTax = round2(totals.cgstAmount + totals.sgstAmount + totals.igstAmount);
-    if (doc.kind === 'PROFORMA') {
-      if (totalTax) taxRows.push([`GST @ ${doc.gstRatePercent}%`, totalTax]);
-    } else if (doc.supplyType === SupplyType.INTER) {
-      if (totals.igstAmount) taxRows.push([`IGST @ ${doc.gstRatePercent}%`, totals.igstAmount]);
-    } else {
-      const half = doc.gstRatePercent / 2;
-      if (totals.cgstAmount) taxRows.push([`CGST @ ${half}%`, totals.cgstAmount]);
-      if (totals.sgstAmount) taxRows.push([`SGST @ ${half}%`, totals.sgstAmount]);
+    /*
+     * A tax row per rate — but only when the lines, taxed at their own rates,
+     * give exactly the tax this document stored (Money Plan 2, decision 7).
+     * A document prepared before per-line GST was taxed at its one rate
+     * whatever its lines said; it prints as it always did, from its stored
+     * figures, and is never restated with the new maths.
+     */
+    const groups = taxByRate(doc.lines, doc.supplyType === SupplyType.INTER);
+    const sum = (k: 'cgstAmount' | 'sgstAmount' | 'igstAmount') => round2(groups.reduce((a, g) => a + g[k], 0));
+    const perRate =
+      sum('cgstAmount') === round2(totals.cgstAmount) &&
+      sum('sgstAmount') === round2(totals.sgstAmount) &&
+      sum('igstAmount') === round2(totals.igstAmount);
+    const rates: RateTax[] = perRate
+      ? groups
+      : [
+          {
+            rate: doc.gstRatePercent,
+            taxable: totals.subtotal,
+            cgstAmount: totals.cgstAmount,
+            sgstAmount: totals.sgstAmount,
+            igstAmount: totals.igstAmount,
+            totalTax: round2(totals.cgstAmount + totals.sgstAmount + totals.igstAmount),
+          },
+        ];
+    for (const r of rates) {
+      if (doc.kind === 'PROFORMA') {
+        if (r.totalTax) taxRows.push([`GST @ ${r.rate}%`, r.totalTax]);
+      } else if (doc.supplyType === SupplyType.INTER) {
+        if (r.igstAmount) taxRows.push([`IGST @ ${r.rate}%`, r.igstAmount]);
+      } else {
+        const half = r.rate / 2;
+        if (r.cgstAmount) taxRows.push([`CGST @ ${half}%`, r.cgstAmount]);
+        if (r.sgstAmount) taxRows.push([`SGST @ ${half}%`, r.sgstAmount]);
+      }
     }
   }
 

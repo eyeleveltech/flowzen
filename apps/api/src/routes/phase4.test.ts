@@ -232,8 +232,8 @@ describe('Phase 4: Financials & Intelligence Engine', () => {
     ]);
 
     (prisma.retainer.findMany as any).mockResolvedValue([
-      { id: 'ret-1', monthlyValue: 250000, endsOn: null, company: { id: 'comp-1', name: 'Alpha' } },
-      { id: 'ret-2', monthlyValue: 150000, endsOn: null, company: { id: 'comp-2', name: 'Beta' } },
+      { id: 'ret-1', monthlyValue: 250000, startDate: new Date('2026-01-01'), endsOn: null, company: { id: 'comp-1', name: 'Alpha' } },
+      { id: 'ret-2', monthlyValue: 150000, startDate: new Date('2026-01-01'), endsOn: null, company: { id: 'comp-2', name: 'Beta' } },
     ]);
 
     (prisma.proposal.findMany as any).mockResolvedValue([

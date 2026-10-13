@@ -24,6 +24,8 @@ export interface LineItemDraft {
   units: string;
   unitCost: string;
   hsnSac: string;
+  /** This line's GST rate. Blank: the document's rate. */
+  gstRate: string;
 }
 
 export const blankLineItem = (): LineItemDraft => ({
@@ -31,7 +33,20 @@ export const blankLineItem = (): LineItemDraft => ({
   units: '1',
   unitCost: '',
   hsnSac: '',
+  gstRate: '',
 });
+
+/**
+ * A stored line's rate, as the editor holds it: blank when it is the
+ * document's own rate, so changing the document's rate carries every such
+ * line with it.
+ */
+export const draftRate = (stored: unknown, documentRate: number): string =>
+  stored === null || stored === undefined || Number(stored) === documentRate ? '' : String(Number(stored));
+
+/** A line's own rate if it has one — the rate its tax is worked out at. */
+export const lineRate = (row: LineItemDraft, documentRate: number): number =>
+  row.gstRate.trim() === '' || !Number.isFinite(Number(row.gstRate)) ? documentRate : Number(row.gstRate);
 
 /** What the row is worth. The single definition — the summary reads this too. */
 export const lineAmount = (row: LineItemDraft): number => {
@@ -57,6 +72,8 @@ export const toLineItemPayload = (rows: LineItemDraft[]) =>
     units: Number(row.units),
     unitCost: Number(row.unitCost),
     hsnSac: row.hsnSac.trim() || null,
+    // Blank goes as null, and the server uses the document's rate.
+    gstRate: row.gstRate.trim() === '' ? null : Number(row.gstRate),
   }));
 
 export const money = (amount: number): string =>
@@ -71,9 +88,11 @@ type Props = {
   /** The saved codes from Settings, offered as a datalist so one can be picked or a new one typed. */
   sacCodes?: string[];
   disabled?: boolean;
+  /** The document's rate — what a line with no rate of its own is taxed at. */
+  documentRate?: number;
 };
 
-export function LineItemsEditor({ rows, onChange, sacCodes = [], disabled = false }: Props) {
+export function LineItemsEditor({ rows, onChange, sacCodes = [], disabled = false, documentRate }: Props) {
   const sacListId = useId();
 
   const set = (index: number, key: keyof LineItemDraft, value: string) =>
@@ -99,18 +118,19 @@ export function LineItemsEditor({ rows, onChange, sacCodes = [], disabled = fals
    * chosen for reading rather than typing. The custom-fields editor next to it
    * is laid out the same way, for the same reason.
    */
-  const grid = 'grid grid-cols-[1.75rem_minmax(0,1fr)_4.5rem_6.5rem_5.75rem_6.5rem_1.75rem] items-center gap-2';
+  const grid = 'grid grid-cols-[1.75rem_minmax(0,1fr)_4.5rem_6.5rem_5.75rem_4rem_6.5rem_1.75rem] items-center gap-2';
 
   return (
     <div className="space-y-2">
       <div className="overflow-x-auto">
-        <div className="min-w-[600px] space-y-1.5">
+        <div className="min-w-[680px] space-y-1.5">
           <div className={grid} aria-hidden="true">
             <span className="eyebrow">Sr</span>
             <span className="eyebrow">Particulars</span>
             <span className="eyebrow text-right">Units</span>
             <span className="eyebrow text-right">Unit cost</span>
             <span className="eyebrow">HSN/SAC</span>
+            <span className="eyebrow text-right">GST %</span>
             <span className="eyebrow text-right">Amount</span>
             <span />
           </div>
@@ -155,6 +175,20 @@ export function LineItemsEditor({ rows, onChange, sacCodes = [], disabled = fals
                 placeholder="998365"
                 disabled={disabled}
                 aria-label={`HSN or SAC code, line ${index + 1}`}
+              />
+              {/* Blank: the document's rate. A line at another rate (5% on a
+                  print job, say) is taxed at its own (Money Plan 2, decision 7). */}
+              <input
+                className={`${cell} text-right tabular-nums`}
+                value={row.gstRate}
+                onChange={(e) => set(index, 'gstRate', e.target.value)}
+                type="number"
+                step="0.01"
+                min="0"
+                max="28"
+                placeholder={documentRate !== undefined ? String(documentRate) : ''}
+                disabled={disabled}
+                aria-label={`GST rate, line ${index + 1}`}
               />
               <span className="text-right text-sm tabular-nums text-body">{money(lineAmount(row))}</span>
               {rows.length > 1 && !disabled ? (

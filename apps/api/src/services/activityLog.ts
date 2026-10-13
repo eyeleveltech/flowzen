@@ -449,6 +449,7 @@ const ACTION: Record<string, string> = {
   'Retainer.retainer_project_deleted': 'removed a project from the retainer for',
   'MonthCard.month_card_created': 'opened the month',
   'MonthCard.month_card_reopened': 'reopened the closed month',
+  'MonthCard.month_auto_closed': 'closed the month, as it had ended:',
   'InternalProject.internal_project_created': 'created the internal project',
   'InternalProject.internal_project_deleted': 'deleted the internal project',
   'InternalProject.internal_project_status_changed': 'changed the status of',
@@ -462,6 +463,8 @@ const ACTION: Record<string, string> = {
   'Invoice.document_emailed': 'emailed',
   'Proforma.proforma_generated': 'issued',
   'Proforma.proforma_edited': 'edited',
+  'Proforma.proforma_status_changed': 'changed the status of',
+  'Proforma.proforma_expired': 'marked expired, as its valid-till date had passed:',
   'Proforma.document_emailed': 'emailed',
   'Cost.created': 'entered a cost:',
   'Cost.cost_updated': 'edited a cost:',
@@ -469,6 +472,9 @@ const ACTION: Record<string, string> = {
   'Cost.deleted': 'deleted a cost:',
   'Cost.restored': 'restored a cost:',
   'Cost.recurring_cost_rolled': 'carried a recurring cost into the new month:',
+  'Cost.cleanup_soft_deleted': 'removed a doubled cost in the money clean-up:',
+  'Cost.cleanup_moved_month': 'moved a cost to its own month in the money clean-up:',
+  'Cost.cleanup_undone': 'undid the money clean-up on a cost:',
 
   // Assets
   // Meetings and shoots

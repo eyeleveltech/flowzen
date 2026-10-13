@@ -461,6 +461,13 @@ const editRetainer = (body: Record<string, unknown>, retainer: Record<string, un
 };
 
 describe('editing a retainer', () => {
+  beforeEach(() => {
+    // After a new fee: no proforma out at the old one (Money Plan 2, decision
+    // 13). Tests about the start date set their own cards.
+    (prisma.monthCard.findMany as any).mockResolvedValue([]);
+    (prisma.proforma.findMany as any).mockResolvedValue([]);
+  });
+
   it('corrects the monthly value and reprices the open month', async () => {
     const res = await editRetainer({ monthlyValue: 60000 });
     expect(res.status).toBe(200);

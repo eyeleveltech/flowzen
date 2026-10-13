@@ -107,10 +107,9 @@ export function AssigneeField({
  * Who asked for the work — not always who is typing it up.
  *
  * A manager writing out what a Head asked for in a meeting had no way to say
- * so, and the task landed attributed to them. Naming somebody else is itself a
- * work.team act, though: an employee recording their manager as the requester
- * would be writing down a conversation nobody can check, so for them the field
- * is simply not there.
+ * so, and the task landed attributed to them. Everybody gets it, employees
+ * included: naming who asked puts no work on anyone else's list, and the task
+ * still records who typed it ("Added by" on the task, when that differs).
  */
 export function AssignedByField({
   value,
@@ -122,9 +121,6 @@ export function AssignedByField({
   disabled?: boolean;
 }) {
   const team = useTeamMembers();
-  const { may } = useMayAssignOthers();
-
-  if (!may) return null;
 
   return (
     <FieldSelect

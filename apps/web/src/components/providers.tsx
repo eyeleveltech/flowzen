@@ -86,7 +86,7 @@ function SocketProvider({ children }: { children: ReactNode }) {
       if (msg?.type !== 'flowzen:navigate' || typeof msg.url !== 'string') return;
       if (!msg.url.startsWith('/') || msg.url.startsWith('//')) return;
       router.push(msg.url);
-      if (/[?&]bell=1/.test(msg.url)) window.dispatchEvent(new Event('flowzen:open-bell'));
+      if (/[?&]bell=1\b/.test(msg.url)) window.dispatchEvent(new Event('flowzen:open-bell'));
     };
     navigator.serviceWorker.addEventListener('message', onMessage);
     return () => navigator.serviceWorker.removeEventListener('message', onMessage);

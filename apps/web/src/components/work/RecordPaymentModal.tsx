@@ -14,8 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Field, FieldSelect } from '@/components/ui/field';
 import { ErrorNote } from '@/components/ui/empty-state';
 import { InvoiceGstFields, paymentGstStart, useInvoiceGst } from '@/components/work/InvoiceGstFields';
-
-const PAYMENT_MODES = ['NEFT', 'RTGS', 'UPI', 'CHEQUE', 'BANK_TRANSFER', 'CASH'];
+import { PAYMENT_MODES } from '@/lib/money';
 
 export function RecordPaymentModal({
   invoiceId,
@@ -101,7 +100,7 @@ export function RecordPaymentModal({
         <ModalBody className="space-y-4">
           <Field label={gst.on ? 'Amount before GST (₹)' : 'Amount (₹)'} value={amount} onChange={setAmount} type="number" required />
           <InvoiceGstFields gst={gst} disabled={saving} kind="payment" />
-          <FieldSelect label="Mode" value={mode} onChange={setMode} required options={PAYMENT_MODES.map((m) => ({ value: m, label: m }))} />
+          <FieldSelect label="Mode" value={mode} onChange={setMode} required options={PAYMENT_MODES} />
           <Field label="Reference" value={reference} onChange={setReference} placeholder="UTR / cheque no. (optional)" />
           <Field
             label="Date the client paid"

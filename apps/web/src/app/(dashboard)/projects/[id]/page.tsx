@@ -16,6 +16,8 @@
  */
 
 import { use, useCallback, useEffect, useState } from 'react';
+import { InvoiceStatusBadge } from '@/components/work/InvoiceStatusBadge';
+import { moneyDate } from '@/lib/money';
 import { useWorkCacheNudge } from '@/hooks/useWorkCacheNudge';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -103,7 +105,17 @@ type Task = {
   assignees?: { id: string; name: string; designation?: string | null }[];
 };
 type Cost = { id: string; category: string; vendor: string; paidBy?: string | null; amount: string | number | null; incurredAt: string; enteredBy: { id: string; name: string } | null };
-type Invoice = { id: string; number: string; amount: string | number | null; status: string; dueAt: string };
+type Invoice = {
+  id: string;
+  number: string;
+  amount: string | number | null;
+  status: string;
+  dueAt: string;
+  /** The badge, worked out on the server — the same as /money's. */
+  state?: string;
+  isOverdue?: boolean;
+  partPaid?: boolean;
+};
 type Allocation = {
   id: string;
   month: string;
@@ -883,8 +895,10 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                       <tr key={inv.id}>
                         <td className="font-medium text-primary">{inv.number}</td>
                         <td className="text-right">{money(inv.amount)}</td>
-                        <td className="text-secondary">{date(inv.dueAt)}</td>
-                        <td className="text-secondary">{inv.status}</td>
+                        <td className="text-secondary">{moneyDate(inv.dueAt)}</td>
+                        <td>
+                          <InvoiceStatusBadge invoice={inv} />
+                        </td>
                       </tr>
                     ))}
                   </tbody>

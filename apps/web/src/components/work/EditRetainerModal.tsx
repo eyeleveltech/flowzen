@@ -30,7 +30,8 @@ import { Field, FieldSelect, FieldCheckbox } from '@/components/ui/field';
 import { ErrorNote } from '@/components/ui/empty-state';
 import { personOptions } from '@/lib/people';
 import { GstAmountFields } from '@/components/work/GstAmountFields';
-import { BILLING_OPTIONS } from '@/lib/retainerBilling';
+import { BILLING_OPTIONS, monthLabel } from '@/lib/retainerBilling';
+import { NewProformaModal } from '@/components/clients/NewProformaModal';
 import type { RetainerBilling } from '@/lib/api-v2';
 import { formatDate, plural } from '@/lib/utils';
 
@@ -47,19 +48,46 @@ type Retainer = {
   ownerId?: string | null;
 };
 
+type StaleProforma = { id: string; number: string; amount: number; month: string; monthCardId: string };
+
 type Props = {
   retainer: Retainer;
   companyName: string;
+  /** The client — so a proforma at the old fee can be raised again here. */
+  companyId?: string;
   /** The month the page is showing, e.g. "2026-09" — what a re-rate would move. */
   openMonthLabel: string | null;
   onSaved: () => void;
   onClose: () => void;
 };
 
-export function EditRetainerModal({ retainer, companyName, openMonthLabel, onSaved, onClose }: Props) {
+export function EditRetainerModal({ retainer, companyName, companyId, openMonthLabel, onSaved, onClose }: Props) {
   const team = useTeamMembers();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /*
+   * Proformas still out at the old fee, after a new one was saved (Money Plan
+   * 2, decision 13). Said, never left silent: each can be cancelled and
+   * raised again at the new fee.
+   */
+  const [stale, setStale] = useState<StaleProforma[] | null>(null);
+  const [reraising, setReraising] = useState<StaleProforma | null>(null);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
+
+  const cancelAndReraise = async (pf: StaleProforma) => {
+    setCancellingId(pf.id);
+    setError(null);
+    try {
+      await api.proformas.updateStatus(pf.id, 'CANCELLED');
+      toast.success(`Proforma ${pf.number} cancelled`);
+      if (companyId) setReraising(pf);
+      else setStale((list) => (list ?? []).filter((x) => x.id !== pf.id));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not cancel that proforma');
+    } finally {
+      setCancellingId(null);
+    }
+  };
 
   const original = {
     monthlyValue: retainer.monthlyValue != null ? String(Number(retainer.monthlyValue)) : '',
@@ -123,6 +151,10 @@ export function EditRetainerModal({ retainer, companyName, openMonthLabel, onSav
           ? `Retainer updated — ${plural(res.repricedCards, 'month card')} repriced`
           : 'Retainer updated',
       );
+      if (res.staleProformas && res.staleProformas.length > 0) {
+        setStale(res.staleProformas);
+        return;
+      }
       onSaved();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not save this retainer');
@@ -130,6 +162,62 @@ export function EditRetainerModal({ retainer, companyName, openMonthLabel, onSav
       setBusy(false);
     }
   };
+
+  if (stale) {
+    const newFee = Number(monthlyValue);
+    return (
+      <>
+        <Modal
+          open={!reraising}
+          onClose={onSaved}
+          title="A proforma is still at the old fee"
+          description={`${companyName} — the fee is now ${formatMoney(newFee)} a month, before GST.`}
+        >
+          <ScrollingModalBody className="space-y-3">
+            {error && <ErrorNote onDismiss={() => setError(null)}>{error}</ErrorNote>}
+            {stale.length === 0 ? (
+              <p className="text-sm text-secondary">Done — nothing is left at the old fee.</p>
+            ) : (
+              stale.map((pf) => (
+                <div key={pf.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warning/30 bg-warning-tint px-3 py-2.5">
+                  <p className="text-sm text-warning-ink">
+                    Proforma <span className="font-mono">{pf.number}</span> for {pf.month ? monthLabel(pf.month) : 'the open month'} asks for{' '}
+                    {formatMoney(pf.amount)} before GST. The client will be billed the old fee unless it is raised again.
+                  </p>
+                  <Button size="sm" variant="secondary" loading={cancellingId === pf.id} onClick={() => void cancelAndReraise(pf)}>
+                    Cancel and re-raise
+                  </Button>
+                </div>
+              ))
+            )}
+          </ScrollingModalBody>
+          <ModalFooter>
+            <Button type="button" variant="primary" onClick={onSaved}>
+              {stale.length === 0 ? 'Done' : 'Leave it as it is'}
+            </Button>
+          </ModalFooter>
+        </Modal>
+        {reraising && companyId && (
+          <NewProformaModal
+            companyId={companyId}
+            companyName={companyName}
+            source={{ type: 'MONTH_CARD', monthCardId: reraising.monthCardId, monthLabel: monthLabel(reraising.month) }}
+            defaultAmount={newFee}
+            defaultGstPercent={gstPercent ? Number(gstPercent) : null}
+            onCancel={() => {
+              // Cancelled already; it can be raised from Billing later.
+              setStale((list) => (list ?? []).filter((x) => x.id !== reraising.id));
+              setReraising(null);
+            }}
+            onConfirm={() => {
+              setStale((list) => (list ?? []).filter((x) => x.id !== reraising.id));
+              setReraising(null);
+            }}
+          />
+        )}
+      </>
+    );
+  }
 
   return (
     <Modal

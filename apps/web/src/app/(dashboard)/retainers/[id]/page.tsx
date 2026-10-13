@@ -62,6 +62,7 @@ import { NewWorkTaskModal } from '@/components/work/NewWorkTaskModal';
 import { RetainerProjectModal } from '@/components/work/RetainerProjectModal';
 import { EditRetainerModal } from '@/components/work/EditRetainerModal';
 import type { RetainerBilling, RetainerProject } from '@/lib/api-v2';
+import { moneyDate, paymentModeLabel } from '@/lib/money';
 import { NewWorkCostModal } from '@/components/work/NewWorkCostModal';
 import { EditCostModal } from '@/components/work/EditCostModal';
 import { RecordPaymentModal } from '@/components/work/RecordPaymentModal';
@@ -1332,7 +1333,7 @@ export default function RetainerMonthCardPage() {
                         <ul className="space-y-2">
                           {monthCard.invoice.payments.map((p) => (
                             <li key={p.id} className="flex items-center justify-between rounded-lg bg-subtle/40 px-3 py-2 text-sm">
-                              <span className="text-secondary">{date(p.receivedAt)} · {p.mode}{p.reference ? ` · ${p.reference}` : ''}</span>
+                              <span className="text-secondary">{moneyDate(p.receivedAt)} · {paymentModeLabel(p.mode)}{p.reference ? ` · ${p.reference}` : ''}</span>
                               <span className="text-right font-medium text-primary">
                                 {money(p.amount)}
                                 {Number(p.gstAmount) > 0 && (
@@ -1402,6 +1403,7 @@ export default function RetainerMonthCardPage() {
         <EditRetainerModal
           retainer={retainer}
           companyName={retainer.company.name}
+          companyId={retainer.company.id}
           /*
            * Only a month that is open and not yet invoiced can be repriced, and
            * the server decides that. Naming the month the page is on is enough

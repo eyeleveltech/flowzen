@@ -55,11 +55,43 @@ export interface DocumentTotalsOptions {
   gstRatePercent: number;
   /** Decided by place of supply against the seller's state — never by the buyer's GSTIN. */
   isInterState: boolean;
+  /**
+   * Tax each line at its own rate (Money Plan 2, decision 7). Only documents
+   * prepared from now on ask for it: an existing document is reprinted with
+   * the maths it was issued with, so its stored totals keep matching Tally.
+   */
+  perLineGst?: boolean;
+}
+
+/** The tax on the lines at one rate. */
+export interface RateTax {
+  rate: number;
+  taxable: number;
+  cgstAmount: number;
+  sgstAmount: number;
+  igstAmount: number;
+  totalTax: number;
+}
+
+/**
+ * Tax by rate: the lines grouped by their GST rate, each group taxed at its
+ * rate. A line's tax is its amount times its rate; adding a group's lines
+ * first and rounding once per rate is the same sum without a paisa of drift
+ * per line. One rate gives exactly what the single document rate gave.
+ */
+export function taxByRate(lines: readonly { amount: number; gstRate: number }[], isInterState: boolean): RateTax[] {
+  const byRate = new Map<number, number>();
+  for (const line of lines) byRate.set(line.gstRate, (byRate.get(line.gstRate) ?? 0) + line.amount);
+  return [...byRate].map(([rate, sum]) => {
+    const taxable = round2(sum);
+    const gst = calculateGst(taxable, isInterState, rate);
+    return { rate, taxable, cgstAmount: gst.cgstAmount, sgstAmount: gst.sgstAmount, igstAmount: gst.igstAmount, totalTax: gst.totalTaxAmount };
+  });
 }
 
 export function computeDocumentTotals(
   items: LineItemInput[],
-  { gstApplicable, gstRatePercent, isInterState }: DocumentTotalsOptions,
+  { gstApplicable, gstRatePercent, isInterState, perLineGst = false }: DocumentTotalsOptions,
 ): DocumentTotals {
   // §5: "Sr — auto generated ... renumbers automatically if a row is deleted or
   // reordered. Never entered by hand." Array position is the order the user put
@@ -83,9 +115,20 @@ export function computeDocumentTotals(
 
   const subtotal = round2(lines.reduce((sum, line) => sum + line.amount, 0));
 
-  const gst = gstApplicable
-    ? calculateGst(subtotal, isInterState, gstRatePercent)
-    : { cgstAmount: 0, sgstAmount: 0, igstAmount: 0, totalTaxAmount: 0 };
+  const gst = !gstApplicable
+    ? { cgstAmount: 0, sgstAmount: 0, igstAmount: 0, totalTaxAmount: 0 }
+    : perLineGst
+      ? taxByRate(lines, isInterState).reduce(
+          (acc, r) => ({
+            cgstAmount: round2(acc.cgstAmount + r.cgstAmount),
+            sgstAmount: round2(acc.sgstAmount + r.sgstAmount),
+            igstAmount: round2(acc.igstAmount + r.igstAmount),
+            totalTaxAmount: round2(acc.totalTaxAmount + r.totalTax),
+          }),
+          { cgstAmount: 0, sgstAmount: 0, igstAmount: 0, totalTaxAmount: 0 },
+        )
+      : // How every document before this release was priced: the document's one rate.
+        calculateGst(subtotal, isInterState, gstRatePercent);
 
   // §6: "Round off = difference to the nearest whole rupee. TOTAL = subtotal +
   // tax + round off." Computed in that order — the total is the rounded figure

@@ -9,6 +9,11 @@
  * Company-first, then "bill against": a retainer's most recent un-invoiced
  * month, or any live project. A month that already has an invoice is left
  * out — the backend only allows one per month anyway.
+ *
+ * And then what it settles (Money Plan 2, decision 10): the client's live
+ * proforma for that month or milestone, and for a project the milestone. Left
+ * unlinked, a proforma stayed open for ever beside the invoice that paid it,
+ * and a milestone could be invoiced a second time from its own page.
  */
 
 import { useEffect, useState } from 'react';
@@ -19,6 +24,7 @@ import { Field, FieldSelect } from '@/components/ui/field';
 import { ErrorNote } from '@/components/ui/empty-state';
 import { InvoiceGstFields, useInvoiceGst } from '@/components/work/InvoiceGstFields';
 import { monthLabel } from '@/lib/retainerBilling';
+import { formatMoney } from '@/lib/api-v2';
 
 type Target = { label: string; workType: 'RETAINER' | 'PROJECT'; monthCardId?: string; projectId?: string };
 
@@ -33,6 +39,10 @@ export function NewInvoiceModal({ onClose, onCreated }: Props) {
   const [loadingTargets, setLoadingTargets] = useState(false);
   const [targets, setTargets] = useState<Target[]>([]);
   const [targetKey, setTargetKey] = useState('');
+  // The company as loaded — its proformas and its projects' milestones.
+  const [company, setCompany] = useState<any>(null);
+  const [milestoneId, setMilestoneId] = useState('');
+  const [linkProforma, setLinkProforma] = useState(true);
 
   const [number, setNumber] = useState('');
   const [amount, setAmount] = useState('');
@@ -49,12 +59,14 @@ export function NewInvoiceModal({ onClose, onCreated }: Props) {
   useEffect(() => {
     setTargets([]);
     setTargetKey('');
+    setCompany(null);
     if (!companyId) return;
     setLoadingTargets(true);
     void api.companies
       .get(companyId)
       .then((res) => {
         const company = (res as { company?: any }).company ?? res;
+        setCompany(company);
         const list: Target[] = [];
         /*
          * Every retainer month still without an invoice, oldest first.
@@ -87,6 +99,37 @@ export function NewInvoiceModal({ onClose, onCreated }: Props) {
   }, [companyId]);
 
   const selectedTarget = targets.find((t) => (t.monthCardId ?? t.projectId) === targetKey);
+
+  /*
+   * What this invoice can settle. For a project: its milestones not yet
+   * invoiced (one invoice per milestone — the server refuses a second). For
+   * either: the proforma still standing against that month or milestone.
+   */
+  const project = selectedTarget?.projectId ? (company?.projects ?? []).find((pr: any) => pr.id === selectedTarget.projectId) : null;
+  const openMilestones: any[] = project
+    ? (project.milestones ?? []).filter(
+        (m: any) =>
+          (m.status === 'PENDING' || m.status === 'PROFORMA_RAISED') &&
+          !(project.invoices ?? []).some((i: any) => i.milestoneId === m.id && i.status !== 'CANCELLED'),
+      )
+    : [];
+  const liveProformas: any[] = (company?.proformas ?? []).filter(
+    (pf: any) => (pf.status === 'UNPAID' || pf.status === 'PAID') && !pf.invoiceId,
+  );
+  const proformaToLink = selectedTarget?.monthCardId
+    ? liveProformas.find((pf) => pf.sourceType === 'MONTH_CARD' && pf.sourceId === selectedTarget.monthCardId)
+    : milestoneId
+      ? liveProformas.find((pf) => pf.milestoneId === milestoneId)
+      : null;
+
+  // A new target: start from the milestone with a proforma out, if there is one.
+  useEffect(() => {
+    setLinkProforma(true);
+    const withProforma = openMilestones.find((m) => m.status === 'PROFORMA_RAISED');
+    setMilestoneId(withProforma?.id ?? '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetKey]);
+
   const canSave = Boolean(companyId) && Boolean(selectedTarget) && Boolean(number.trim()) && Number(amount) > 0 && Boolean(raisedAt) && gst.gstValid;
 
   const submit = async (e: React.FormEvent) => {
@@ -105,6 +148,8 @@ export function NewInvoiceModal({ onClose, onCreated }: Props) {
         workType: selectedTarget.workType,
         monthCardId: selectedTarget.monthCardId,
         projectId: selectedTarget.projectId,
+        ...(milestoneId ? { milestoneId } : {}),
+        ...(proformaToLink && linkProforma ? { proformaId: proformaToLink.id } : {}),
       });
       onCreated();
     } catch (err) {
@@ -136,6 +181,37 @@ export function NewInvoiceModal({ onClose, onCreated }: Props) {
             placeholder={!companyId ? 'Choose a company first' : loadingTargets ? 'Loading…' : targets.length === 0 ? 'Nothing open to bill' : 'Choose…'}
             options={targets.map((t) => ({ value: (t.monthCardId ?? t.projectId)!, label: t.label }))}
           />
+
+          {openMilestones.length > 0 && (
+            <FieldSelect
+              label="Milestone it settles"
+              value={milestoneId}
+              onChange={setMilestoneId}
+              options={[
+                { value: '', label: 'None — not for a milestone' },
+                ...openMilestones.map((m) => ({
+                  value: m.id,
+                  label: `${m.label} — ${m.percent}%${m.amount != null ? `, ${formatMoney(m.amount)} before GST` : ''}${m.status === 'PROFORMA_RAISED' ? ' · proforma raised' : ''}`,
+                })),
+              ]}
+            />
+          )}
+
+          {proformaToLink && (
+            <label className="flex items-start gap-2 rounded-xl border border-border bg-subtle/60 px-3 py-2.5 text-sm text-body">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={linkProforma}
+                onChange={(e) => setLinkProforma(e.target.checked)}
+              />
+              <span>
+                Link proforma <span className="font-mono">{proformaToLink.number}</span>
+                {proformaToLink.amount != null ? ` (${formatMoney(proformaToLink.total ?? proformaToLink.amount)})` : ''} — this
+                invoice is what it became, so it stops showing as unpaid.
+              </span>
+            </label>
+          )}
 
           <Field label="Tally invoice number" value={number} onChange={setNumber} required placeholder="e.g. INV-2026-0142" />
           <Field label={gst.on ? 'Amount before GST (₹)' : 'Amount (₹)'} value={amount} onChange={setAmount} type="number" required />

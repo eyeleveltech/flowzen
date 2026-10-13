@@ -5,7 +5,7 @@ import { apiGet, formatMoney } from '@/lib/api-v2';
 import { Select } from '@/components/ui/select';
 import { usePageHeader } from '@/hooks/usePageHeader';
 import { StatTile, StatRow } from '@/components/ui/stat-tile';
-import { Note } from '@/components/ui/empty-state';
+import { LoadError, Note } from '@/components/ui/empty-state';
 
 interface ForecastMonth {
   monthKey: string;
@@ -20,8 +20,12 @@ interface ForecastMonth {
     pipelineWeighted: number;
     total: number;
   };
-  outflows: { payroll: number; overheads: number; vendorAndDirect: number; total: number };
-  /** Committed cash, less payroll and vendors. The figure the verdict uses. */
+  /**
+   * Money we know is going out: salaries, recurring costs, and costs owed but
+   * not paid. No longer a 15–20% guess at "vendor and direct".
+   */
+  outflows: { payroll: number; recurring: number; committed: number; total: number };
+  /** Committed cash, less what goes out. The figure the verdict uses. */
   netCashFlow: number;
   /** The same month if every weighted deal lands. Shown beside, never as. */
   netCashFlowWithPipeline: number;
@@ -34,9 +38,8 @@ interface ForecastMonth {
 interface Summary {
   currentMrr: number;
   monthlyPayroll: number;
-  /** Company overheads a month: the recurring ones, or a 3-month average. */
-  monthlyOverheads: number;
-  overheadsBasis: 'recurring' | 'average' | 'none';
+  /** This month's recurring costs (rent, software…), salary-like ones left out. */
+  monthlyRecurringCosts: number;
   peopleWithoutCost: number;
   activeRetainersCount: number;
   activeDealsCount: number;
@@ -51,7 +54,7 @@ export default function ForecastPage() {
   /** What this forecast cannot see — no salaries, no overheads — said above it. */
   const [warnings, setWarnings] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState<unknown>(null);
 
   // "What if" scenario (§10: "what if per deal") — a second forecast fetch
   // with the picked proposal's pipeline contribution forced to its full
@@ -62,7 +65,7 @@ export default function ForecastPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    setError('');
+    setError(null);
     try {
       const res = await apiGet<any>('/forecast/3-month');
       if (res.success) {
@@ -71,8 +74,8 @@ export default function ForecastPage() {
         setDeals(res.deals ?? []);
         setWarnings(res.warnings ?? []);
       }
-    } catch (e: any) {
-      setError(e.message ?? 'Failed to load forecast');
+    } catch (e) {
+      setError(e);
     } finally {
       setLoading(false);
     }
@@ -124,27 +127,20 @@ export default function ForecastPage() {
             tone={summary.peopleWithoutCost > 0 ? 'danger' : undefined}
           />
           <StatTile
-            label="MRR − Payroll − Overheads"
-            value={formatMoney(summary.currentMrr - summary.monthlyPayroll - summary.monthlyOverheads)}
+            label="MRR − Payroll − Recurring costs"
+            value={formatMoney(summary.currentMrr - summary.monthlyPayroll - summary.monthlyRecurringCosts)}
             note={
-              summary.overheadsBasis === 'recurring'
-                ? `overheads ${formatMoney(summary.monthlyOverheads)}/month, recurring`
-                : summary.overheadsBasis === 'average'
-                  ? `overheads ${formatMoney(summary.monthlyOverheads)}/month, 3-month average`
-                  : 'no overheads entered'
+              summary.monthlyRecurringCosts > 0
+                ? `recurring costs ${formatMoney(summary.monthlyRecurringCosts)}/month`
+                : 'no recurring costs set up'
             }
-            tone={summary.currentMrr - summary.monthlyPayroll - summary.monthlyOverheads >= 0 ? 'success' : 'danger'}
+            tone={summary.currentMrr - summary.monthlyPayroll - summary.monthlyRecurringCosts >= 0 ? 'success' : 'danger'}
           />
           <StatTile label="Active Deals" value={summary.activeDealsCount} note="in pipeline" />
         </StatRow>
       )}
 
-      {error && (
-        <div className="border border-danger/30 bg-danger-tint rounded-xl p-5 mb-6">
-          <p className="text-sm font-semibold text-danger">{error}</p>
-          <p className="text-micro text-secondary mt-1">You may not have permission to view the forecast.</p>
-        </div>
-      )}
+      {error ? <LoadError what="the forecast" error={error} onRetry={() => void load()} className="mb-6" /> : null}
 
       {/* §10: "what if per deal" — pick one open deal and see what closing it
           would actually do to the next 3 months, instead of guessing from
@@ -271,16 +267,16 @@ export default function ForecastPage() {
                   <p className="eyebrow mb-3">Outflows</p>
                   <div className="space-y-2">
                     <div className="flex justify-between">
-                      <span className="text-sm text-secondary">Payroll</span>
+                      <span className="text-sm text-secondary">Salaries</span>
                       <span className="text-sm font-semibold text-primary">{formatMoney(m.outflows.payroll)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-sm text-secondary">Overheads</span>
-                      <span className="text-sm font-semibold text-primary">{formatMoney(m.outflows.overheads ?? 0)}</span>
+                      <span className="text-sm text-secondary">Recurring costs</span>
+                      <span className="text-sm font-semibold text-primary">{formatMoney(m.outflows.recurring)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-sm text-secondary">Vendor & Direct</span>
-                      <span className="text-sm font-semibold text-primary">{formatMoney(m.outflows.vendorAndDirect)}</span>
+                      <span className="text-sm text-secondary">Owed, not paid</span>
+                      <span className="text-sm font-semibold text-primary">{formatMoney(m.outflows.committed)}</span>
                     </div>
                     <div className="flex justify-between pt-2 border-t border-border">
                       <span className="text-sm font-bold text-primary">Total</span>

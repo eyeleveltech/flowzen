@@ -70,8 +70,10 @@ beforeEach(() => {
     { id: 'usr-1', name: 'Team', dept: 'DESIGN', monthlyCost: 500_000 },
   ]);
   (prisma.retainer.findMany as any).mockResolvedValue([
-    { id: 'ret-1', monthlyValue: 400_000, renewalDate: null, company: { id: 'co-1', name: 'Suvai' } },
+    { id: 'ret-1', monthlyValue: 400_000, startDate: new Date('2026-01-01'), renewalDate: null, company: { id: 'co-1', name: 'Suvai' } },
   ]);
+  // No recurring costs and nothing owed, unless a test says otherwise.
+  (prisma.cost.findMany as any).mockResolvedValue([]);
   (prisma.proposal.findMany as any).mockResolvedValue([
     {
       id: DEAL_ID,
@@ -122,9 +124,9 @@ describe('the verdict', () => {
   it('calls a month short when only the pipeline would cover it', async () => {
     const m = await thisMonth();
 
-    // Committed 4,00,000. Out: 5,00,000 payroll + 15% vendor on the retainer.
-    expect(m.outflows.total).toBe(560_000);
-    expect(m.netCashFlow).toBe(-160_000);
+    // Committed 4,00,000. Out: 5,00,000 payroll — and nothing guessed on top.
+    expect(m.outflows.total).toBe(500_000);
+    expect(m.netCashFlow).toBe(-100_000);
     expect(m.status).toBe('DEFICIT');
 
     // The old sum reaches a surplus on this exact data and says so. That
@@ -134,13 +136,13 @@ describe('the verdict', () => {
     // §14 prices that at 30% against the 10% behind it, so the same ₹50,00,000
     // now weighs three times what it did. The point of the test is unchanged —
     // committed cash is short, and only hope covers it.
-    expect(m.netCashFlowWithPipeline).toBe(590_000);
+    expect(m.netCashFlowWithPipeline).toBe(650_000);
   });
 
   it('measures what is kept against committed cash, not against hope', async () => {
     const m = await thisMonth();
-    // -160,000 of 400,000. Against the old total it flattered itself to +13%.
-    expect(m.cashKeptPercent).toBe(-40);
+    // -100,000 of 400,000.
+    expect(m.cashKeptPercent).toBe(-25);
     expect(m).not.toHaveProperty('grossMarginPercent');
   });
 });
@@ -154,11 +156,12 @@ describe('what if this deal closes', () => {
     expect(m.inflows.committed).toBe(400_000 + DEAL_VALUE);
   });
 
-  it('costs the won deal as well as banking it', async () => {
+  it('takes off what we owe, not a share of the income', async () => {
     const m = await thisMonth(`?assumeWon=${DEAL_ID}`);
-    // 15% of the retainer plus 20% of the newly-won work. A scenario that
-    // counts the income and not the spend is a sales pitch.
-    expect(m.outflows.vendorAndDirect).toBe(60_000 + DEAL_VALUE * 0.2);
+    // Money Plan 2, decision 9: the 15–20% "vendor and direct" guess is gone.
+    // Outflows are salaries, recurring costs and costs owed — none of which a
+    // won deal changes until its costs are entered.
+    expect(m.outflows).toEqual({ payroll: 500_000, recurring: 0, committed: 0, total: 500_000 });
     expect(m.status).toBe('SURPLUS');
   });
 
@@ -168,7 +171,69 @@ describe('what if this deal closes', () => {
     // netCashFlow — picking a deal would have moved it by exactly nothing.
     const base = await thisMonth();
     const scenario = await thisMonth(`?assumeWon=${DEAL_ID}`);
-    expect(scenario.netCashFlow - base.netCashFlow).toBe(DEAL_VALUE * 0.8);
+    expect(scenario.netCashFlow - base.netCashFlow).toBe(DEAL_VALUE);
+  });
+});
+
+// ── Money Plan 2, decision 9 ──
+describe('a project deal, a retainer not started yet, and what goes out', () => {
+  const PROJECT_DEAL = 'prop-film';
+
+  it('counts a project deal once — in the first month — not in all three', async () => {
+    (prisma.proposal.findMany as any).mockResolvedValue([
+      { id: PROJECT_DEAL, kind: 'PROJECT', stage: 'VERBAL_YES', probabilityOverride: 100, company: { id: 'co-3', name: 'Film Co' }, versions: [{ value: 500_000, n: 1 }] },
+    ]);
+    const res = await request(app).get('/api/forecast/3-month').set(...auth(MANAGEMENT));
+    const weighted = res.body.forecast.map((m: any) => m.inflows.pipelineWeighted);
+    expect(weighted).toEqual([500_000, 0, 0]);
+
+    const won = await request(app).get(`/api/forecast/3-month?assumeWon=${PROJECT_DEAL}`).set(...auth(MANAGEMENT));
+    expect(won.body.forecast.map((m: any) => m.inflows.assumedWon)).toEqual([500_000, 0, 0]);
+  });
+
+  it('skips a retainer that starts next quarter', async () => {
+    const res0 = await request(app).get('/api/forecast/3-month').set(...auth(MANAGEMENT));
+    const months: string[] = res0.body.forecast.map((m: any) => m.monthKey);
+    (prisma.retainer.findMany as any).mockResolvedValue([
+      { id: 'ret-1', monthlyValue: 400_000, startDate: new Date('2026-01-01'), renewalDate: null, company: { id: 'co-1', name: 'Suvai' } },
+      // Starts in the third month of the window.
+      { id: 'ret-2', monthlyValue: 100_000, startDate: new Date(`${months[2]}-01T00:00:00Z`), renewalDate: null, company: { id: 'co-4', name: 'Later' } },
+      // Starts after the window altogether.
+      { id: 'ret-3', monthlyValue: 900_000, startDate: new Date('2099-01-01'), renewalDate: null, company: { id: 'co-5', name: 'Much later' } },
+    ]);
+    const res = await request(app).get('/api/forecast/3-month').set(...auth(MANAGEMENT));
+    expect(res.body.forecast.map((m: any) => m.inflows.retainers)).toEqual([400_000, 400_000, 500_000]);
+  });
+
+  it('outflows: salaries + confirmed recurring costs + costs owed, salary-like ones left out', async () => {
+    const res0 = await request(app).get('/api/forecast/3-month').set(...auth(MANAGEMENT));
+    const [m1, m2] = res0.body.forecast.map((m: any) => m.monthKey);
+    (prisma.cost.findMany as any)
+      // The recurring rows (not their monthly copies), confirmed.
+      .mockResolvedValueOnce([
+        { category: 'Office rent', vendor: 'Landlord', amount: 65_000, incurredAt: new Date('2026-01-10') },
+        { category: 'Salaries', vendor: 'Payroll', amount: 662_000, incurredAt: new Date('2026-01-10') },
+        // Set up to start next month.
+        { category: 'Software', vendor: 'Adobe', amount: 20_000, incurredAt: new Date(`${m2}-01T00:00:00Z`) },
+      ])
+      // Owed, not paid: one already past due, one due next month.
+      .mockResolvedValueOnce([
+        { category: 'Printing', vendor: 'Press', amount: 30_000, incurredAt: new Date('2026-01-20') },
+        { category: 'Shoot', vendor: 'Crew', amount: 45_000, incurredAt: new Date(`${m2}-15T00:00:00Z`) },
+      ]);
+    const res = await request(app).get('/api/forecast/3-month').set(...auth(MANAGEMENT));
+    const [first, second, third] = res.body.forecast;
+    expect(first.outflows).toEqual({ payroll: 500_000, recurring: 65_000, committed: 30_000, total: 595_000 });
+    expect(second.outflows).toEqual({ payroll: 500_000, recurring: 85_000, committed: 45_000, total: 630_000 });
+    expect(third.outflows).toEqual({ payroll: 500_000, recurring: 85_000, committed: 0, total: 585_000 });
+    expect(res.body.summary.monthlyRecurringCosts).toBe(65_000);
+    expect(res.body.warnings).toContainEqual(expect.stringMatching(/^1 recurring or owed cost looks like salaries/));
+    expect(m1).toBeTruthy();
+
+    // The queries: the recurring rows themselves, confirmed; owed ones that are not recurring.
+    const calls = (prisma.cost.findMany as any).mock.calls.slice(-2).map((c: any[]) => c[0].where);
+    expect(calls[0]).toMatchObject({ recurring: true, recurringSourceId: null, confirmed: true, deletedAt: null });
+    expect(calls[1]).toMatchObject({ committedNotPaid: true, recurring: false, recurringSourceId: null, deletedAt: null });
   });
 });
 

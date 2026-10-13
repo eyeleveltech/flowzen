@@ -669,8 +669,8 @@ export async function runZenLookup(name: ZenLookupName, args: Record<string, unk
         currentMonthlyRetainers: f.summary.currentMrr,
         // The team's total only, as the screen shows it — never one person's.
         monthlyPayrollTotal: f.summary.monthlyPayroll,
-        monthlyOverheads: f.summary.monthlyOverheads,
-        // Say these before any surplus: a forecast without salaries or overheads overstates cash.
+        monthlyRecurringCosts: f.summary.monthlyRecurringCosts,
+        // Say these before any surplus: a forecast without salaries or recurring costs overstates cash.
         caveats: f.warnings,
         activeRetainers: f.summary.activeRetainersCount,
         openDeals: f.summary.activeDealsCount,
@@ -683,8 +683,8 @@ export async function runZenLookup(name: ZenLookupName, args: Record<string, unk
           fromAssumedWonDeal: m.inflows.assumedWon,
           pipelineWeightedNotCounted: m.inflows.pipelineWeighted,
           payroll: m.outflows.payroll,
-          overheads: m.outflows.overheads,
-          vendorAndDirect: m.outflows.vendorAndDirect,
+          recurringCosts: m.outflows.recurring,
+          owedNotPaid: m.outflows.committed,
           netCashFlow: m.netCashFlow,
           netCashFlowIfPipelineLands: m.netCashFlowWithPipeline,
           cashKeptPercent: m.cashKeptPercent,

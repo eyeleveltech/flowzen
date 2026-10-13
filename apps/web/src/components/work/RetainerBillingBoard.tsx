@@ -133,7 +133,8 @@ export function RetainerBillingBoard() {
               <b className="text-primary">{summary.toRaise}</b> to raise ·{' '}
               <b className="text-primary">{summary.awaitingInvoice}</b> waiting on the client ·{' '}
               <b className="text-primary">{summary.awaitingPayment}</b> invoiced, unpaid ·{' '}
-              <b className="text-primary">{money(summary.outstanding)}</b> still to come in
+              <b className="text-primary">{money(summary.owedOnInvoices)}</b> owed on invoices (incl. GST) ·{' '}
+              <b className="text-primary">{money(summary.feesNotInvoiced)}</b> in fees not invoiced yet (before GST)
             </p>
           )}
           <Button
@@ -229,7 +230,8 @@ export function RetainerBillingHistory({ retainerId, onChanged }: { retainerId: 
             <b className="text-primary">{summary.toRaise}</b> to raise ·{' '}
             <b className="text-primary">{summary.awaitingInvoice}</b> waiting on the client ·{' '}
             <b className="text-primary">{summary.awaitingPayment}</b> invoiced, unpaid ·{' '}
-            <b className="text-primary">{money(summary.outstanding)}</b> still to come in
+            <b className="text-primary">{money(summary.owedOnInvoices)}</b> owed on invoices (incl. GST) ·{' '}
+              <b className="text-primary">{money(summary.feesNotInvoiced)}</b> in fees not invoiced yet (before GST)
           </p>
         )}
       </div>

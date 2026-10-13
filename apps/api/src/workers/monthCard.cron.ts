@@ -31,12 +31,35 @@ export async function rollActiveRetainers(specifiedMonth?: string): Promise<{ cr
    * Not filtered to ACTIVE retainers: a client who left in March still has a
    * March card, and it still wants invoicing.
    */
-  const closed = await prisma.monthCard.updateMany({
+  // Each close is on the record (Money Plan 2, decision 14): a closed month is
+  // a reported month, and "who closed it, when" has an answer — the job did.
+  const toClose = await prisma.monthCard.findMany({
     where: { month: { lt: targetMonth }, status: 'OPEN' },
-    data: { status: 'CLOSED', closedAt: new Date() },
+    select: { id: true, month: true, retainer: { select: { organizationId: true, company: { select: { name: true } } } } },
   });
-  if (closed.count > 0) {
-    logger.info(`   closed ${closed.count} month card(s) for months before ${targetMonth}`);
+  const closedAt = new Date();
+  let closedCount = 0;
+  for (const card of toClose) {
+    // Conditional, so a card somebody reopened or closed in the meantime is left alone.
+    const moved = await prisma.monthCard.updateMany({
+      where: { id: card.id, status: 'OPEN' },
+      data: { status: 'CLOSED', closedAt },
+    });
+    if (moved.count === 0) continue;
+    closedCount++;
+    await prisma.activity.create({
+      data: {
+        organizationId: card.retainer.organizationId,
+        entityType: 'MonthCard',
+        entityId: card.id,
+        actorId: null,
+        verb: 'month_auto_closed',
+        payload: { month: card.month, companyName: card.retainer.company.name, statusWas: 'OPEN' },
+      },
+    });
+  }
+  if (closedCount > 0) {
+    logger.info(`   closed ${closedCount} month card(s) for months before ${targetMonth}`);
   }
 
   const activeRetainers = await prisma.retainer.findMany({

@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback, use } from 'react';
+import { InvoiceStatusBadge } from '@/components/work/InvoiceStatusBadge';
+import { moneyDate } from '@/lib/money';
 import { useWorkCacheNudge } from '@/hooks/useWorkCacheNudge';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, type TabDef } from '@/components/ui/tabs';
@@ -1304,20 +1306,17 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="font-mono text-sm font-semibold text-primary">{inv.number}</span>
-                        <span className={`eyebrow px-2 py-0.5 rounded border ${
-                          inv.status === 'PAID' ? 'bg-success-tint text-success border-success/30' : 'bg-danger-tint text-danger border-danger/30'
-                        }`}>
-                          {inv.status}
-                        </span>
+                        {/* The same badge as /money, worked out on the server (Money Plan 2, decision 6). */}
+                        <InvoiceStatusBadge invoice={inv} />
                       </div>
-                      <span className="text-xs text-secondary">Due {formatDate(inv.dueAt)}</span>
+                      <span className="text-xs text-secondary">Due {moneyDate(inv.dueAt)}</span>
                     </div>
                     <div className="text-right">
                       <span className="font-mono text-sm font-semibold text-primary tabular-nums block">
                         {formatMoney(inv.amount)}
                       </span>
                       {inv.paidAt && (
-                        <span className="text-micro text-success">Paid {formatDate(inv.paidAt)}</span>
+                        <span className="text-micro text-success">Paid {moneyDate(inv.paidAt)}</span>
                       )}
                     </div>
                   </div>

@@ -1060,7 +1060,10 @@ export interface RetainerBillingResponse {
     awaitingPayment: number;
     done: number;
     notYet: number;
-    outstanding: number;
+    /** Left to pay on invoices raised — GST included. */
+    owedOnInvoices: number;
+    /** Fees for months not invoiced yet — before GST. Never added to the above. */
+    feesNotInvoiced: number;
   };
 }
 
@@ -2051,7 +2054,14 @@ export const api = {
         ownerId?: string;
         repriceOpenMonth?: boolean;
       },
-    ) => patch<{ success: boolean; retainer: any; repricedCards: number }>(`/retainers/${id}`, body),
+    ) =>
+      patch<{
+        success: boolean;
+        retainer: any;
+        repricedCards: number;
+        /** Proformas still out at the old fee, for an open month — to cancel and raise again. */
+        staleProformas?: { id: string; number: string; amount: number; month: string; monthCardId: string }[];
+      }>(`/retainers/${id}`, body),
     /** The named pieces of work inside a retainer. No money on any of them. */
     projects: (id: string) =>
       get<{ success: boolean; projects: RetainerProject[] }>(`/retainers/${id}/projects`),
@@ -2285,6 +2295,24 @@ export const api = {
       quotes: { id: string; number: string; company: { name: string } }[];
       invoices: { id: string; number: string; company: { name: string } }[];
     }>(`/search?q=${encodeURIComponent(q)}`),
+
+  /**
+   * The money screen's figures, worked out on the server over every row
+   * (Money Plan 2). Invoice and payment amounts include GST; fees and profit
+   * revenue are before GST.
+   */
+  money: {
+    summary: (from: string, to: string) =>
+      getFull<MoneySummary>(`/money/summary?${new URLSearchParams({ from, to })}`),
+    profit: (month: string) => getFull<CompanyProfit>(`/money/profit?month=${encodeURIComponent(month)}`),
+    milestones: () => getFull<{ success: boolean; rows: MilestoneToBill[] }>('/money/milestones'),
+    /** One page of invoices, with how many there are in all. */
+    invoicesPage: (params: Record<string, string>) =>
+      getFull<{ success: boolean; data: any[]; meta: PageMeta }>(`/invoices?${new URLSearchParams(params)}`),
+    /** One page of costs, with the count and the total of every matching row. */
+    costsPage: (params: Record<string, string>) =>
+      getFull<{ success: boolean; data: any[]; meta: PageMeta; totalAmount: number | null }>(`/costs?${new URLSearchParams(params)}`),
+  },
 
   invoices: {
     /**
@@ -2858,6 +2886,71 @@ export const formatMoney = (
     maximumFractionDigits: 0,
   }).format(Number(amount));
 };
+
+export interface PageMeta {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+type MoneySplit = { amount: number; count: number; retainers: number; projects: number; other: number };
+
+/** GET /money/summary — every figure includes GST. */
+export interface MoneySummary {
+  success: boolean;
+  period: { from: string; to: string };
+  today: string;
+  includesGst: true;
+  /** Raised in the period, cancelled ones left out. */
+  billed: MoneySplit & { gst: number; gstUnknownCount: number };
+  /** Payments received in the period. */
+  collected: MoneySplit;
+  /** Owed today, on every invoice — a balance, not a flow. */
+  outstanding: MoneySplit;
+  /** Of that, past due. */
+  overdue: { amount: number; count: number };
+}
+
+/** GET /money/profit — one month. Revenue before GST; costs as paid. */
+export interface CompanyProfit {
+  success: boolean;
+  month: string;
+  revenue: { retainers: number; projects: number; total: number; includesGst: false };
+  directCost: { retainers: number; projects: number; other: number; total: number };
+  peopleCost: { total: number; people: number; withoutCost: number };
+  overheads: { total: number; count: number; drafts: number; salaryLikeLeftOut: { count: number; amount: number } };
+  profit: number;
+  marginPercent: number | null;
+  warnings: string[];
+}
+
+/** GET /money/milestones — a project milestone to bill or collect. */
+export interface MilestoneToBill {
+  id: string;
+  label: string;
+  percent: number;
+  /** Before GST. */
+  amount: number;
+  status: 'PENDING' | 'PROFORMA_RAISED' | 'INVOICED';
+  next: 'PROFORMA' | 'INVOICE' | 'PAYMENT';
+  project: { id: string; name: string; status: string };
+  company: { id: string; name: string };
+  proforma: { id: string; number: string; status: string; amount: number; validTill: string } | null;
+  invoice: {
+    id: string;
+    number: string;
+    /** GST included. */
+    amount: number;
+    gstAmount: number | null;
+    status: string;
+    dueAt: string;
+    balanceDue: number;
+    state: string;
+    isOverdue: boolean;
+    partPaid: boolean;
+  } | null;
+}
 
 /** Dates are rendered in the ORGANISATION's timezone, never the browser's (§3.11). */
 export const formatDate = (

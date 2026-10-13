@@ -358,6 +358,8 @@ export function buildDocumentSnapshot(input: SnapshotInput): DocumentSnapshot {
     gstApplicable: input.gstApplicable,
     gstRatePercent: input.gstRatePercent,
     isInterState: supplyType === SupplyType.INTER,
+    // A document prepared now: each line at its own rate (decision 7).
+    perLineGst: true,
   });
 
   return {

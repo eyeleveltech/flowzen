@@ -1,4 +1,5 @@
 import { prisma } from '../lib/prisma.js';
+import { dayKey, financialYearOf, orgToday } from './moneyDates.js';
 
 /**
  * The numbered documents this business issues, and the one series behind them.
@@ -35,19 +36,6 @@ export type DocumentKind = 'PROFORMA' | 'INVOICE';
 
 /** Three digits is the house format. Past 999 the width simply grows. */
 const SEQUENCE_WIDTH = 3;
-
-/**
- * India's financial year, as the two-digit pair documents print.
- *
- * It begins on 1 April, so January to March belong to the year that started the
- * previous April: March 2027 is still `26-27`.
- */
-function financialYearLabel(now: Date, startMonth: number): string {
-  const year = now.getFullYear();
-  const month = now.getMonth() + 1; // 1-indexed
-  const startYear = month < startMonth ? year - 1 : year;
-  return `${String(startYear).slice(-2)}-${String(startYear + 1).slice(-2)}`;
-}
 
 /**
  * Today, in the organisation's own zone, as a proforma prints it: 30-09-2026.
@@ -94,6 +82,12 @@ function basePrefix(kind: DocumentKind, proformaPrefix: string | undefined): str
 export async function nextDocumentNumber(
   organizationId: string,
   kind: DocumentKind,
+  /**
+   * The invoice's own date (a stored calendar day). Its financial year is the
+   * one on the number — an invoice dated 31 March and entered on 2 April is
+   * last year's. Without one: today, where the studio is.
+   */
+  issuedOn?: Date,
 ): Promise<string> {
   const org = await prisma.organization.findUnique({
     where: { id: organizationId },
@@ -128,8 +122,14 @@ export async function nextDocumentNumber(
     return `${prefix}/${day}/${String(highest + 1).padStart(SEQUENCE_WIDTH, '0')}`;
   }
 
-  // A tax invoice: the financial year, and a count within it.
-  const fy = financialYearLabel(now, org?.financialYearStart ?? 4);
+  /*
+   * A tax invoice: the financial year, and a count within it — the year of
+   * the invoice's date, in the studio's timezone (Money Plan 2, decision 8).
+   * It used to be the server's clock: UTC, and "now", so an invoice dated in
+   * March but entered in April took next year's number.
+   */
+  const day = issuedOn ? dayKey(issuedOn) : orgToday(org?.timezone || 'Asia/Kolkata', now);
+  const fy = financialYearOf(day, org?.financialYearStart ?? 4);
   const searchPrefix = `${prefix}/${fy}/`;
   const issued = await prisma.invoice.findMany({
     where: { organizationId, number: { startsWith: searchPrefix } },
@@ -159,9 +159,11 @@ export async function issueWithRetry<T>(
   kind: DocumentKind,
   create: (documentNumber: string) => Promise<T>,
   maxAttempts = 5,
+  /** For an invoice: its date, which decides the financial year on the number. */
+  issuedOn?: Date,
 ): Promise<T> {
   for (let attempt = 1; ; attempt++) {
-    const documentNumber = await nextDocumentNumber(organizationId, kind);
+    const documentNumber = await nextDocumentNumber(organizationId, kind, issuedOn);
     try {
       return await create(documentNumber);
     } catch (err) {

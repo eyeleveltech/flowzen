@@ -35,6 +35,7 @@ import {
   linesSubtotal,
   linesAreValid,
   toLineItemPayload,
+  draftRate,
   type LineItemDraft,
 } from '@/components/documents/LineItemsEditor';
 import {
@@ -124,12 +125,14 @@ export function EditProformaModal({ proforma, onConfirm, onCancel }: Props) {
         const full = res.proforma as Record<string, unknown>;
         const items = (full.lineItems as Record<string, unknown>[] | undefined) ?? [];
         if (items.length > 0) {
+          const docRate = Number(full.gstRatePercent ?? 18);
           setLines(
             items.map((li) => ({
               particulars: String(li.particulars ?? ''),
               units: String(Number(li.units)),
               unitCost: String(Number(li.unitCost)),
               hsnSac: (li.hsnSac as string) ?? '',
+              gstRate: draftRate(li.gstRate, docRate),
             })),
           );
         }
@@ -221,7 +224,7 @@ export function EditProformaModal({ proforma, onConfirm, onCancel }: Props) {
               <h3 className="eyebrow">Items</h3>
               {loadingLines && <span className="text-micro text-secondary">Loading the lines…</span>}
             </div>
-            <LineItemsEditor rows={lines} onChange={setLines} sacCodes={sacCodes} disabled={busy || loadingLines} />
+            <LineItemsEditor rows={lines} onChange={setLines} sacCodes={sacCodes} disabled={busy || loadingLines} documentRate={parsedGstRate || 0} />
           </section>
 
           <section className="space-y-3">
@@ -254,6 +257,7 @@ export function EditProformaModal({ proforma, onConfirm, onCancel }: Props) {
               subtotal={subtotal}
               gstApplicable={gstApplicable}
               gstRatePercent={parsedGstRate || 0}
+              lines={lines}
               interState={Boolean(placeOfSupplyCode && sellerStateCode && placeOfSupplyCode !== sellerStateCode)}
             />
           </section>

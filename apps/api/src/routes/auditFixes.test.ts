@@ -46,11 +46,11 @@ describe('1. a monthly cost can be entered', () => {
 });
 
 // ── 2 ──
-describe('2. the Forecast takes overheads off, and says what it cannot see', () => {
+describe('2. the Forecast takes costs off, and says what it cannot see', () => {
   beforeEach(() => {
     p.organization.findUnique.mockResolvedValue({});
     p.retainer.findMany.mockResolvedValue([
-      { id: 'r1', monthlyValue: 268000, status: 'ACTIVE', startDate: new Date('2026-01-01'), endsOn: null, company: { id: 'c1', name: 'Acme' } },
+      { id: 'r1', monthlyValue: 268000, status: 'ACTIVE', startDate: new Date('2026-01-01'), renewalDate: null, company: { id: 'c1', name: 'Acme' } },
     ]);
     p.proposal.findMany.mockResolvedValue([]);
     p.project.findMany.mockResolvedValue([]);
@@ -58,59 +58,40 @@ describe('2. the Forecast takes overheads off, and says what it cannot see', () 
   });
   const get = () => request(app).get('/api/forecast/3-month').set(auth);
 
-  // The recurring company costs, then the last three months'.
-  const costs = (recurring: unknown[], recent: unknown[] = []) =>
-    p.cost.findMany.mockResolvedValueOnce(recurring).mockResolvedValueOnce(recent);
+  // The recurring rows, then the costs owed and not paid.
+  const costs = (recurring: unknown[], owed: unknown[] = []) =>
+    p.cost.findMany.mockResolvedValueOnce(recurring).mockResolvedValueOnce(owed);
+  const rent = { category: 'Office rent', vendor: 'Landlord', amount: 65000, incurredAt: new Date('2026-01-05') };
 
-  it('with nobody costed: payroll ₹0 is said, and no overheads is said', async () => {
+  it('with nobody costed: payroll ₹0 is said, and no recurring costs is said', async () => {
     p.user.findMany.mockResolvedValue([{ id: 'u1', monthlyCost: 0 }, { id: 'u2', monthlyCost: 0 }]);
     costs([], []);
     const res = await get();
     expect(res.status).toBe(200);
     expect(res.body.warnings).toEqual([
       expect.stringMatching(/^No one's monthly cost is entered, so payroll is ₹0/),
-      expect.stringMatching(/^No company overheads are entered/),
+      expect.stringMatching(/^No recurring costs are set up/),
     ]);
-    expect(res.body.summary).toMatchObject({ monthlyPayroll: 0, payrollBasis: 'none', monthlyOverheads: 0, overheadsBasis: 'none', peopleWithoutCost: 2 });
+    expect(res.body.summary).toMatchObject({ monthlyPayroll: 0, monthlyRecurringCosts: 0, peopleWithoutCost: 2 });
   });
 
-  it('recurring company costs are a month of overheads, taken off every month', async () => {
+  it('recurring costs are taken off every month', async () => {
     p.user.findMany.mockResolvedValue([{ id: 'u1', monthlyCost: 150000 }, { id: 'u2', monthlyCost: 0 }]);
-    costs([{ category: 'Office rent', amount: 65000 }, { category: 'Software', amount: 27000 }]);
+    costs([rent, { category: 'Software', vendor: 'Adobe', amount: 27000, incurredAt: new Date('2026-01-05') }]);
     const res = await get();
-    expect(res.body.summary).toMatchObject({ monthlyPayroll: 150000, payrollBasis: 'people', monthlyOverheads: 92000, overheadsBasis: 'recurring' });
+    expect(res.body.summary).toMatchObject({ monthlyPayroll: 150000, monthlyRecurringCosts: 92000 });
     const first = res.body.forecast[0];
-    expect(first.outflows.overheads).toBe(92000);
-    expect(first.outflows.total).toBe(150000 + 92000 + first.outflows.vendorAndDirect);
+    expect(first.outflows).toEqual({ payroll: 150000, recurring: 92000, committed: 0, total: 242000 });
     expect(res.body.warnings).toEqual([expect.stringMatching(/^1 of 2 people have no monthly cost entered/)]);
-    // The recurring rows themselves, not the monthly copies of them.
-    expect(p.cost.findMany.mock.calls[0][0].where).toMatchObject({ type: 'COMPANY', recurring: true, recurringSourceId: null, deletedAt: null });
   });
 
-  it('with no recurring ones: the average of the last three months', async () => {
+  it('a Salaries cost is never payroll — payroll is Team, and the cost is left out and said', async () => {
     p.user.findMany.mockResolvedValue([{ id: 'u1', monthlyCost: 150000 }]);
-    costs([], [{ category: 'Office rent', amount: 195000 }, { category: 'Software', amount: 75000 }]);
+    costs([{ category: 'Salaries', vendor: 'Payroll', amount: 662000, incurredAt: new Date('2026-01-05') }, rent]);
     const res = await get();
-    expect(res.body.summary).toMatchObject({ monthlyOverheads: 90000, overheadsBasis: 'average' });
-    expect(res.body.warnings).toEqual([]);
-  });
-
-  it('salaries entered only as one company cost are the payroll — and not an overhead', async () => {
-    p.user.findMany.mockResolvedValue([{ id: 'u1', monthlyCost: 0 }]);
-    costs([{ category: 'Salaries', amount: 340000 }, { category: 'Office rent', amount: 65000 }]);
-    const res = await get();
-    expect(res.body.summary).toMatchObject({ monthlyPayroll: 340000, payrollBasis: 'companyCost', monthlyOverheads: 65000 });
-    expect(res.body.forecast[0].outflows.payroll).toBe(340000);
-    expect(res.body.warnings).toEqual([expect.stringMatching(/^Payroll is the Salaries company cost, as one total/)]);
-  });
-
-  it('salaries entered both ways are counted once — per person — and it says so', async () => {
-    p.user.findMany.mockResolvedValue([{ id: 'u1', monthlyCost: 150000 }]);
-    costs([{ category: 'Salaries', amount: 662000 }, { category: 'Office rent', amount: 65000 }]);
-    const res = await get();
-    expect(res.body.summary).toMatchObject({ monthlyPayroll: 150000, payrollBasis: 'people', monthlyOverheads: 65000 });
-    expect(res.body.forecast[0].outflows.total).toBe(150000 + 65000 + res.body.forecast[0].outflows.vendorAndDirect);
-    expect(res.body.warnings).toEqual([expect.stringMatching(/^Salaries are entered per person and as a company cost too/)]);
+    expect(res.body.summary).toMatchObject({ monthlyPayroll: 150000, monthlyRecurringCosts: 65000 });
+    expect(res.body.forecast[0].outflows.total).toBe(150000 + 65000);
+    expect(res.body.warnings).toEqual([expect.stringMatching(/^1 recurring or owed cost looks like salaries/)]);
   });
 });
 

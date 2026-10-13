@@ -33,6 +33,7 @@ import {
   linesSubtotal,
   linesAreValid,
   toLineItemPayload,
+  draftRate,
   type LineItemDraft,
 } from '@/components/documents/LineItemsEditor';
 import {
@@ -40,6 +41,7 @@ import {
   PlaceOfSupplyField,
   STATE_OPTIONS,
   TotalsPreview,
+  previewTotals,
   toCustomFieldPayload,
   type CustomFieldDraft,
 } from '@/components/documents/DocumentFields';
@@ -104,12 +106,14 @@ export function InvoiceDocumentModal({ invoice, onSaved, onClose }: Props) {
         if (inv.subtotal !== null && inv.subtotal !== undefined) {
           const items = (inv.lineItems as Record<string, any>[] | undefined) ?? [];
           if (items.length > 0) {
+            const docRate = Number(inv.gstRatePercent ?? 18);
             setLines(
               items.map((li) => ({
                 particulars: String(li.particulars ?? ''),
                 units: String(Number(li.units)),
                 unitCost: String(Number(li.unitCost)),
                 hsnSac: (li.hsnSac as string) ?? '',
+                gstRate: draftRate(li.gstRate, docRate),
               })),
             );
           }
@@ -216,7 +220,7 @@ export function InvoiceDocumentModal({ invoice, onSaved, onClose }: Props) {
   };
 
   const recorded = invoice.amount;
-  const total = Math.round(subtotal + (gstApplicable ? (subtotal * (parsedGstRate || 0)) / 100 : 0));
+  const { total } = previewTotals(lines, gstApplicable, parsedGstRate || 0);
   const differsFromRecorded = recorded !== null && recorded > 0 && Math.abs(total - recorded) >= 1;
 
   return (
@@ -257,7 +261,7 @@ export function InvoiceDocumentModal({ invoice, onSaved, onClose }: Props) {
               <h3 className="eyebrow">Items</h3>
               {loading && <span className="text-micro text-secondary">Loading…</span>}
             </div>
-            <LineItemsEditor rows={lines} onChange={setLines} sacCodes={sacCodes} disabled={busy || loading} />
+            <LineItemsEditor rows={lines} onChange={setLines} sacCodes={sacCodes} disabled={busy || loading} documentRate={parsedGstRate || 0} />
           </section>
 
           <section className="space-y-3">
@@ -286,6 +290,7 @@ export function InvoiceDocumentModal({ invoice, onSaved, onClose }: Props) {
               subtotal={subtotal}
               gstApplicable={gstApplicable}
               gstRatePercent={parsedGstRate || 0}
+              lines={lines}
               interState={Boolean(placeOfSupplyCode && sellerStateCode && placeOfSupplyCode !== sellerStateCode)}
             />
             {differsFromRecorded && (

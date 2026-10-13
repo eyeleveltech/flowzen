@@ -23,7 +23,7 @@ A person who types the address of a screen they cannot open is sent away from it
 
 **Department heads see their own departments.** A Head sees the people of the departments they lead (set in Settings → Departments) and the tasks any of those people are on, plus tasks the Head created or asked for. Management sees everyone. A Head who leads no department still sees everyone until given one. This applies to Team, All tasks, the calendar's Team tasks, editing other people's tasks and events, team alerts and confirming the time split. It does not apply to assigning (a Head can give work to anyone), to client work (projects, retainers, Live work), to the Approvals report, events or assets.
 
-**Salaries** (a person's monthly cost) are visible only to Setup access. There is currently no screen to change a person's monthly cost. Heads and Accounts see time-split percentages; Accounts also see combined "People cost" figures on Money.
+**Salaries** (a person's monthly cost) are visible only to Setup access. An admin sets it on Team → the person's menu → Edit → "Monthly cost to the company". Heads and Accounts see time-split percentages; Accounts also see combined "People cost" figures on Money.
 
 ## Links to records
 
@@ -233,26 +233,29 @@ Reports access (Management). The week on one page.
 
 Money figures (Accounts and Management).
 
-- **Tiles:**
-  - Total Billed.
-  - Collected.
-  - Outstanding: unpaid balance.
-  - Overdue.
-- **Header buttons:** Export invoices CSV, Export costs CSV, "+ New invoice". "+ New invoice" records a tax invoice already raised in Tally.
-- **Tabs:**
+- **"Figures for"** picks the period: this month, last month, this quarter, this financial year (the default), last financial year, or all time.
+- **Tiles** (worked out on the server over every invoice; all include GST):
+  - Billed: invoices raised in the period, cancelled ones left out.
+  - Collected: payments received in the period.
+  - Outstanding today: what is owed now, on every invoice, whatever the period.
+  - Overdue today: the part of that past its due date, in rupees, with a count.
+- **Header buttons:** Export invoices CSV, Export costs CSV, "+ New invoice". "+ New invoice" records a tax invoice already raised in Tally. It offers to link the client's live proforma and, for a project, the milestone it settles.
+- **Tabs** (the tab is in the address: /money?tab=invoices, billing, costs or profit):
   - **Invoices:**
-    - Statuses: Raised, Paid, Overdue, Cancelled. A part-paid invoice stays Raised.
+    - A page of 50 at a time; filter by Still owed, Overdue, Paid or Cancelled. Amounts include GST.
+    - Statuses: Raised, Part-paid (some money in), Overdue (due before today, by the studio's calendar), Paid, Cancelled. The same badge shows on a client's tab and a project's invoices.
     - Row actions: "Record payment", "Prepare document", PDF and Email. PDF and Email need the seller's GSTIN, address and state.
-  - **Retainer billing** (/money?tab=billing):
-    - Every retainer month waiting for a proforma, an invoice or a payment, plus "Earlier months, still owed".
-    - Each row has its next step. "Raise all proformas" raises every waiting month at once.
-  - **Costs:** every cost; "+ Record a cost"; "Confirm draft" on recurring copies.
-  - **Profit & Costs** (this month):
-    - Tiles: Revenue, Direct + people cost, Overheads, and "Company profit" (retainer profit minus overheads).
-    - "Profit by client": retainers only.
-    - "Profit by project": the whole contract, never added to the retainer figures.
-    - Company costs.
-    - Capital and loans: listed, not subtracted from profit.
+  - **Billing** (/money?tab=billing):
+    - Retainers: every retainer month waiting for a proforma, an invoice or a payment, plus "Earlier months, still owed". "Raise all proformas" raises every waiting month at once. Its line shows what is owed on invoices (incl. GST) and the fees not invoiced yet (before GST) separately — never added together.
+    - **Project milestones:** each project's next milestone to bill, and every milestone with a proforma or invoice out, with "Raise proforma", "Record invoice" or "Record payment". Accounts can bill projects here without access to the project page. A milestone can have only one invoice.
+  - **Costs:** every cost, newest first, with its date and "Paid by"; "+ Record a cost"; "Confirm draft" on recurring copies.
+  - **Profit & Costs** (pick a month):
+    - Tiles: Revenue (retainer fees + project invoices raised that month, before GST), Direct + people cost (client costs + the whole payroll), Overheads (company costs, salary-like ones left out), and "Company profit".
+    - "Profit by client": retainers.
+    - "Profit by project": each job's whole contract.
+    - Company costs for the month, with a total of what counts as overheads.
+    - Capital and loans: listed with a total, not subtracted from profit.
+    - A section that fails to load says so; it never shows ₹0.
 
 ## Forecast (/forecast)
 
@@ -520,7 +523,7 @@ For a Prospect, use "Add sample" instead. Sample work has no billing, but its co
 [Money → Costs](/money) → "+ Record a cost":
 - **What kind:**
   - Client (against a retainer month or a live project).
-  - Company (an overhead: salaries, rent, software…).
+  - Company (an overhead: rent, software, utilities…). **Never salaries:** they come from Team (each person's monthly cost) and the time split, so a salary entered as a cost would be counted twice. Flowzen refuses it.
   - Capital or loan.
 - **Then:** category, "Paid to" (the vendor), amount and GST, date.
 - **Recurring costs:** copied into each new month on the 1st as drafts, which you confirm with "Confirm draft". Drafts count in totals before they are confirmed.
@@ -538,12 +541,12 @@ For a Prospect, use "Add sample" instead. Sample work has no billing, but its co
   - People cost is each person's time-split % × their monthly cost. Proposed percentages count, not only confirmed ones.
   - Profit is fee − cost, and margin is profit ÷ fee.
 - If nothing has been costed against a month (no cost rows and no time split), it is not costed yet. The retainer page says "the whole fee — nothing costed against this month yet". Treat that profit as unknown, not as the whole fee.
-- On Money → Profit & Costs, an uncosted month still shows the fee as profit (100% margin). Explain that, rather than calling it a great month.
+- On Money → Profit & Costs, "Profit by client" marks an uncosted month "Not costed yet" and leaves it out of the profit total.
 - Zen's month lookup counts cost rows only, without people cost, so it can show a higher profit than Money. Money is the figure to trust.
-- "Company profit" on Money is retainer profit minus Company (overhead) costs for the month. Project money is not in it.
+- "Company profit" on Money, for a month = retainer fees + project revenue invoiced that month (before GST) − client costs − the whole payroll (every active person's monthly cost) − company overheads (salary-like costs left out, as payroll counts them).
 
 ## Why retainer and project money are never added together
-A retainer month's fee and a project's whole contract value are different kinds of number. One is earned month by month; the other is a single contract over its life. So Flowzen reports them separately and never sums them into one revenue figure. The Forecast adds both into "Cash in", which is cash expected, not revenue.
+A retainer month's fee and a project's whole contract value are different kinds of number. One is earned month by month; the other is a single contract over its life. So the per-client and per-project tables stay separate. Company profit for a month is the one place they meet: a project counts there in the month it is invoiced. The Forecast adds both into "Cash in", which is cash expected, not revenue.
 
 ## Project profit
 - Revenue is the quote before GST. Cost is cost rows plus people cost. Profit is revenue − cost, and overheads are not included. Margin is "—" with no quote.
@@ -557,11 +560,11 @@ A retainer month's fee and a project's whole contract value are different kinds 
 - **A deal's probability:** its own override if set, otherwise the stage's: Proposal sent 30%, In negotiation 60%, Proforma issued 85%, Verbal yes 90%, Won 100%, Prospect and Lost 0%. Settings → Organisation changes the stage figures.
 - **Weighted pipeline** is each deal's latest value × its probability. It is not revenue.
 - **Committed money (Forecast "Cash in"):**
-  - active retainers' monthly value, each month up to the renewal month (every month if there is no renewal date);
+  - active retainers' monthly value, from the month the retainer starts up to the renewal month (every month if there is no renewal date);
   - live projects' unpaid milestones (or the quote if there are none), spread evenly over the project's remaining months in the window, or all in this month if it is past its end;
   - plus any deal picked in "What if".
-- **"Pipeline (weighted)" in the Forecast** is shown separately and never counted in Cash in. Month 1 counts Verbal yes and Proforma issued at full weight and other stages at half. Month 2 counts In negotiation and Proposal sent at full weight and other stages at 0.7. Month 3 counts everything at 0.8.
-- **Forecast outflows:** payroll + 15% of retainer inflow + 20% of project inflow.
+- **"Pipeline (weighted)" in the Forecast** is shown separately and never counted in Cash in. A project deal is one payment, so it counts once, in month 1, at its probability. A retainer deal counts every month: month 1 counts Verbal yes and Proforma issued at full weight and other stages at half; month 2 counts In negotiation and Proposal sent at full weight and other stages at 0.7; month 3 counts everything at 0.8.
+- **Forecast outflows:** salaries (every active person's monthly cost) + recurring costs (confirmed, from the month they start) + costs entered as owed and not paid (in the month they fall due; already past due in month 1). Salary-like costs are left out of the last two.
   - Net Cash Flow = Cash in − outflows.
   - Cash Kept % = net ÷ Cash in: green at 20% or more, red below 0.
 
@@ -571,7 +574,7 @@ The scanner checks hourly and clears an alert once its condition stops. An alert
 - **Sales** (pipeline access):
   - **Proposal stalled:** Proposal Sent or In Negotiation with no new version for more than 5 days. It is high after 10 days, and creates a "Follow up — {client} proposal" task for the owner.
   - **Verbal yes not advanced:** Verbal Yes for more than 3 days with no proforma.
-  - **Proforma expired:** unpaid and past its "valid till".
+  - **Proforma expired:** unpaid and past its "valid till". Once a day such a proforma is marked Expired (logged on its record); it is never done to one that became an invoice. The alert stays until it is re-raised, cancelled or invoiced. Accounts sees this and "Proforma unpaid" too.
   - **Proforma unpaid:** unpaid more than 7 days after it was raised.
 - **Retainers** (all work):
   - **Retainer expiring:** renewal within 45 days, including dates already passed. It is high within 15 days.

@@ -8,7 +8,7 @@ import { getInitials, getAvatarColor } from '@/lib/utils';
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { FieldSelect } from '@/components/ui/field';
-import { ErrorNote } from '@/components/ui/empty-state';
+import { ErrorNote, LoadError } from '@/components/ui/empty-state';
 import { usePageHeader } from '@/hooks/usePageHeader';
 import { StatTile, StatRow } from '@/components/ui/stat-tile';
 
@@ -44,19 +44,26 @@ export default function AllocationsPage() {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   });
   const [loading, setLoading] = useState(true);
+  // A failed load, said on the page — it only reached the console, and the
+  // screen then showed an empty month as if nobody had a split.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [editing, setEditing] = useState<MemberAllocation | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const res = await api.allocations.list(month);
       if (res.success) {
         setMembers(res.members);
         setCanSeeFigures(res.canSeeFigures);
       }
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
+    } catch (e) {
+      setLoadError(e);
+    } finally {
+      setLoading(false);
+    }
   }, [month]);
 
   useEffect(() => { load(); }, [load]);
@@ -102,6 +109,8 @@ export default function AllocationsPage() {
         <span className="text-sm font-semibold text-primary w-36 text-center">{monthLabel}</span>
         <button onClick={nextMonth} className="border border-border rounded-lg w-8 h-8 flex items-center justify-center text-secondary hover:bg-subtle">›</button>
       </div>
+
+      {loadError ? <LoadError what={`the time split for ${monthLabel}`} error={loadError} onRetry={() => void load()} className="mb-6" /> : null}
 
       <StatRow className="mb-8 sm:grid-cols-3 lg:grid-cols-3">
         <StatTile label="People" value={members.length} note={`${confirmed} confirmed this month`} />

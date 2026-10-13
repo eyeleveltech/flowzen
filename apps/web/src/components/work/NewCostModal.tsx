@@ -23,7 +23,9 @@ type CostType = 'DIRECT' | 'COMPANY' | 'CAPITAL';
 type Target = { label: string; workType: 'RETAINER' | 'PROJECT'; monthCardId?: string; projectId?: string };
 
 const CLIENT_CATEGORIES = ['Ad spend', 'Freelancer', 'Photography and video', 'Printing', 'Hosting and domain', 'Stock and licences', 'Travel, client', 'Venue and events'];
-const COMPANY_CATEGORIES = ['Salaries', 'Office rent', 'Internet and utilities', 'Software', 'Pantry and tea', 'Travel, not client', 'Professional fees', 'Marketing, our own'];
+// No "Salaries": salaries are people cost — each person's monthly cost on Team,
+// shared out by the time split. As a cost they would count twice (Money Plan 2).
+const COMPANY_CATEGORIES = ['Office rent', 'Internet and utilities', 'Software', 'Pantry and tea', 'Travel, not client', 'Professional fees', 'Marketing, our own'];
 
 // Same escape hatch as the project and retainer form — see NewWorkCostModal.
 const OTHER_CATEGORY = 'Other';

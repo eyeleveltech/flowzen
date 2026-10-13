@@ -390,6 +390,20 @@ proformasRouter.patch('/:id/status', requireAnyPermission('pipeline.write', 'mon
       data: { status: status as ProformaStatus },
     });
 
+    // Every status change on the record, with what it was (Money Plan 2, decision 14).
+    if (existing.status !== status) {
+      await prisma.activity.create({
+        data: {
+          organizationId: orgId,
+          entityType: 'Proforma',
+          entityId: id,
+          actorId: req.user!.userId,
+          verb: 'proforma_status_changed',
+          payload: { number: existing.number, from: existing.status, to: status },
+        },
+      });
+    }
+
     /*
      * Cancelling one gives its milestone back.
      *

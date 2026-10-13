@@ -22,7 +22,7 @@ import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { ErrorNote } from '@/components/ui/empty-state';
 import { useConfirmStore } from '@/stores/confirm';
-import { formatDate } from '@/lib/utils';
+import { moneyDate, paymentModeLabel } from '@/lib/money';
 import { EditInvoiceModal } from '@/components/work/EditInvoiceModal';
 import { RecordPaymentModal } from '@/components/work/RecordPaymentModal';
 import { useMayEditInvoice } from '@/components/work/PaidInvoiceLock';
@@ -148,8 +148,8 @@ function InvoicePaymentsModal({
     const ok = await confirm({
       title: `Remove the ${formatMoney(p.amount)} payment?`,
       message: settling
-        ? `Received ${formatDate(p.receivedAt)} by ${p.mode}. Invoice ${number} will be owed again, and anything it settled goes back to unpaid.`
-        : `Received ${formatDate(p.receivedAt)} by ${p.mode}. It comes off invoice ${number}'s balance.`,
+        ? `Received ${moneyDate(p.receivedAt)} by ${paymentModeLabel(p.mode)}. Invoice ${number} will be owed again, and anything it settled goes back to unpaid.`
+        : `Received ${moneyDate(p.receivedAt)} by ${paymentModeLabel(p.mode)}. It comes off invoice ${number}'s balance.`,
       confirmText: 'Remove payment',
       cancelText: 'Keep it',
       variant: 'danger',
@@ -220,7 +220,7 @@ function InvoicePaymentsModal({
                         ) : null}
                       </p>
                       <p className="truncate text-xs text-secondary">
-                        {formatDate(p.receivedAt)} · {p.mode}
+                        {moneyDate(p.receivedAt)} · {paymentModeLabel(p.mode)}
                         {p.reference ? ` · ${p.reference}` : ''}
                       </p>
                     </div>

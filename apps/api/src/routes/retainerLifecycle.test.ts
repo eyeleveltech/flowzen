@@ -179,20 +179,35 @@ describe('the monthly roll closes the month that ended', () => {
     (prisma.retainer.findMany as any).mockResolvedValue([]);
   });
 
+  // Each card closed on its own, still OPEN at that moment, and logged with
+  // what it was (Money Plan 2, decision 14).
+  const openCards = () =>
+    (prisma.monthCard.findMany as any).mockResolvedValueOnce([
+      { id: 'card-sep', month: '2026-09', retainer: { organizationId: 'org-1', company: { name: 'Suvai' } } },
+    ]);
+
   it('closes every open card from a month before the one being opened', async () => {
+    openCards();
+    (prisma.monthCard.updateMany as any).mockResolvedValue({ count: 1 });
     await rollActiveRetainers('2026-10');
 
+    const find = (prisma.monthCard.findMany as any).mock.calls[0][0];
+    expect(find.where).toEqual({ month: { lt: '2026-10' }, status: 'OPEN' });
     const call = (prisma.monthCard.updateMany as any).mock.calls.at(-1)[0];
-    expect(call.where).toEqual({ month: { lt: '2026-10' }, status: 'OPEN' });
+    expect(call.where).toEqual({ id: 'card-sep', status: 'OPEN' });
     expect(call.data.status).toBe('CLOSED');
     expect(call.data.closedAt).toBeInstanceOf(Date);
+    const logged = (prisma.activity.create as any).mock.calls.map((c: any[]) => c[0].data).find((d: any) => d.verb === 'month_auto_closed');
+    expect(logged).toMatchObject({ entityType: 'MonthCard', entityId: 'card-sep', payload: { month: '2026-09', statusWas: 'OPEN' } });
   });
 
   it('closes a departed client’s last month too, not only running ones', async () => {
     // Scoped by month rather than by retainer status: a client who left in
     // March still has a March card, and it still wants invoicing.
+    openCards();
+    (prisma.monthCard.updateMany as any).mockResolvedValue({ count: 1 });
     await rollActiveRetainers('2026-10');
-    const call = (prisma.monthCard.updateMany as any).mock.calls.at(-1)[0];
-    expect(call.where.retainer).toBeUndefined();
+    const find = (prisma.monthCard.findMany as any).mock.calls[0][0];
+    expect(find.where.retainer).toBeUndefined();
   });
 });

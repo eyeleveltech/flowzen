@@ -2,6 +2,8 @@ import { Router, type Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { maskInvoiceFigures, maskPaymentFigures } from '../utils/invoiceFigures.js';
+import { moneyClock, orgToday } from '../utils/moneyDates.js';
+import { invoiceState } from '../utils/invoiceState.js';
 import { changesBetween } from '../utils/activityDiff.js';
 import { authenticate, requirePermission, type AuthRequest, hasPermission } from '../middleware/auth.js';
 import { CompanyStatus, ProjectStatus, MilestoneStatus, Priority } from '@prisma/client';
@@ -391,8 +393,11 @@ projectsRouter.get('/:id', requirePermission('work.all'), async (req: AuthReques
       invoices: m.invoices.map((inv) => maskInvoiceFigures(inv, canSeeFigures)),
     }));
     // Every figure on the row, not just `amount` — its GST and printed totals are the same money.
+    // The badge, worked out here as on /money — same rule, same clock (decision 6).
+    const today = orgToday((await moneyClock(orgId)).timezone);
     const maskedInvoices = project.invoices.map((inv) => ({
       ...maskInvoiceFigures(inv, canSeeFigures),
+      ...invoiceState(inv, today),
       payments: inv.payments.map((p) => maskPaymentFigures(p, canSeeFigures)),
     }));
 

@@ -8,6 +8,8 @@ import { loadWorkCalendar, workingMinutesOn } from '../utils/workCalendar.js';
 import { computeTaskTypeMedians, taskTypeGroupKey } from '../utils/taskTypeMedian.js';
 import { rupees } from '../utils/money.js';
 import { pushNewAlerts } from '../services/push.js';
+import { expireLapsedProformas } from '../services/proformaExpiry.js';
+import { asStoredDay, moneyClock, orgToday } from '../utils/moneyDates.js';
 
 function median(values: number[]): number {
   if (values.length === 0) return 0;
@@ -121,12 +123,17 @@ export async function evaluateAgencyHealthRules(organizationId: string): Promise
     }
   }
 
-  // 3. RULE: PROFORMA_EXPIRED
+  // 3. RULE: PROFORMA_EXPIRED — past its valid-till date and never invoiced.
+  // EXPIRED as well as UNPAID: the daily step now marks lapsed ones EXPIRED,
+  // and the alert must not vanish the moment it does (Money Plan 2, decision
+  // 12). It clears when the proforma is re-raised, cancelled or invoiced.
+  const todayStored = asStoredDay(orgToday((await moneyClock(organizationId)).timezone, now));
   const expiredProformas = await prisma.proforma.findMany({
     where: {
       organizationId,
-      status: 'UNPAID',
-      validTill: { lt: now },
+      status: { in: ['UNPAID', 'EXPIRED'] },
+      validTill: { lt: todayStored },
+      invoiceId: null,
     },
     include: { company: true },
   });
@@ -820,6 +827,8 @@ export async function runAgencyHealthScanner(): Promise<number> {
   for (const org of orgs) {
     try {
       await applyCompanyStatusDerivation(org.id);
+      // UNPAID proformas past their valid-till date become EXPIRED, logged.
+      await expireLapsedProformas(org.id);
 
       let createdForOrg = 0;
       const newAlertIds: string[] = [];

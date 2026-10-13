@@ -360,9 +360,6 @@ describe('who assigned it, who reviews it, and what kind of work it is', () => {
   });
 
   it('records who asked for the work, when it is somebody else', async () => {
-    // A Head, because naming somebody else as the person who asked is itself
-    // a work.team act — an employee recording their manager as the requester
-    // would be writing a fact about a conversation nobody can check.
     const res = await request(app)
       .post('/api/tasks')
       .set(...auth('head'))
@@ -474,14 +471,19 @@ describe('assigning work to other people', () => {
     expect(res.status).toBe(403);
   });
 
-  it('refuses an employee naming somebody else as the one who asked', async () => {
+  it('lets an employee name who asked for it — the work is still only on their own list', async () => {
+    // Writing up what the head asked for in a meeting. It puts nothing on the
+    // head's list, and who typed it is still on the task.
     const res = await request(app)
       .post('/api/tasks')
       .set(...auth('designer'))
       .send({ title: 'They asked for it', dueDate: '2026-09-09', assignedById: 'usr-head' });
 
-    expect(res.status).toBe(403);
-    expect(res.body.error).toMatch(/only record yourself/i);
+    expect(res.status).toBe(201);
+    const { data } = (prisma.task.create as any).mock.calls.at(-1)[0];
+    expect(data.assignedById).toBe('usr-head');
+    expect(data.createdById).toBe('usr-des');
+    expect(data.assignees.create).toEqual([{ userId: 'usr-des' }]);
   });
 
   it('lets a head assign to anybody', async () => {

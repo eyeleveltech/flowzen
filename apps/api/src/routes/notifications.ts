@@ -49,7 +49,7 @@ notificationsRouter.use(authenticate);
  * than shown: a new rule should stay quiet until somebody decides who it is
  * for, which is the safe direction to fail.
  */
-export const RULE_PERMISSION: Record<string, PermissionKey | undefined> = {
+export const RULE_PERMISSION: Record<string, PermissionKey | readonly PermissionKey[] | undefined> = {
   // Somebody else's overdue task is a fact about the team. Your own is a fact
   // about you — see MINE_REGARDLESS below, which lets these three through to
   // the person the task belongs to whatever their permissions say.
@@ -76,8 +76,10 @@ export const RULE_PERMISSION: Record<string, PermissionKey | undefined> = {
   // Selling.
   PROPOSAL_STALLED: 'pipeline.read',
   VERBAL_NO_ADVANCE: 'pipeline.read',
-  PROFORMA_EXPIRED: 'pipeline.read',
-  PROFORMA_UNPAID: 'pipeline.read',
+  // A proforma is a request for money: whoever sells it, and Accounts who
+  // collect it (Money Plan 2, decision 12). Any one of these opens it.
+  PROFORMA_EXPIRED: ['pipeline.read', 'money.figures'],
+  PROFORMA_UNPAID: ['pipeline.read', 'money.figures'],
   CLIENT_QUIET: 'company.read',
 
   // The month's cost split, which is the Time split screen's own gate.
@@ -206,7 +208,9 @@ export async function alertClausesFor(user: UserSession): Promise<Prisma.AlertWh
 
   const allowedRules = Object.keys(RULE_PERMISSION).filter((rule) => {
     const needed = RULE_PERMISSION[rule];
-    return needed === undefined || hasPermission(user, needed);
+    if (needed === undefined) return true;
+    // A list means any one of them.
+    return typeof needed === 'string' ? hasPermission(user, needed) : needed.some((p) => hasPermission(user, p));
   });
 
   const scope = await teamScope(user);

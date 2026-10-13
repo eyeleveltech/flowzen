@@ -23,15 +23,10 @@ import { Button } from '@/components/ui/button';
 import { Field, FieldSelect } from '@/components/ui/field';
 import { ErrorNote, Note } from '@/components/ui/empty-state';
 import { InvoiceGstFields, paymentGstStart, useInvoiceGst } from '@/components/work/InvoiceGstFields';
+import { PAYMENT_MODES } from '@/lib/money';
 
-const MODES = [
-  { value: 'NEFT', label: 'NEFT' },
-  { value: 'RTGS', label: 'RTGS' },
-  { value: 'UPI', label: 'UPI' },
-  { value: 'BANK_TRANSFER', label: 'Bank transfer' },
-  { value: 'CHEQUE', label: 'Cheque' },
-  { value: 'CASH', label: 'Cash' },
-];
+// One list of payment modes, the same words everywhere (lib/money).
+const MODES = PAYMENT_MODES;
 
 const today = () => new Date().toISOString().slice(0, 10);
 

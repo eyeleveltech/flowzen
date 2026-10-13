@@ -17,6 +17,7 @@ import { z } from 'zod';
 import { ProformaStatus, ProformaSourceType, type Proforma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { issueWithRetry } from '../utils/documentNumber.js';
+import { asStoredDay, moneyClock, orgToday } from '../utils/moneyDates.js';
 import { buildDocumentSnapshot } from './documentModel.js';
 import { documentFieldsSchema, cleanCustomFields, ORG_DOCUMENT_SELECT } from '../utils/documentSchemas.js';
 
@@ -230,8 +231,9 @@ export async function issueProforma(orgId: string, actorId: string, input: Profo
     customFields: cleanCustomFields(customFields),
   });
 
-  const raisedAt = new Date();
-  const validTill = new Date(Date.now() + validDays * 24 * 3600 * 1000);
+  // Calendar days, where the studio is (Money Plan 2, decision 8).
+  const raisedAt = asStoredDay(orgToday((await moneyClock(orgId)).timezone));
+  const validTill = new Date(raisedAt.getTime() + validDays * 24 * 3600 * 1000);
 
   // The number is read-highest-then-insert, so two people raising a proforma
   // at the same moment compute the same one. The unique index on

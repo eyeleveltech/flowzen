@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { STATE_OPTIONS, TotalsPreview } from './DocumentFields';
+import { STATE_OPTIONS, TotalsPreview, previewTotals } from './DocumentFields';
 
 /**
  * The form has to say what the document will say.
@@ -76,5 +76,30 @@ describe('the totals preview', () => {
     preview({ gstApplicable: false });
     expect(screen.getByText('Not applicable')).toBeTruthy();
     expect(screen.queryByText(/@ 18%/)).toBeNull();
+  });
+});
+
+// Money Plan 2, decision 7: each line at its own rate, as the server prices it.
+describe('lines at 18% and 5%', () => {
+  const lines = [
+    { particulars: 'Campaign film', units: '1', unitCost: '10000', hsnSac: '', gstRate: '' },
+    { particulars: 'Brochures', units: '2', unitCost: '2000', hsnSac: '', gstRate: '5' },
+  ];
+
+  it('totals the way the document will', () => {
+    const t = previewTotals(lines, true, 18);
+    expect(t.subtotal).toBe(14000);
+    expect(t.rates.map((r) => [r.rate, r.taxable, r.tax])).toEqual([
+      [18, 10000, 1800],
+      [5, 4000, 200],
+    ]);
+    expect(t.total).toBe(16000);
+  });
+
+  it('shows a tax row per rate on a tax invoice', () => {
+    render(<TotalsPreview kind="INVOICE" subtotal={14000} gstApplicable gstRatePercent={18} interState={false} lines={lines} />);
+    expect(screen.getByText('CGST @ 9%')).toBeTruthy();
+    expect(screen.getByText('CGST @ 2.5%')).toBeTruthy();
+    expect(screen.getByText('SGST @ 2.5%')).toBeTruthy();
   });
 });

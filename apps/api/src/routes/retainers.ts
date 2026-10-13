@@ -1573,7 +1573,44 @@ retainersRouter.patch('/:id', requirePermission('company.write'), async (req: Au
       return { retainer: updated, repricedCards: count };
     });
 
-    res.json({ success: true, retainer, repricedCards, emptyMonthsRemoved: cardsToDrop.length });
+    /*
+     * A proforma already out at the old fee (Money Plan 2, decision 13).
+     *
+     * Repricing moved the month's fee, and said nothing about the proforma the
+     * client is holding for that month — so it was invoiced, or paid, at a fee
+     * that no longer stood. Named here, with the month, so the screen can offer
+     * to cancel it and raise the right one. Never changed silently.
+     */
+    let staleProformas: { id: string; number: string; amount: number; month: string; monthCardId: string }[] = [];
+    if (rateChanged) {
+      const openCards = await prisma.monthCard.findMany({
+        where: { retainerId: id, status: 'OPEN', invoiceId: null },
+        select: { id: true, month: true },
+      });
+      const live = openCards.length
+        ? await prisma.proforma.findMany({
+            where: {
+              organizationId: orgId,
+              sourceType: 'MONTH_CARD',
+              sourceId: { in: openCards.map((c) => c.id) },
+              status: 'UNPAID',
+              invoiceId: null,
+            },
+            select: { id: true, number: true, amount: true, sourceId: true },
+          })
+        : [];
+      staleProformas = live
+        .filter((pf) => Math.round(Number(pf.amount) * 100) !== Math.round(Number(monthlyValue) * 100))
+        .map((pf) => ({
+          id: pf.id,
+          number: pf.number,
+          amount: Number(pf.amount),
+          monthCardId: pf.sourceId,
+          month: openCards.find((c) => c.id === pf.sourceId)?.month ?? '',
+        }));
+    }
+
+    res.json({ success: true, retainer, repricedCards, emptyMonthsRemoved: cardsToDrop.length, staleProformas });
   } catch (error) {
     next(error);
   }

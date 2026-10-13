@@ -1272,14 +1272,20 @@ const mayAssignOthers = (req: AuthRequest): boolean =>
 
 /**
  * The rule, as one sentence: someone who can only manage their own work may
- * name only themselves — as the person doing it, and as the person who asked.
+ * put work only on themselves.
+ *
+ * Who ASKED for it is theirs to say, though. An employee writing up what their
+ * head asked for in a meeting needs to record the head as "Assigned by", or
+ * the task reads as their own idea. That was refused too, and it is not the
+ * same act: it puts nothing on anybody's list. The record stays honest because
+ * the task keeps `createdById` — who actually typed it — and the task shows
+ * "Added by" whenever that is someone else.
  *
  * Returns the refusal to send, or null when the request is allowed.
  */
 function assignmentRefusal(
   req: AuthRequest,
   people: string[] | null,
-  assignedById: string | undefined,
   /** For an edit: what the task already says, which they are allowed to leave alone. */
   existingPeople?: string[],
 ): string | null {
@@ -1298,10 +1304,6 @@ function assignmentRefusal(
     if (others.length > 0 && !unchanged) {
       return 'You can only assign work to yourself. Ask a head or management to put it on somebody else.';
     }
-  }
-
-  if (assignedById && assignedById !== me) {
-    return 'You can only record yourself as the person who asked for this.';
   }
 
   return null;
@@ -1336,7 +1338,7 @@ tasksRouter.post('/', requirePermission('work.own'), async (req: AuthRequest, re
     }
 
     // §9: putting work on somebody else's plate is a work.team act.
-    const refusal = assignmentRefusal(req, people, assignedById);
+    const refusal = assignmentRefusal(req, people);
     if (refusal) {
       res.status(403).json({ success: false, error: refusal });
       return;
@@ -1681,7 +1683,7 @@ tasksRouter.patch('/:id', requirePermission('work.own'), async (req: AuthRequest
     if (people || assignedById) {
       const current = await prisma.taskAssignee.findMany({ where: { taskId: id }, select: { userId: true } });
       assigneesBefore = people ? (current ?? []).map((a) => a.userId) : null;
-      const refusal = assignmentRefusal(req, people, assignedById, (current ?? []).map((a) => a.userId));
+      const refusal = assignmentRefusal(req, people, (current ?? []).map((a) => a.userId));
       if (refusal) {
         res.status(403).json({ success: false, error: refusal });
         return;

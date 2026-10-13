@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../utils/logger.js';
+import { moneyClock, monthBounds, monthOfDay, orgMonth } from '../utils/moneyDates.js';
 
 /**
  * §13: "00:15 on the 1st — Create recurring Cost rows (rent, internet,
@@ -11,40 +12,89 @@ import { logger } from '../utils/logger.js';
  * as a draft until someone reviews it. The template itself is never
  * touched again after the month it was entered for.
  */
-export async function rollRecurringCosts(month?: string): Promise<{ created: number }> {
-  const now = new Date();
-  const targetMonth = month || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const [year, mon] = targetMonth.split('-').map((n) => parseInt(n, 10));
-  const monthStart = new Date(year, mon - 1, 1);
-  const monthEnd = new Date(year, mon, 1);
-
+export async function rollRecurringCosts(
+  month?: string,
+  now: Date = new Date(),
+): Promise<{ created: number; waiting: number }> {
   const templates = await prisma.cost.findMany({
     where: { recurring: true, deletedAt: null },
+    include: { monthCard: { select: { retainerId: true } } },
   });
 
+  // "This month" is the studio's month, not the server's (decision 8).
+  const clocks = new Map<string, string>();
+  const monthFor = async (orgId: string) => {
+    if (month) return month;
+    if (!clocks.has(orgId)) clocks.set(orgId, orgMonth((await moneyClock(orgId)).timezone, now));
+    return clocks.get(orgId)!;
+  };
+
   let created = 0;
+  let waiting = 0;
   for (const template of templates) {
+    const targetMonth = await monthFor(template.organizationId);
+
+    /*
+     * Never in the template's own month. The template IS that month's cost —
+     * cloning it there as well counted rent twice in the month it was
+     * entered. Nor before it.
+     */
+    if (targetMonth <= monthOfDay(template.incurredAt)) continue;
+
+    /*
+     * Once per template per month, ever. A clone somebody deleted counts: it
+     * was deleted on purpose (we did not pay that this month), and bringing it
+     * back within the hour is the job overruling a person. So deleted rows are
+     * looked at too.
+     */
+    const { start, end } = monthBounds(targetMonth);
     const alreadyRolled = await prisma.cost.findFirst({
-      where: {
-        recurringSourceId: template.id,
-        incurredAt: { gte: monthStart, lt: monthEnd },
-        deletedAt: null,
-      },
+      where: { recurringSourceId: template.id, incurredAt: { gte: start, lt: end }, deletedAt: undefined },
+      select: { id: true },
     });
     if (alreadyRolled) continue;
 
-    await prisma.cost.create({
+    /*
+     * The right month. A retainer's cost goes on THAT retainer's card for the
+     * month being rolled — copying the template's own card put every clone on
+     * the month the template was entered in, long since closed. A company
+     * cost belongs to no card; a project cost keeps its project.
+     */
+    let monthCardId: string | null = null;
+    let workId = template.workId;
+    const isRetainerCost = template.type !== 'COMPANY' && (template.monthCardId || template.workType === 'MONTH_CARD');
+    if (isRetainerCost) {
+      const retainerId =
+        template.monthCard?.retainerId ??
+        (template.workId
+          ? (await prisma.monthCard.findUnique({ where: { id: template.workId }, select: { retainerId: true } }))?.retainerId
+          : null);
+      const card = retainerId
+        ? await prisma.monthCard.findFirst({ where: { retainerId, month: targetMonth }, select: { id: true, status: true } })
+        : null;
+      // No card yet (the month's roll has not run, or the retainer stopped),
+      // or a closed one: nothing to put it on. The next hourly run looks again.
+      if (!card || card.status !== 'OPEN') {
+        waiting++;
+        continue;
+      }
+      monthCardId = card.id;
+      if (template.workType === 'MONTH_CARD') workId = card.id;
+    }
+
+    const clone = await prisma.cost.create({
       data: {
         organizationId: template.organizationId,
         type: template.type,
         workType: template.workType,
-        workId: template.workId,
-        monthCardId: template.monthCardId,
+        workId,
+        monthCardId,
         projectId: template.projectId,
         category: template.category,
         vendor: template.vendor,
         amount: template.amount,
-        incurredAt: monthStart,
+        gstPercent: template.gstPercent,
+        incurredAt: start,
         committedNotPaid: template.committedNotPaid,
         paidBy: template.paidBy,
         treatment: template.treatment,
@@ -63,14 +113,14 @@ export async function rollRecurringCosts(month?: string): Promise<{ created: num
         entityId: template.id,
         actorId: null,
         verb: 'recurring_cost_rolled',
-        payload: { month: targetMonth, category: template.category, vendor: template.vendor },
+        payload: { month: targetMonth, category: template.category, vendor: template.vendor, cloneId: clone.id },
       },
     });
 
     created++;
   }
 
-  return { created };
+  return { created, waiting };
 }
 
 /**

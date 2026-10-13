@@ -1,5 +1,6 @@
 import { Router, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
+import { looksLikeSalary, SALARY_NOT_A_COST } from '../utils/salaryCost.js';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, type AuthRequest, hasPermission, requirePermission } from '../middleware/auth.js';
 import { CostType, CostTreatment, TaskWorkType } from '@prisma/client';
@@ -7,6 +8,7 @@ import { parsePagination } from '../utils/query.js';
 import { toCsv } from '../utils/csv.js';
 import { sendCsv } from '../utils/csvResponse.js';
 import { monthCardRefusal } from '../utils/monthCardOpen.js';
+import { asStoredDay, moneyClock, monthBounds, orgToday } from '../utils/moneyDates.js';
 
 export const costsRouter = Router();
 
@@ -55,14 +57,14 @@ costsRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction)
     if (category && typeof category === 'string') {
       where.category = category;
     }
-    if (month && typeof month === 'string') {
-      // Filter by month YYYY-MM
-      const start = new Date(`${month}-01`);
-      const end = new Date(start.getFullYear(), start.getMonth() + 1, 0);
-      where.incurredAt = { gte: start, lte: end };
+    if (month && typeof month === 'string' && /^\d{4}-\d{2}$/.test(month)) {
+      // A calendar month, as stored days compare (the server's clock made the
+      // last day fall out of its own month on a server ahead of UTC).
+      const { start, end } = monthBounds(month);
+      where.incurredAt = { gte: start, lt: end };
     }
 
-    const [costs, total] = await Promise.all([
+    const [costs, total, sum] = await Promise.all([
       prisma.cost.findMany({
         where,
         orderBy: { incurredAt: 'desc' },
@@ -87,6 +89,9 @@ costsRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction)
         },
       }),
       prisma.cost.count({ where }),
+      // The total of every matching row, not of the page — a screen adding up
+      // the page it was sent was wrong past 200 rows (Money Plan 2).
+      canSeeFigures ? prisma.cost.aggregate({ where, _sum: { amount: true } }) : null,
     ]);
 
     const data = costs.map((c) => ({
@@ -138,6 +143,8 @@ costsRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction)
       data,
       costs: data,
       meta: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
+      /** Every matching cost, all pages — what left the account, tax included. Null without money.figures. */
+      totalAmount: sum ? Number(sum._sum.amount ?? 0) : null,
     });
   } catch (e) {
     next(e);
@@ -281,6 +288,10 @@ costsRouter.post(
         res.status(400).json({ success: false, error: parsed.error.issues[0].message });
         return;
       }
+      if (looksLikeSalary(parsed.data.category)) {
+        res.status(400).json({ success: false, error: SALARY_NOT_A_COST, code: 'SALARY_NOT_A_COST' });
+        return;
+      }
 
       const orgId = req.user!.organizationId;
 
@@ -293,7 +304,10 @@ costsRouter.post(
         return;
       }
 
-      const incurredDate = parsed.data.incurredAt ? new Date(parsed.data.incurredAt) : new Date();
+      // Left blank: today where the studio is, as a calendar day (Money Plan 2, decision 8).
+      const incurredDate = parsed.data.incurredAt
+        ? new Date(parsed.data.incurredAt)
+        : asStoredDay(orgToday((await moneyClock(req.user!.organizationId)).timezone));
 
       const cost = await prisma.cost.create({
         data: {
@@ -437,6 +451,12 @@ costsRouter.patch(
       }
 
       const d = parsed.data;
+      // An existing row keeps whatever category it has (the clean-up report
+      // deals with those); it just cannot be turned into a salary.
+      if (d.category !== undefined && d.category !== existing.category && looksLikeSalary(d.category)) {
+        res.status(400).json({ success: false, error: SALARY_NOT_A_COST, code: 'SALARY_NOT_A_COST' });
+        return;
+      }
       const cost = await prisma.cost.update({
         where: { id: costId },
         data: {

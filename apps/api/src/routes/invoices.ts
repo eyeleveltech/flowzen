@@ -7,6 +7,8 @@ import { InvoiceStatus, MilestoneStatus, MonthCardStatus, RetainerBilling, TaskW
 import type { Prisma } from '@prisma/client';
 import { parsePagination } from '../utils/query.js';
 import { maskInvoiceFigures } from '../utils/invoiceFigures.js';
+import { asStoredDay, moneyClock, orgToday } from '../utils/moneyDates.js';
+import { daysPastDue, invoiceState } from '../utils/invoiceState.js';
 import { rupeesFromPaise, sumPaise, toPaise } from '../utils/paise.js';
 import { toCsv } from '../utils/csv.js';
 import { sendCsv } from '../utils/csvResponse.js';
@@ -48,8 +50,26 @@ invoicesRouter.get('/', requirePermission('money.status'), async (req: AuthReque
       wantsCsv ? { defaultLimit: 10000, maxLimit: 10000 } : { defaultLimit: 200, maxLimit: 500 },
     );
 
+    // Today where the studio is: what makes an invoice overdue (decision 6).
+    const today = orgToday((await moneyClock(orgId)).timezone);
+    const todayStored = asStoredDay(today);
+
     const where: any = { organizationId: orgId };
-    if (status && typeof status === 'string' && Object.values(InvoiceStatus).includes(status as InvoiceStatus)) {
+    /*
+     * OVERDUE is not a stored status — a RAISED invoice becomes overdue by the
+     * calendar — so filtering on the column returned nothing. The filters
+     * mean what the badges show: OVERDUE is open and past due, RAISED is open
+     * and not yet due, OPEN is either.
+     */
+    if (status === 'OVERDUE') {
+      where.status = { in: [InvoiceStatus.RAISED, InvoiceStatus.OVERDUE] };
+      where.dueAt = { lt: todayStored };
+    } else if (status === 'RAISED') {
+      where.status = { in: [InvoiceStatus.RAISED, InvoiceStatus.OVERDUE] };
+      where.dueAt = { gte: todayStored };
+    } else if (status === 'OPEN') {
+      where.status = { in: [InvoiceStatus.RAISED, InvoiceStatus.OVERDUE] };
+    } else if (status && typeof status === 'string' && Object.values(InvoiceStatus).includes(status as InvoiceStatus)) {
       where.status = status as InvoiceStatus;
     }
     if (companyId && typeof companyId === 'string') {
@@ -77,17 +97,12 @@ invoicesRouter.get('/', requirePermission('money.status'), async (req: AuthReque
       prisma.invoice.count({ where }),
     ]);
 
-    const now = new Date();
-    const todayStr = now.toISOString().slice(0, 10);
-
     const data = invoices.map((inv) => {
       const totalPaid = sumPaise(inv.payments) / 100;
       const invoiceAmount = Number(inv.amount);
       const balanceDue = Math.max(0, toPaise(inv.amount) - sumPaise(inv.payments)) / 100;
-      const isOverdue = inv.status !== 'PAID' && inv.status !== 'CANCELLED' && inv.dueAt.toISOString().slice(0, 10) < todayStr;
-      
-      const dueDaysDiff = Math.floor((now.getTime() - new Date(inv.dueAt).getTime()) / (1000 * 3600 * 24));
-      const agingDays = isOverdue ? dueDaysDiff : 0;
+      const { state, isOverdue, partPaid } = invoiceState(inv, today);
+      const agingDays = isOverdue ? daysPastDue(inv.dueAt, today) : 0;
 
       return {
         id: inv.id,
@@ -99,6 +114,10 @@ invoicesRouter.get('/', requirePermission('money.status'), async (req: AuthReque
         raisedAt: inv.raisedAt,
         dueAt: inv.dueAt,
         status: isOverdue && inv.status === 'RAISED' ? 'OVERDUE' : inv.status,
+        /** What the badge says: RAISED, PART_PAID, OVERDUE, PAID or CANCELLED. */
+        state,
+        /** Open with some money in. A status, not a figure, so not masked. */
+        partPaid,
         /*
          * Computed since this route was written and never sent, while the web's
          * `Invoice` interface declared it — so the type compiled, the value was
@@ -203,8 +222,8 @@ invoicesRouter.get('/', requirePermission('money.status'), async (req: AuthReque
 invoicesRouter.get('/retainer-billing', requirePermission('money.figures'), async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const orgId = req.user!.organizationId;
-    const now = new Date();
-    const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    // The studio's month, not the server's (decision 8).
+    const thisMonth = orgToday((await moneyClock(orgId)).timezone).slice(0, 7);
     const asked = typeof req.query.month === 'string' ? req.query.month : '';
     const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(asked) ? asked : thisMonth;
     /*
@@ -358,12 +377,17 @@ invoicesRouter.get('/retainer-billing', requirePermission('money.figures'), asyn
         awaitingPayment: count('PAYMENT'),
         done: count('DONE'),
         notYet: count('NOT_YET'),
-        // What is still to come in, across every row: the fee for months not
-        // yet invoiced, what is left on the ones that are.
-        outstanding: rows.reduce(
-          (a, r) => a + (r.step === 'DONE' || r.step === 'NOT_YET' ? 0 : r.invoice ? Math.max(0, r.invoice.amount - r.invoice.paid) : r.fee),
+        /*
+         * What is still to come in — as two figures, never one (Money Plan 2,
+         * decision 4). An invoice's balance includes GST; a month not yet
+         * invoiced is only its fee, before GST. Adding them made a number that
+         * was neither.
+         */
+        owedOnInvoices: rows.reduce(
+          (a, r) => a + (r.step === 'PAYMENT' && r.invoice ? Math.max(0, r.invoice.amount - r.invoice.paid) : 0),
           0,
         ),
+        feesNotInvoiced: rows.reduce((a, r) => a + ((r.step === 'PROFORMA' || r.step === 'INVOICE') && !r.invoice ? r.fee : 0), 0),
       },
     });
   } catch (e) {
@@ -375,8 +399,7 @@ invoicesRouter.get('/awaiting', requirePermission('money.figures'), async (req: 
   try {
     const orgId = req.user!.organizationId;
 
-    const now = new Date();
-    const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const thisMonth = orgToday((await moneyClock(orgId)).timezone).slice(0, 7);
 
     const base = { retainer: { organizationId: orgId }, invoiceId: null };
 
@@ -612,11 +635,10 @@ invoicesRouter.post(
         workType,
         workId,
         projectId,
-        proformaId,
         milestoneId,
         customNumber,
       } = parsed.data;
-      let { monthCardId } = parsed.data;
+      let { monthCardId, proformaId } = parsed.data;
 
       // The GST is part of the total, so it is always less than it.
       if (gstAmount != null && gstAmount >= amount) {
@@ -756,8 +778,30 @@ invoicesRouter.post(
         }
       }
 
-      const now = new Date();
-      const raisedDate = raisedAt ? new Date(raisedAt) : now;
+      /*
+       * No orphaned proformas (Money Plan 2, decision 10). An invoice for a
+       * milestone or a retainer month settles the proforma standing against
+       * it, whichever form recorded it — the project page's "Record invoice"
+       * named only the milestone, so its proforma stayed "unpaid" for ever
+       * beside the invoice that paid it.
+       */
+      if (!proformaId && (settlesMilestoneId || monthCardId)) {
+        const standing = await prisma.proforma.findFirst({
+          where: {
+            organizationId: orgId,
+            companyId,
+            invoiceId: null,
+            status: { in: ['UNPAID', 'PAID', 'EXPIRED'] },
+            ...(settlesMilestoneId ? { milestoneId: settlesMilestoneId } : { sourceType: 'MONTH_CARD', sourceId: monthCardId! }),
+          },
+          orderBy: { createdAt: 'desc' },
+          select: { id: true },
+        });
+        if (standing) proformaId = standing.id;
+      }
+
+      // Left blank: today where the studio is, as a calendar day (decision 8).
+      const raisedDate = raisedAt ? new Date(raisedAt) : asStoredDay(orgToday((await moneyClock(orgId)).timezone));
       const dueDate = dueAt ? new Date(dueAt) : new Date(raisedDate.getTime() + 15 * 24 * 3600 * 1000); // 15 days credit
 
       // A number typed in by hand (an invoice raised in Tally first) is used as
@@ -767,6 +811,25 @@ invoicesRouter.post(
 
       const issue = async (invoiceNumber: string) =>
         prisma.$transaction(async (tx) => {
+          /*
+           * One invoice per milestone, checked again under a lock (decision 10).
+           * The look-up above runs before the transaction, so two people
+           * recording the same milestone's invoice at the same moment both
+           * passed it. Holding the milestone row makes the second one wait,
+           * then see the first.
+           */
+          if (settlesMilestoneId) {
+            await tx.$queryRaw`SELECT id FROM "milestones" WHERE id = ${settlesMilestoneId} FOR UPDATE`;
+            const twin = await tx.invoice.findFirst({
+              where: { milestoneId: settlesMilestoneId, status: { not: InvoiceStatus.CANCELLED } },
+              select: { number: true },
+            });
+            if (twin) {
+              throw new MoneyRefusal(
+                `That milestone already has invoice ${twin.number} against it. Cancel that one first if this is a correction.`,
+              );
+            }
+          }
           const created = await tx.invoice.create({
             data: {
               organizationId: orgId,
@@ -807,9 +870,17 @@ invoicesRouter.post(
           return created;
         });
 
-      const invoice = typed
-        ? await issue(typed)
-        : await issueWithRetry(orgId, 'INVOICE', issue);
+      let invoice;
+      try {
+        // Numbered in the financial year of its own date (decision 8).
+        invoice = typed ? await issue(typed) : await issueWithRetry(orgId, 'INVOICE', issue, 5, raisedDate);
+      } catch (e) {
+        if (e instanceof MoneyRefusal) {
+          res.status(400).json({ success: false, error: e.message });
+          return;
+        }
+        throw e;
+      }
 
       // Log activity
       await prisma.activity.create({
@@ -877,7 +948,9 @@ invoicesRouter.post(
         return;
       }
 
-      const receivedDate = parsed.data.receivedAt ? new Date(parsed.data.receivedAt) : new Date();
+      const receivedDate = parsed.data.receivedAt
+        ? new Date(parsed.data.receivedAt)
+        : asStoredDay(orgToday((await moneyClock(req.user!.organizationId)).timezone));
       const paymentPaise = toPaise(parsed.data.amount);
 
       /*
@@ -995,6 +1068,8 @@ async function resettle(tx: Tx, invoiceId: string): Promise<Settlement> {
     where: { id: invoiceId },
     select: {
       id: true,
+      organizationId: true,
+      number: true,
       amount: true,
       status: true,
       milestoneId: true,
@@ -1003,6 +1078,18 @@ async function resettle(tx: Tx, invoiceId: string): Promise<Settlement> {
     },
   });
   const none = { receivedPaise: 0, settled: false, becamePaid: false, becameOwed: false };
+  // The proforma follows its invoice; each move is on the record (Money Plan 2, decision 14).
+  const logProforma = async (proformaId: string, from: string, to: string, because: string) =>
+    tx.activity.create({
+      data: {
+        organizationId: inv!.organizationId,
+        entityType: 'Proforma',
+        entityId: proformaId,
+        actorId: null,
+        verb: 'proforma_status_changed',
+        payload: { from, to, because },
+      },
+    });
   if (!inv || inv.status === InvoiceStatus.CANCELLED) return none;
   // Whole paise: a float sum can fall a fraction short of a bill paid to the paisa.
   const receivedPaise = sumPaise(inv.payments);
@@ -1018,7 +1105,11 @@ async function resettle(tx: Tx, invoiceId: string): Promise<Settlement> {
         await tx.milestone.update({ where: { id: inv.milestoneId }, data: { status: MilestoneStatus.PAID } });
       }
       if (inv.proformaId) {
-        await tx.proforma.updateMany({ where: { id: inv.proformaId, status: { not: 'CANCELLED' } }, data: { status: 'PAID' } });
+        const was = await tx.proforma.findUnique({ where: { id: inv.proformaId }, select: { status: true } });
+        if (was && was.status !== 'CANCELLED' && was.status !== 'PAID') {
+          await tx.proforma.update({ where: { id: inv.proformaId }, data: { status: 'PAID' } });
+          await logProforma(inv.proformaId, was.status, 'PAID', `Invoice ${inv.number} was paid`);
+        }
       }
     }
     return { receivedPaise, settled, becamePaid: !wasPaid, becameOwed: false };
@@ -1033,7 +1124,8 @@ async function resettle(tx: Tx, invoiceId: string): Promise<Settlement> {
       });
     }
     if (inv.proformaId) {
-      await tx.proforma.updateMany({ where: { id: inv.proformaId, status: 'PAID' }, data: { status: 'UNPAID' } });
+      const back = await tx.proforma.updateMany({ where: { id: inv.proformaId, status: 'PAID' }, data: { status: 'UNPAID' } });
+      if (back.count > 0) await logProforma(inv.proformaId, 'PAID', 'UNPAID', `Invoice ${inv.number} is owed again`);
     }
     return { receivedPaise, settled, becamePaid: false, becameOwed: true };
   }

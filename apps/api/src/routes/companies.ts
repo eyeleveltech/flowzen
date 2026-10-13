@@ -2,6 +2,8 @@ import { Router, type Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { maskInvoiceFigures, maskPaymentFigures } from '../utils/invoiceFigures.js';
+import { moneyClock, orgToday } from '../utils/moneyDates.js';
+import { invoiceState } from '../utils/invoiceState.js';
 import { changesBetween } from '../utils/activityDiff.js';
 import { canReadActivityType, stripMoney } from '../utils/activityAccess.js';
 import { emitToOrganization } from '../sse.js';
@@ -448,8 +450,11 @@ companiesRouter.get('/:id', requirePermission('company.read'), async (req: AuthR
     // money.figures) is operational visibility, not a right to see a figure.
     // Every figure on an invoice row, not just `amount` — its GST and printed
     // totals are the same money in other words.
+    // The badge, worked out here as on /money — same rule, same clock (decision 6).
+    const today = orgToday((await moneyClock(orgId)).timezone);
     const sanitizedInvoices = company.invoices.map((inv) => ({
       ...maskInvoiceFigures(inv, canSeeFinancials),
+      ...invoiceState(inv, today),
       payments: inv.payments.map((p) => maskPaymentFigures(p, canSeeFinancials)),
     }));
 

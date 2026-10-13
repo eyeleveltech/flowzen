@@ -12,7 +12,34 @@ import { Plus, Trash2 } from 'lucide-react';
 import { GST_STATES } from '@flowzen/shared';
 import { Button } from '@/components/ui/button';
 import { FieldSelect } from '@/components/ui/field';
-import { money } from './LineItemsEditor';
+import { lineAmount, lineRate, money, type LineItemDraft } from './LineItemsEditor';
+
+/**
+ * The document's tax as the server will work it out: each line at its own
+ * rate, grouped by rate and rounded once per rate (utils/documentTotals.ts,
+ * `taxByRate`). One rate gives exactly the old single-rate figure.
+ */
+export function previewTotals(lines: LineItemDraft[], gstApplicable: boolean, documentRate: number) {
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+  const byRate = new Map<number, number>();
+  for (const line of lines) {
+    const rate = lineRate(line, documentRate);
+    byRate.set(rate, (byRate.get(rate) ?? 0) + lineAmount(line));
+  }
+  const rates = gstApplicable
+    ? [...byRate].map(([rate, sum]) => {
+        const taxable = round2(sum);
+        const tax = round2((taxable * rate) / 100);
+        const cgst = round2(tax / 2);
+        return { rate, taxable, tax, cgst, sgst: round2(tax - cgst) };
+      })
+    : [];
+  const subtotal = round2(lines.reduce((s, l) => s + lineAmount(l), 0));
+  const tax = round2(rates.reduce((s, r) => s + r.tax, 0));
+  const beforeRounding = round2(subtotal + tax);
+  const total = Math.round(beforeRounding);
+  return { subtotal, rates, tax, total, roundOff: round2(total - beforeRounding) };
+}
 
 // ── Place of supply ─────────────────────────────────────────────────────────
 
@@ -164,11 +191,14 @@ export function TotalsPreview({
   gstRatePercent,
   interState,
   kind,
+  lines,
 }: {
   subtotal: number;
   gstApplicable: boolean;
   gstRatePercent: number;
   interState: boolean;
+  /** The lines, so each is taxed at its own rate. Without them: one rate on the subtotal. */
+  lines?: LineItemDraft[];
   /**
    * Which document this is going to be. Required rather than defaulted: the
    * two kinds genuinely print the tax differently, and a preview that guessed
@@ -176,13 +206,12 @@ export function TotalsPreview({
    */
   kind: 'PROFORMA' | 'INVOICE';
 }) {
-  const round2 = (n: number) => Math.round(n * 100) / 100;
-  const tax = gstApplicable ? round2((subtotal * gstRatePercent) / 100) : 0;
-  const cgst = round2(tax / 2);
-  const sgst = round2(tax - cgst);
-  const beforeRounding = round2(subtotal + tax);
-  const total = Math.round(beforeRounding);
-  const roundOff = round2(total - beforeRounding);
+  const sums = previewTotals(
+    lines ?? [{ particulars: '', units: '1', unitCost: String(subtotal), hsnSac: '', gstRate: '' }],
+    gstApplicable,
+    gstRatePercent,
+  );
+  const { total, roundOff } = sums;
 
   const row = (label: string, amount: number, strong = false) => (
     <div className={`flex justify-between py-1 text-sm ${strong ? 'font-semibold text-body' : 'text-secondary'}`}>
@@ -200,10 +229,15 @@ export function TotalsPreview({
         proforma has no statutory format. The preview follows the document it
         is previewing, so what is on screen is what the client will receive.
       */}
-      {gstApplicable && kind === 'PROFORMA' && row(`GST @ ${gstRatePercent}%`, tax)}
-      {gstApplicable && kind === 'INVOICE' && interState && row(`IGST @ ${gstRatePercent}%`, tax)}
-      {gstApplicable && kind === 'INVOICE' && !interState && row(`CGST @ ${gstRatePercent / 2}%`, cgst)}
-      {gstApplicable && kind === 'INVOICE' && !interState && row(`SGST @ ${gstRatePercent / 2}%`, sgst)}
+      {/* A row per rate, as the document prints them. No zero rows (§6). */}
+      {sums.rates.map((r) => (
+        <div key={r.rate}>
+          {kind === 'PROFORMA' && r.tax !== 0 && row(`GST @ ${r.rate}%`, r.tax)}
+          {kind === 'INVOICE' && interState && r.tax !== 0 && row(`IGST @ ${r.rate}%`, r.tax)}
+          {kind === 'INVOICE' && !interState && r.cgst !== 0 && row(`CGST @ ${r.rate / 2}%`, r.cgst)}
+          {kind === 'INVOICE' && !interState && r.sgst !== 0 && row(`SGST @ ${r.rate / 2}%`, r.sgst)}
+        </div>
+      ))}
       {!gstApplicable && (
         <div className="flex justify-between py-1 text-sm text-secondary">
           <span>GST</span>
