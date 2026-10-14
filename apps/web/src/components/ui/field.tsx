@@ -20,6 +20,9 @@ export interface FieldProps {
   disabled?: boolean;
   autoComplete?: string;
   className?: string;
+  /** For a date or number: the earliest and latest it may be. */
+  min?: string;
+  max?: string;
 }
 
 export function Field({
@@ -39,6 +42,8 @@ export function Field({
   disabled = false,
   autoComplete,
   className = '',
+  min,
+  max,
 }: FieldProps) {
   const generatedId = useId();
   const fieldId = id || generatedId;
@@ -83,6 +88,8 @@ export function Field({
             placeholder={placeholder}
             disabled={disabled}
             autoComplete={autoComplete}
+            min={min}
+            max={max}
             aria-invalid={!!error}
             aria-describedby={error ? `${fieldId}-error` : hint ? `${fieldId}-hint` : undefined}
             className={`w-full rounded-xl border bg-white ${

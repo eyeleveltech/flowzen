@@ -35,12 +35,15 @@ import type { LastReview } from '@/lib/api-v2';
 import { getPriorityDot, getPriorityLabel } from '@/lib/priority';
 import { StatTile, StatRow } from '@/components/ui/stat-tile';
 import { TaskDrawer, type DrawerTask } from '@/components/work/TaskDrawer';
+import { FollowUps } from '@/components/sales/FollowUps';
 import toast from 'react-hot-toast';
 import { CheckSquare, Plus, GripVertical } from 'lucide-react';
 import type { TaskRepeatInfo } from '@/lib/repeat';
 import { RepeatMark } from '@/components/work/RepeatMark';
 import { NewTaskModal } from '@/components/work/NewTaskModal';
 import { taskTypeLabel } from '@/lib/task-type';
+import { NowBadge, canBeNow, useWorkingOnNow } from '@/components/work/WorkingOnNow';
+import { qk } from '@/hooks/queries';
 
 
 type TStatus = 'TODO' | 'IN_PROGRESS' | 'IN_REVIEW' | 'ON_HOLD' | 'DONE' | 'CANCELLED';
@@ -245,6 +248,12 @@ export default function MyWorkPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [selected, setSelected] = useState<TaskItem | null>(null);
+  /*
+   * What this person said they are working on now (Team plan 1): the Now badge
+   * on that row, "Working on this now" on the others, and Clear. No time goes
+   * with it.
+   */
+  const { focus, busy: focusBusy, start: startNow, clear: clearNow } = useWorkingOnNow();
 
   /*
    * /my-work?task=… — the WhatsApp approval link.
@@ -318,7 +327,9 @@ export default function MyWorkPage() {
   /** What the mutation handlers call after they change something. */
   const load = useCallback(async () => {
     await refetch();
-  }, [refetch]);
+    // A task finished, held or sent for approval stops being "now" on the server.
+    void queryClient.invalidateQueries({ queryKey: qk.myFocus });
+  }, [refetch, queryClient]);
 
   // Quick Create's "New task" lands here — including when you are already
   // here, which is the case the old mount-only check missed.
@@ -393,6 +404,24 @@ export default function MyWorkPage() {
           >
             {t.title}
           </button> <RepeatMark repeat={t.repeat} />
+          {canBeNow(t.status) &&
+            (focus?.id === t.id ? (
+              <NowBadge className="ml-1 align-middle" />
+            ) : (
+              // On hover, so twenty rows don't each carry a button; the drawer
+              // offers the same on a phone.
+              <button
+                type="button"
+                disabled={focusBusy}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void startNow(t.id).then((now) => now && load());
+                }}
+                className="ml-2 rounded-sm text-micro font-semibold text-primary underline-offset-2 opacity-0 outline-none transition-opacity hover:underline focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-primary/40 group-hover/row:opacity-100"
+              >
+                Working on this now
+              </button>
+            ))}
           {t.status === 'ON_HOLD' && t.waitingOn && (
             <p className="mt-0.5 text-micro text-secondary">
               waiting on {t.waitingOn === 'CLIENT' ? 'the client' : 'someone else'}
@@ -603,6 +632,11 @@ export default function MyWorkPage() {
         <StatTile label="Your average close" value={avgClose} note={`across ${plural(counts.completed, 'task')}`} />
       </StatRow>
 
+      {/* Deals and leads with a next step due — only for someone who has any. */}
+      <div className="mb-6">
+        <FollowUps />
+      </div>
+
       <Card padding="none" className="overflow-hidden">
         <CardHeader>
           <CardTitle>Everything assigned to you</CardTitle>
@@ -610,6 +644,27 @@ export default function MyWorkPage() {
             Task for myself
           </Button>
         </CardHeader>
+
+        {/* What they said they are on — wherever that row is on the list. */}
+        {focus && (
+          <div className="flex items-center gap-2 border-b border-border bg-info-tint/40 px-5 py-2.5 text-sm">
+            <NowBadge />
+            <span className="shrink-0 text-secondary">Working on</span>
+            <button
+              type="button"
+              onClick={() => {
+                const t = everyTask.find((x) => x.id === focus.id);
+                if (t) setSelected(t);
+              }}
+              className="min-w-0 truncate rounded-sm text-left font-medium text-primary underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-primary/40"
+            >
+              {focus.title}
+            </button>
+            <Button variant="ghost" size="sm" className="ml-auto shrink-0" loading={focusBusy} onClick={() => void clearNow()}>
+              Clear
+            </Button>
+          </div>
+        )}
 
         {total === 0 ? (
           <div className="p-6">

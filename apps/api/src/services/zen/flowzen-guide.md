@@ -41,6 +41,8 @@ Every row a lookup returns carries a `link` (and some a `clientLink`): use it ex
 
 Everybody's own list: every task they are on, as lead or helper. Cancelled and deleted tasks are not shown.
 
+- **Follow-ups** (only for someone with any): their own open deals and active leads whose next step is due today, overdue (red), or tomorrow — the next step, the client, the date, and "Log touch". There is no bell for an overdue next step; this is where the owner sees it.
+
 - **Tiles:** "Due Today" (with how many are on hold), "Overdue" (with how long the oldest has been open), "Rest of the week" (the next 7 days, today excluded), "Your average close".
 - **Groups, in order:**
   1. **Overdue:** due before today, not Done, not In review.
@@ -89,6 +91,7 @@ Team work (Heads and Management). The Team tab is the delivery view; the Approva
 - **Row menu:** Edit details, Assign a task, Kit they hold, Access & permissions, Send a password link (valid 60 minutes), Switch off account. All but "Assign a task" and "Kit they hold" need Setup access.
 - **Invite** (Setup access): name, email, department, access preset. The invite link is shown and emailed.
 - **Opening a person:** shows their tasks grouped by state, each linked to its project or retainer month.
+- **Board tab** (/members?tab=board): one row per person — **Now** (the task they said they are on: each person sets it themselves with "Working on this now" on one of their own open tasks on My Work or in the task, which moves a To do task to In progress; one at a time; it clears itself when the task is done, cancelled, sent for approval or put on hold, or when they press Clear; no time is kept or shown), **Next up** (the top of their own My Work order), and plain counts (Open, Due this week, Overdue, Waiting, In review, Done this week — click one to see the tasks), with **Needs attention** above it: overdue tasks, on hold more than 3 working days, in review past the approval reminder time, and urgent tasks not started. No ranking or labels.
 - **Approvals tab:**
   - For the last 7 or 30 days: what is waiting now, typical decision time, how many were decided on time, escalations, and each approver's record.
   - It covers the whole studio.
@@ -142,9 +145,14 @@ Companies access. Cold names, before they are companies.
 - **Status tabs:** All, Not contacted, Follow up, Meeting, Interested, Dead. A link can carry ?status=.
 - **New lead:** a name, plus a phone or an email, then "Add to the list". Import CSV checks the file first, then adds the names.
 - **Changing status:**
-  - Follow up asks for a call-back date and remarks.
-  - Meeting asks for a date.
-  - The date shows under the name, turns red once it has passed, and appears on the Calendar's Sales layer. It creates no task and no alert.
+  - Follow up, Meeting and Interested are "active": each asks for a **next step** (a few words) and its date. Follow up also asks for remarks. A next step date can't be in the past.
+  - Not contacted and Dead need neither; moving to them clears the next step.
+  - The next step and its date show under the name, red once the date has passed, and the date appears on the Calendar's Sales layer. It creates no task and no alert.
+  - An active lead with no next step shows a "No next step" badge. The "Missing next step" filter lists them. Editing an active lead also needs its next step.
+- **Last touch:** the last real contact — a logged touch, a status change, or a date set by hand. Editing a phone number is not contact. Each active lead shows "Last contact Nd ago"; with none recorded it counts from the day the lead was added.
+- **Going stale:** an active lead whose last touch is more than 10 days ago (Settings → Organisation → Going stale). The banner says how many.
+- **Log touch** (row button or menu): how (Call, WhatsApp, Email, Meeting, Other), a short note, and the next step and date. It moves the last touch to now and is in the lead's history.
+- **Set last contact date** (row menu, or tick several rows): for correcting the record — imported names carry the import date. A date, not in the future. The CSV import also reads an optional "Last contacted" column.
 - **Delete:** goes to Trash.
 - **Becoming a company:** see "Lead to client" below. Only an Interested lead can be promoted.
 
@@ -167,9 +175,13 @@ Pipeline access (BD, Management). The "Sales pipeline" board.
   - Won → Mark won
   - Lost → Mark lost
   - Backward moves are refused, and Lost is final.
-- **Each card:** value, retainer or one-time, owner, days in stage (amber after 25), and "N% likely". Click "N% likely" to override this deal's probability.
+- **Each card:** value, retainer or one-time, owner, days since the last touch (amber once going stale), the next step and its date (red when overdue, a "No next step" badge when missing), and "N% likely". Click "N% likely" to override this deal's probability.
+- **Next step:** every open deal (no outcome) has a short next step and a date. Adding a version, raising a proforma, flagging verbal yes, writing a promoted lead's first proposal, or editing the deal is refused without one. Winning or losing needs none.
+- **Last touch:** the latest of a logged touch, a version sent, a stage change or a proforma raised, or a date set by hand. Owner, probability and correction edits don't count. With none recorded, it falls back to when the deal entered its stage.
+- **Card menu (⋯):** Log touch (how, a note, and the next step), Set next step, Set last contact date. The client's Proposals tab has the same buttons on each open deal.
 - **Tiles:**
-  - "Live Deals", "Full Pipeline" and "Going Stale" (more than 25 days in stage) count every card not in Won, so lost deals are included.
+  - "Live Deals" and "Full Pipeline" count every card not in Won, so lost deals are included.
+  - "Going Stale": open deals whose last touch is more than 25 days ago (Settings → Organisation → Going stale).
   - "Weighted": each deal's value × its probability.
 - **Won card:** offers "Set up the retainer →" or "Create the project →" until the work exists.
 - **"Stage to stage":** conversion rates over 6 months.
@@ -434,8 +446,8 @@ Shown only when Settings → Integrations has it on. Per person and per device:
 
 ## Lead to client
 1. [Outreach list](/outreach) → "New lead" → a name and a phone or email → "Add to the list".
-2. Work it with the status: Follow up (with a date and remarks) or Meeting (with a date).
-3. When they want a quote, press "Mark interested".
+2. Work it with the status: Follow up (a next step, a date and remarks) or Meeting (a next step and a date). After each call or message, "Log touch".
+3. When they want a quote, press "Mark interested" and say what happens next.
 4. Press "Promote to company", check the details, then "Promote". A matching phone or email blocks a duplicate.
 5. It is now a Prospect in [Companies](/companies). It becomes a Client only when a proposal is won.
 
@@ -572,7 +584,7 @@ A retainer month's fee and a project's whole contract value are different kinds 
 The scanner checks hourly and clears an alert once its condition stops. An alert's message and severity are fixed when it is first raised. Each person sees the alerts their permissions open, their own tasks' alerts, and approval and calendar alerts meant for them. A Head sees team alerts only about their own people.
 
 - **Sales** (pipeline access):
-  - **Proposal stalled:** Proposal Sent or In Negotiation with no new version for more than 5 days. It is high after 10 days, and creates a "Follow up — {client} proposal" task for the owner.
+  - **Proposal stalled:** Proposal Sent or In Negotiation with no contact for more than 5 days, counted from the last touch (a logged call or message counts). It is high after 10 days, and creates a "Follow up — {client} proposal" task for the owner.
   - **Verbal yes not advanced:** Verbal Yes for more than 3 days with no proforma.
   - **Proforma expired:** unpaid and past its "valid till". Once a day such a proforma is marked Expired (logged on its record); it is never done to one that became an invoice. The alert stays until it is re-raised, cancelled or invoiced. Accounts sees this and "Proforma unpaid" too.
   - **Proforma unpaid:** unpaid more than 7 days after it was raised.

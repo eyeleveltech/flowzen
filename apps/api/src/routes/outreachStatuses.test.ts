@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import request from 'supertest';
 import { app } from '../index.js';
 import { prisma } from '../lib/prisma.js';
@@ -64,7 +64,13 @@ const lead = (over: Record<string, unknown> = {}) => ({
 
 let written: { entry?: any; company?: any; person?: any; activity?: any; proposal?: any };
 
+// These tests date their callbacks in mid-September; the clock sits before
+// them, since a next step date may not already be past (Sales next step plan).
+afterEach(() => vi.useRealTimers());
+
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-09-10T06:00:00Z'));
   written = {};
   (prisma.user.findUnique as any).mockResolvedValue({
     id: BD.id,
@@ -110,7 +116,7 @@ describe('the two statuses that carry a next action', () => {
 
   it('refuses a follow-up with no note', async () => {
     // A callback with no reason is a lead being parked, not followed up.
-    const res = await setStatus({ status: 'FOLLOW_UP', nextActionDate: '2026-09-15' });
+    const res = await setStatus({ status: 'FOLLOW_UP', nextActionDate: '2026-09-15', nextStep: 'Call back' });
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/What did they say/);
   });
@@ -120,6 +126,7 @@ describe('the two statuses that carry a next action', () => {
       status: 'FOLLOW_UP',
       nextActionDate: '2026-09-15',
       remarks: 'Busy with a launch. Call back Thursday morning.',
+      nextStep: 'Call back Thursday morning',
     });
     expect(res.status).toBe(200);
     expect(written.entry.status).toBe('FOLLOW_UP');
@@ -134,7 +141,7 @@ describe('the two statuses that carry a next action', () => {
   });
 
   it('accepts a meeting with no note, because the note is only logistics', async () => {
-    const res = await setStatus({ status: 'MEETING', nextActionDate: '2026-09-20' });
+    const res = await setStatus({ status: 'MEETING', nextActionDate: '2026-09-20', nextStep: 'Pitch at their office' });
     expect(res.status).toBe(200);
     expect(written.entry.status).toBe('MEETING');
   });
@@ -161,7 +168,7 @@ describe('moving a meeting', () => {
     (prisma.outreachEntry.findFirst as any).mockResolvedValue(
       lead({ status: OutreachStatus.MEETING, nextActionDate: new Date('2026-09-20'), remarks: '11:30, their office' }),
     );
-    const res = await setStatus({ status: 'MEETING', nextActionDate: '2026-09-27', remarks: '2pm, our office instead' });
+    const res = await setStatus({ status: 'MEETING', nextActionDate: '2026-09-27', remarks: '2pm, our office instead', nextStep: 'Pitch at our office' });
     expect(res.status).toBe(200);
     expect(new Date(written.entry.nextActionDate).toISOString().slice(0, 10)).toBe('2026-09-27');
     expect(written.entry.remarks).toBe('2pm, our office instead');
@@ -171,7 +178,7 @@ describe('moving a meeting', () => {
     (prisma.outreachEntry.findFirst as any).mockResolvedValue(
       lead({ status: OutreachStatus.MEETING, nextActionDate: new Date('2026-09-20') }),
     );
-    await setStatus({ status: 'MEETING', nextActionDate: '2026-09-27', remarks: 'They moved it a week' });
+    await setStatus({ status: 'MEETING', nextActionDate: '2026-09-27', remarks: 'They moved it a week', nextStep: 'Pitch' });
     const a = (prisma.activity.create as any).mock.calls.at(-1)[0].data;
     // from === to is what the screen reads as "rescheduled" rather than a move.
     expect(a.payload.from).toBe('MEETING');
@@ -191,7 +198,7 @@ describe('moving a meeting', () => {
 describe('the trail', () => {
   it('writes one activity row per change, naming both ends', async () => {
     (prisma.outreachEntry.findFirst as any).mockResolvedValue(lead({ status: OutreachStatus.NOT_CONTACTED }));
-    await setStatus({ status: 'FOLLOW_UP', nextActionDate: '2026-09-15', remarks: 'Asked for Thursday' });
+    await setStatus({ status: 'FOLLOW_UP', nextActionDate: '2026-09-15', remarks: 'Asked for Thursday', nextStep: 'Call back Thursday' });
 
     const a = (prisma.activity.create as any).mock.calls.at(-1)[0].data;
     expect(a.entityType).toBe('OutreachEntry');

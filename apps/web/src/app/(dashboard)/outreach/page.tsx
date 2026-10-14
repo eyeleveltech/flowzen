@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { ShowMore } from '@/components/ui/show-more';
 import { ErrorNote } from '@/components/ui/empty-state';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { ApiError, api, fileUrl, type DuplicateVerdict } from '@/lib/api-v2';
 import { DuplicateNotice } from '@/components/clients/DuplicateNotice';
@@ -20,12 +20,15 @@ import { Upload, UserPlus } from 'lucide-react';
 import { VERTICAL_LABEL, SOURCE_LABEL, VERTICAL_OPTIONS, SOURCE_OPTIONS, labelFor } from '@/lib/vertical';
 import { RowMenu } from '@/components/ui/row-menu';
 import { useConfirmStore } from '@/stores/confirm';
-import { Pencil, Send, Building2, CalendarClock, Trash2 } from 'lucide-react';
+import { Pencil, Send, Building2, CalendarClock, Trash2, MessageSquarePlus, History } from 'lucide-react';
 import { Tabs, useTabState, type TabDef } from '@/components/ui/tabs';
 import { Search, X } from 'lucide-react';
 import { usePageHeader } from '@/hooks/usePageHeader';
 import { useCreateFlag } from '@/hooks/useCreateFlag';
 import { personOptions } from '@/lib/people';
+import { NextStepLine, stepDate, useStudioToday } from '@/components/sales/NextStep';
+import { LastContactModal, LogTouchModal, type SalesTarget } from '@/components/sales/SalesDialogs';
+import { plural } from '@/lib/utils';
 
 /**
  * Where the conversation has got to.
@@ -52,6 +55,15 @@ interface OutreachItem {
   remarks?: string | null;
   nextActionDate?: string | null;
   importedAt: string;
+  /** What happens next — its date is `nextActionDate` (Sales next step plan). */
+  nextStep?: string | null;
+  lastTouchedAt?: string | null;
+  /** From the server: the last touch, or with none, when the lead was added. */
+  daysSinceTouch?: number;
+  stale?: boolean;
+  /** An active lead with no next step, or no date for it. */
+  noNextStep?: boolean;
+  nextStepOverdue?: boolean;
 }
 
 const STATUS_STYLE: Record<OutreachStatus, string> = {
@@ -77,7 +89,11 @@ const formatDay = (iso: string) =>
 /** A callback whose day has passed is the thing this screen is for. */
 const isOverdue = (iso: string) => new Date(iso).setHours(23, 59, 59, 999) < Date.now();
 
-/** The two statuses that hang off a date, and what that date is called. */
+/**
+ * The statuses that are being worked, and what their date is called. Each one
+ * carries a next step and its date (Sales next step plan): Interested too,
+ * since a lead asking for a quotation is the one most worth not dropping.
+ */
 const CARRIES_ACTION: Partial<Record<OutreachStatus, { dateLabel: string; remarksRequired: boolean; remarksHint: string }>> = {
   FOLLOW_UP: {
     dateLabel: 'Call back on',
@@ -88,6 +104,11 @@ const CARRIES_ACTION: Partial<Record<OutreachStatus, { dateLabel: string; remark
     dateLabel: 'Meeting on',
     remarksRequired: false,
     remarksHint: 'Time, online or offline, where, and who is going.',
+  },
+  INTERESTED: {
+    dateLabel: 'Next step by',
+    remarksRequired: false,
+    remarksHint: 'What they asked for — a quotation, a deck, a call with the founder.',
   },
 };
 
@@ -126,8 +147,17 @@ export default function OutreachPage() {
    * somebody can send. The search box does not — a query string rewritten on
    * every keystroke is noise, and the text is in the box in front of you.
    */
-  const [search, setSearch] = useState('');
-  const [query, setQuery] = useState('');
+  // A follow-up on My Work links here with the lead's name already searched.
+  const searchParams = useSearchParams();
+  const [search, setSearch] = useState(searchParams.get('search') ?? '');
+  const [query, setQuery] = useState(searchParams.get('search') ?? '');
+  /** The "Missing next step" filter: active leads nobody has planned for. */
+  const [missingOnly, setMissingOnly] = useState(false);
+  const today = useStudioToday();
+  // Keeping a lead current: a touch, and the real last contact (one or many).
+  const [touching, setTouching] = useState<SalesTarget | null>(null);
+  const [lastContactIds, setLastContactIds] = useState<string[] | null>(null);
+  const [picked, setPicked] = useState<string[]>([]);
 
   /**
    * Keys and labels only. `useTabState` reads `key` and `visible` and never
@@ -205,7 +235,10 @@ export default function OutreachPage() {
   const [editVertical, setEditVertical] = useState('HEALTHCARE');
   const [editSource, setEditSource] = useState('OUTREACH');
   const [editOwnerId, setEditOwnerId] = useState('');
+  const [editNextStep, setEditNextStep] = useState('');
+  const [editNextDate, setEditNextDate] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
+  const editActive = Boolean(editing && CARRIES_ACTION[editing.status]);
 
   const openEdit = (e: OutreachItem) => {
     setEditing(e);
@@ -216,6 +249,8 @@ export default function OutreachPage() {
     setEditContactName(e.contactPersonName ?? '');
     setEditPhone(e.phone ?? '');
     setEditEmail(e.email ?? '');
+    setEditNextStep(e.nextStep ?? '');
+    setEditNextDate(e.nextActionDate?.slice(0, 10) ?? '');
   };
 
   const saveEdit = async () => {
@@ -230,6 +265,8 @@ export default function OutreachPage() {
         phone: editPhone.trim() || null,
         email: editEmail.trim() || null,
         ...(editOwnerId ? { ownerId: editOwnerId } : {}),
+        // An active lead keeps its next step through an edit.
+        ...(editActive ? { nextStep: editNextStep.trim() || null, nextActionDate: editNextDate || null } : {}),
       });
       toast.success('Updated');
       setEditing(null);
@@ -248,6 +285,7 @@ export default function OutreachPage() {
   const [actionFor, setActionFor] = useState<{ entry: OutreachItem; status: OutreachStatus } | null>(null);
   const [actionDate, setActionDate] = useState('');
   const [actionRemarks, setActionRemarks] = useState('');
+  const [actionNextStep, setActionNextStep] = useState('');
   const [savingAction, setSavingAction] = useState(false);
 
   // Promote modal state
@@ -264,18 +302,21 @@ export default function OutreachPage() {
   const [promoting, setPromoting] = useState(false);
 
   const { data, isPending, isFetching, error } = useQuery({
-    queryKey: ['outreach', statusFilter, query, pages],
+    queryKey: ['outreach', statusFilter, query, pages, missingOnly],
     placeholderData: keepPreviousData,
     queryFn: async () => {
       const rows: OutreachItem[] = [];
       let meta: { total: number } | undefined;
-      let counts = { ALL: 0, NOT_CONTACTED: 0, FOLLOW_UP: 0, MEETING: 0, INTERESTED: 0, DEAD: 0 };
+      let counts: Record<string, number> = { ALL: 0, NOT_CONTACTED: 0, FOLLOW_UP: 0, MEETING: 0, INTERESTED: 0, DEAD: 0, MISSING_NEXT_STEP: 0 };
       let cold = 0;
+      let stale = 0;
+      let staleDays = 10;
       for (let p = 1; p <= pages; p++) {
         const res = await api.outreach.list({
           page: String(p),
           ...(statusFilter !== 'ALL' ? { status: statusFilter } : {}),
           ...(query ? { search: query } : {}),
+          ...(missingOnly ? { missingNextStep: 'true' } : {}),
         });
         if (!res.success) break;
         rows.push(...(res.entries as OutreachItem[]));
@@ -284,6 +325,8 @@ export default function OutreachPage() {
         // what you would get by pressing it rather than what you already have.
         counts = res.counts;
         cold = res.summary.cold;
+        stale = res.summary.stale ?? 0;
+        staleDays = res.staleDays ?? 10;
       }
       return {
         entries: rows,
@@ -293,14 +336,18 @@ export default function OutreachPage() {
         total: meta?.total ?? rows.length,
         counts,
         cold,
+        stale,
+        staleDays,
       };
     },
   });
 
   const entries: OutreachItem[] = data?.entries ?? [];
   const total = data?.total ?? 0;
-  const counts = data?.counts ?? { ALL: 0, NOT_CONTACTED: 0, FOLLOW_UP: 0, MEETING: 0, INTERESTED: 0, DEAD: 0 };
+  const counts: Record<string, number> = data?.counts ?? { ALL: 0, NOT_CONTACTED: 0, FOLLOW_UP: 0, MEETING: 0, INTERESTED: 0, DEAD: 0, MISSING_NEXT_STEP: 0 };
   const cold = data?.cold ?? 0;
+  const staleLeads = data?.stale ?? 0;
+  const leadStaleDays = data?.staleDays ?? 10;
   const loading = isPending;
   const loadingMore = isFetching && !isPending;
   const loadError = error instanceof Error ? error.message : error ? 'Could not load the outreach list' : null;
@@ -392,6 +439,7 @@ export default function OutreachPage() {
     setActionFor({ entry, status });
     setActionDate(entry.nextActionDate?.slice(0, 10) ?? '');
     setActionRemarks(entry.remarks ?? '');
+    setActionNextStep(entry.nextStep ?? '');
   };
 
   /** Saving the date and note the two action statuses require. */
@@ -403,6 +451,7 @@ export default function OutreachPage() {
         status: actionFor.status,
         nextActionDate: actionDate || null,
         remarks: actionRemarks.trim() || null,
+        nextStep: actionNextStep.trim() || null,
       });
       setActionFor(null);
       await load();
@@ -419,17 +468,8 @@ export default function OutreachPage() {
    * is never promoted stays visible in this list rather than disappearing —
    * the button on that row is the reminder.
    */
-  const markInterested = async (entry: OutreachItem) => {
-    setMarkingReplied(entry.id);
-    try {
-      await api.outreach.updateStatus(entry.id, { status: 'INTERESTED' });
-      await load();
-    } catch (e) {
-      setActionError(e instanceof Error ? e.message : 'Could not update that row');
-    } finally {
-      setMarkingReplied(null);
-    }
-  };
+  // Interested is worked, so it carries a next step — the form asks for it.
+  const markInterested = (entry: OutreachItem) => openAction(entry, 'INTERESTED');
 
   const openPromote = (entry: OutreachItem) => {
     setPromotingEntry(entry);
@@ -532,7 +572,7 @@ export default function OutreachPage() {
 
   // `total` follows the filters, so unqualified it would read "1 of 1 shown"
   // while six other names sit behind a chip.
-  const filtered = Boolean(query) || statusFilter !== 'ALL';
+  const filtered = Boolean(query) || statusFilter !== 'ALL' || missingOnly;
   usePageHeader(
     'Outreach list',
     filtered ? `${shown.length} of ${total} matching · ${cold} in all` : `${shown.length} of ${total} shown`,
@@ -572,6 +612,11 @@ export default function OutreachPage() {
         <p className="text-sm text-secondary">
           {cold} scraped names nobody has <span className="italic">spoken</span> to. A <span className="text-primary font-medium">reply</span>, then a promote, turns a row into a Company — and only then does it appear <span className="italic">anywhere else</span> in the system.
         </p>
+        {staleLeads > 0 && (
+          <p className="mt-1 text-sm text-warning-ink">
+            {plural(staleLeads, 'lead')} in follow-up, meeting or interested {staleLeads === 1 ? 'has' : 'have'} had no contact in over {leadStaleDays} days.
+          </p>
+        )}
       </div>
 
       {/* Table section */}
@@ -599,10 +644,34 @@ export default function OutreachPage() {
               </button>
             )}
           </div>
+          {/* The leads being worked with nothing planned — the list's to-do. */}
+          <button
+            type="button"
+            aria-pressed={missingOnly}
+            onClick={() => narrow(() => setMissingOnly((v) => !v))}
+            className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+              missingOnly ? 'border-warning/50 bg-warning-tint text-warning-ink' : 'border-border text-secondary hover:bg-subtle'
+            }`}
+          >
+            Missing next step{counts.MISSING_NEXT_STEP ? ` · ${counts.MISSING_NEXT_STEP}` : ''}
+          </button>
           <Button variant="secondary" size="sm" icon={Upload} onClick={() => setImportOpen(true)}>
             Import CSV
           </Button>
         </div>
+        {picked.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-subtle/60 px-5 py-2.5">
+            <p className="text-sm text-body">{plural(picked.length, 'lead')} selected</p>
+            <div className="flex gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setPicked([])}>
+                Clear
+              </Button>
+              <Button variant="secondary" size="sm" icon={History} onClick={() => setLastContactIds(picked)}>
+                Set last contact date
+              </Button>
+            </div>
+          </div>
+        )}
         {/*
           The status filter, which only narrows — it is not the dropdown on
           each row, which edits. Same underline row the client list and Money
@@ -613,6 +682,14 @@ export default function OutreachPage() {
         <table className="w-full data-table">
           <thead>
             <tr className="border-b border-border bg-subtle/50">
+              <th className="w-8">
+                <input
+                  type="checkbox"
+                  aria-label="Select every lead shown"
+                  checked={shown.length > 0 && picked.length === shown.length}
+                  onChange={(ev) => setPicked(ev.target.checked ? shown.map((x) => x.id) : [])}
+                />
+              </th>
               <th className="eyebrow text-left">Name</th>
               <th className="eyebrow text-left">Industry</th>
               <th className="eyebrow text-left">Source</th>
@@ -623,10 +700,10 @@ export default function OutreachPage() {
           </thead>
           <tbody className="divide-y divide-border">
             {loading ? (
-              <tr><td colSpan={6} className="px-5 py-12 text-center text-sm text-secondary">Loading...</td></tr>
+              <tr><td colSpan={7} className="px-5 py-12 text-center text-sm text-secondary">Loading...</td></tr>
             ) : shown.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-5 py-16 text-center text-sm text-secondary">
+                <td colSpan={7} className="px-5 py-16 text-center text-sm text-secondary">
                   {/*
                     "No entries found" was the answer to both "you have not
                     imported anything" and "nothing matches Prestige", which
@@ -637,7 +714,7 @@ export default function OutreachPage() {
                       Nothing matches that.{' '}
                       <button
                         type="button"
-                        onClick={() => narrow(() => { setSearch(''); setStatusFilter('ALL'); })}
+                        onClick={() => narrow(() => { setSearch(''); setStatusFilter('ALL'); setMissingOnly(false); })}
                         className="rounded-sm font-medium text-primary underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                       >
                         Clear the filters
@@ -651,6 +728,14 @@ export default function OutreachPage() {
               </tr>
             ) : shown.map(e => (
               <tr key={e.id} className="hover:bg-subtle transition-colors">
+                <td>
+                  <input
+                    type="checkbox"
+                    aria-label={`Select ${e.name}`}
+                    checked={picked.includes(e.id)}
+                    onChange={(ev) => setPicked((list) => (ev.target.checked ? [...list, e.id] : list.filter((x) => x !== e.id)))}
+                  />
+                </td>
                 <td className="font-semibold text-primary">
                   {e.name}
                   {/*
@@ -658,19 +743,31 @@ export default function OutreachPage() {
                     row, "who am I calling today" is a question you can only
                     answer by opening every lead one at a time.
                   */}
-                  {CARRIES_ACTION[e.status] && e.nextActionDate && (
+                  {CARRIES_ACTION[e.status] && e.nextActionDate && !e.noNextStep && (
                     <button
                       type="button"
                       onClick={() => openAction(e, e.status)}
-                      title={`Change when — ${e.name}`}
+                      title={`Change the next step — ${e.name}`}
                       className="mt-0.5 block text-left text-micro font-normal text-secondary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                     >
-                      {CARRIES_ACTION[e.status]?.dateLabel}{' '}
+                      {e.nextStep ? <span className="text-body">{e.nextStep}</span> : CARRIES_ACTION[e.status]?.dateLabel}{' '}
                       <span className={isOverdue(e.nextActionDate) ? 'font-semibold text-danger' : 'font-semibold text-primary'}>
+                        {e.nextStep ? '· ' : ''}
+                        {isOverdue(e.nextActionDate) ? 'was due ' : ''}
                         {formatDay(e.nextActionDate)}
                       </span>
                       {e.remarks && <span className="text-secondary"> · {e.remarks}</span>}
                     </button>
+                  )}
+                  {e.noNextStep && (
+                    <NextStepLine missing className="mt-0.5 block" onClick={() => openAction(e, e.status)} />
+                  )}
+                  {/* The last real contact — and a lead past the threshold says so. */}
+                  {CARRIES_ACTION[e.status] && e.daysSinceTouch !== undefined && (
+                    <div className={`mt-0.5 text-micro font-normal ${e.stale ? 'font-semibold text-warning-ink' : 'text-secondary'}`}>
+                      {e.lastTouchedAt ? `Last contact ${e.daysSinceTouch}d ago` : `No contact recorded · added ${e.daysSinceTouch}d ago`}
+                      {e.stale ? ' — going stale' : ''}
+                    </div>
                   )}
                   {/* A lead with no way to reach it predates the rule that
                       there must be one. Saying so is how the backlog gets
@@ -715,6 +812,19 @@ export default function OutreachPage() {
                         Mark interested
                       </Button>
                     )}
+                    {CARRIES_ACTION[e.status] && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        icon={MessageSquarePlus}
+                        onClick={() =>
+                          setTouching({ kind: 'LEAD', id: e.id, name: e.name, nextStep: e.nextStep, nextStepDate: e.nextActionDate?.slice(0, 10) })
+                        }
+                        className="whitespace-nowrap"
+                      >
+                        Log touch
+                      </Button>
+                    )}
                     <RowMenu
                       label={`Actions for ${e.name}`}
                       actions={[
@@ -722,10 +832,21 @@ export default function OutreachPage() {
                           // Discoverable, and reachable by keyboard and on
                           // mobile — the date on the row is the quick way, but
                           // it is small and not everybody will find it.
-                          label: e.status === 'MEETING' ? 'Reschedule meeting' : 'Change callback date',
+                          label: e.status === 'MEETING' ? 'Reschedule meeting' : 'Change next step',
                           icon: CalendarClock,
                           onSelect: () => openAction(e, e.status),
                           visible: Boolean(CARRIES_ACTION[e.status]),
+                        },
+                        {
+                          label: 'Log touch',
+                          icon: MessageSquarePlus,
+                          onSelect: () =>
+                            setTouching({ kind: 'LEAD', id: e.id, name: e.name, nextStep: e.nextStep, nextStepDate: e.nextActionDate?.slice(0, 10) }),
+                        },
+                        {
+                          label: 'Set last contact date',
+                          icon: History,
+                          onSelect: () => setLastContactIds([e.id]),
                         },
                         { label: 'Edit details', icon: Pencil, onSelect: () => openEdit(e) },
                         {
@@ -853,12 +974,22 @@ export default function OutreachPage() {
         }
       >
         <ModalBody>
+          {/* What happens next, and by when — every lead being worked carries both. */}
+          <Field
+            label="Next step"
+            value={actionNextStep}
+            onChange={setActionNextStep}
+            required
+            placeholder={actionFor?.status === 'MEETING' ? 'e.g. Pitch the retainer at their office' : 'e.g. Call back with the revised quote'}
+          />
           <Field
             label={actionFor ? (CARRIES_ACTION[actionFor.status]?.dateLabel ?? 'Date') : 'Date'}
             type="date"
+            min={today}
             value={actionDate}
             onChange={setActionDate}
             required
+            error={actionDate && actionDate < today ? "Can't be in the past" : undefined}
           />
           <Field
             label="Remarks"
@@ -880,6 +1011,8 @@ export default function OutreachPage() {
             loading={savingAction}
             disabled={
               !actionDate ||
+              actionDate < today ||
+              !actionNextStep.trim() ||
               (actionFor ? Boolean(CARRIES_ACTION[actionFor.status]?.remarksRequired) && !actionRemarks.trim() : true)
             }
             onClick={() => void saveAction()}
@@ -960,6 +1093,12 @@ export default function OutreachPage() {
             options={personOptions(team)}
             placeholder="Unassigned"
           />
+          {editActive && (
+            <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_11rem]">
+              <Field label="Next step" value={editNextStep} onChange={setEditNextStep} required placeholder="What happens next" />
+              <Field label="By" type="date" min={today} value={editNextDate} onChange={setEditNextDate} required />
+            </div>
+          )}
 
           {/*
             The trail. `remarks` on the row is only ever the LATEST note — a
@@ -978,7 +1117,13 @@ export default function OutreachPage() {
                       {new Date(h.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} ·{' '}
                     </span>
                     <span className="font-semibold text-primary">
-                      {h.payload?.from === h.payload?.to
+                      {h.verb === 'touch_logged'
+                        ? `${({ CALL: 'Call', WHATSAPP: 'WhatsApp', EMAIL: 'Email', MEETING: 'Meeting', OTHER: 'Touch' } as Record<string, string>)[h.payload?.channel] ?? 'Touch'} logged`
+                        : h.verb === 'last_contact_set'
+                          ? `Last contact set to ${h.payload?.to ?? '—'}`
+                          : h.verb !== 'outreach_status_changed'
+                            ? 'Edited'
+                            : h.payload?.from === h.payload?.to
                         ? /* Same status, new date — a reschedule, not a move. */
                           `${STATUS_LABEL[h.payload?.to as OutreachStatus] ?? h.payload?.to} rescheduled`
                         : `${STATUS_LABEL[h.payload?.from as OutreachStatus] ?? h.payload?.from} → ${
@@ -990,6 +1135,13 @@ export default function OutreachPage() {
                     )}
                     {h.actor?.name && <span className="text-secondary"> by {h.actor.name}</span>}
                     {h.payload?.remarks && <div className="mt-0.5 text-secondary">{h.payload.remarks}</div>}
+                    {h.payload?.note && <div className="mt-0.5 text-secondary">{h.payload.note}</div>}
+                    {h.payload?.nextStep && (
+                      <div className="mt-0.5 text-secondary">
+                        Next: {h.payload.nextStep}
+                        {h.payload.nextStepDate || h.payload.nextActionDate ? ` · ${stepDate(h.payload.nextStepDate ?? h.payload.nextActionDate)}` : ''}
+                      </div>
+                    )}
                   </li>
                 ))}
               </ol>
@@ -998,11 +1150,41 @@ export default function OutreachPage() {
         </ModalBody>
         <ModalFooter>
           <Button variant="ghost" onClick={() => setEditing(null)}>Cancel</Button>
-          <Button variant="primary" loading={savingEdit} disabled={!editName.trim()} onClick={() => void saveEdit()}>
+          <Button
+            variant="primary"
+            loading={savingEdit}
+            disabled={!editName.trim() || (editActive && (!editNextStep.trim() || !editNextDate))}
+            onClick={() => void saveEdit()}
+          >
             Save changes
           </Button>
         </ModalFooter>
       </Modal>
+
+      {touching && (
+        <LogTouchModal
+          target={touching}
+          onClose={() => setTouching(null)}
+          onDone={() => {
+            setTouching(null);
+            void load();
+          }}
+        />
+      )}
+
+      {lastContactIds && (
+        <LastContactModal
+          kind="LEAD"
+          ids={lastContactIds}
+          label={lastContactIds.length === 1 ? (shown.find((x) => x.id === lastContactIds[0])?.name ?? 'This lead') : plural(lastContactIds.length, 'lead')}
+          onClose={() => setLastContactIds(null)}
+          onDone={() => {
+            setLastContactIds(null);
+            setPicked([]);
+            void load();
+          }}
+        />
+      )}
 
       {importOpen && (
         <ImportOutreachModal

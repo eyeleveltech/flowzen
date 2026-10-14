@@ -52,6 +52,7 @@ import { withDueTime } from '@/lib/due-time';
 import { DueTimeField } from '@/components/work/DueTimeField';
 import { Repeat as RepeatIcon } from 'lucide-react';
 import { isRepeating, repeatOptions, repeatRuleLabel, REPEAT_HINT, type TaskRepeatInfo } from '@/lib/repeat';
+import { WorkingOnNowControl } from '@/components/work/WorkingOnNow';
 
 export type DrawerTask = {
   id: string;
@@ -431,6 +432,15 @@ export function TaskDrawer({
                   ariaLabel="Status"
                   disabled={busy}
                   className="mt-1.5 w-full"
+                />
+                {/* Their own open task: "Working on this now", or the Now badge and Clear. */}
+                <WorkingOnNowControl
+                  task={task}
+                  onStarted={(status) => {
+                    // To do moves to In progress — shown at once, then the screen refetches.
+                    if (status !== task.status) setSaved((s) => ({ ...(s ?? {}), status }));
+                    onChanged();
+                  }}
                 />
               </div>
 

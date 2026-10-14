@@ -22,7 +22,9 @@ import { ErrorNote, Note } from '@/components/ui/empty-state';
 // phone and email are new, and one of them is now REQUIRED — a lead nobody can
 // reach is a note, not a lead. A file carrying only names will report every row
 // as invalid in the dry run, which is the readable version of that rule.
-const RECOGNISED = 'name, vertical, source, contact person, phone, email';
+// "Last contacted" (optional): the real date of the last contact — 14/09/2026 or
+// 2026-09-14 — so an import does not count every lead as touched today.
+const RECOGNISED = 'name, vertical, source, contact person, phone, email, last contacted';
 
 export function ImportOutreachModal({
   onClose,
@@ -79,8 +81,9 @@ export function ImportOutreachModal({
             <span className="block text-sm font-medium text-primary">
               {fileName || 'Choose a CSV file'}
             </span>
-            <span className="block truncate text-xs text-secondary">
-              First row is the header. Recognised columns: {RECOGNISED}.
+            <span className="block text-xs text-secondary">
+              First row is the header. Recognised columns: {RECOGNISED}. Last contacted is optional: a date such as
+              14/09/2026, not in the future.
             </span>
           </span>
           <input

@@ -94,6 +94,10 @@ configRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction
         aiModel: org.aiModel,
         aiBaseUrl: org.aiBaseUrl,
 
+        /** When a deal or a lead counts as going stale, in days since its last touch. */
+        dealStaleDays: org.dealStaleDays,
+        outreachStaleDays: org.outreachStaleDays,
+
         stageProbabilities: {
           PROPOSAL_SENT: org.stageProbProposalSent,
           IN_NEGOTIATION: org.stageProbInNegotiation,
@@ -278,6 +282,9 @@ const orgUpdateSchema = z.object({
   stageProbInNegotiation: z.number().int().min(0).max(100).optional(),
   stageProbProformaIssued: z.number().int().min(0).max(100).optional(),
   stageProbVerbalYes: z.number().int().min(0).max(100).optional(),
+  // "Going stale": days since the last touch. A deal sits longer than a cold lead.
+  dealStaleDays: z.number().int().min(1, 'At least 1 day').max(365, '365 days at most').optional(),
+  outreachStaleDays: z.number().int().min(1, 'At least 1 day').max(365, '365 days at most').optional(),
 });
 
 configRouter.patch('/', requirePermission('setup.admin'), async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -345,6 +352,8 @@ configRouter.patch('/', requirePermission('setup.admin'), async (req: AuthReques
         ...(data.stageProbInNegotiation !== undefined ? { stageProbInNegotiation: data.stageProbInNegotiation } : {}),
         ...(data.stageProbProformaIssued !== undefined ? { stageProbProformaIssued: data.stageProbProformaIssued } : {}),
         ...(data.stageProbVerbalYes !== undefined ? { stageProbVerbalYes: data.stageProbVerbalYes } : {}),
+        ...(data.dealStaleDays !== undefined ? { dealStaleDays: data.dealStaleDays } : {}),
+        ...(data.outreachStaleDays !== undefined ? { outreachStaleDays: data.outreachStaleDays } : {}),
       },
     });
 

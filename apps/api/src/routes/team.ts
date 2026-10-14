@@ -8,6 +8,7 @@ import { composeApprovalsReport } from '../services/approvalsReport.js';
 import { toCsv } from '../utils/csv.js';
 import { sendCsv } from '../utils/csvResponse.js';
 import { teamScope, peopleInScope } from '../services/teamScope.js';
+import { BOARD_PERSON_SELECT, composeTeamBoard } from '../services/teamBoard.js';
 
 export const teamRouter = Router();
 
@@ -224,6 +225,35 @@ teamRouter.get('/approvals-report', requirePermission('work.team'), async (req: 
     const from = new Date(to.getTime() - days * 24 * 60 * 60 * 1000);
     const report = await composeApprovalsReport(req.user!.organizationId, { from, to }, to);
     res.json({ success: true, ...report, period: { ...report.period, days } });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── Board ───────────────────────────────────────────────────────────────────
+//
+// Team → Board (Team plan 1): one row per person — what they said they are on
+// now, what is next on their own list, and plain counts — with "Needs
+// attention" above it. Heads see the departments they lead; Management sees
+// everybody, and either can narrow it to one department. See
+// services/teamBoard.ts. Declared before `/:id` for the same reason as above.
+
+teamRouter.get('/board', requirePermission('work.team'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const { departmentId } = req.query;
+    // By id, as on the Team tab; NONE is the people nobody has placed yet.
+    const where: Record<string, unknown> = { organizationId: orgId, active: true };
+    if (typeof departmentId === 'string' && departmentId && departmentId !== 'ALL') {
+      where.departmentId = departmentId === 'NONE' ? null : departmentId;
+    }
+    const people = await prisma.user.findMany({
+      where: await peopleInScope(req.user!, where),
+      // The departments' own order, then by name — never by any of the counts.
+      orderBy: [{ department: { sortOrder: 'asc' } }, { department: { name: 'asc' } }, { name: 'asc' }],
+      select: BOARD_PERSON_SELECT,
+    });
+    res.json({ success: true, ...(await composeTeamBoard(orgId, people)) });
   } catch (error) {
     next(error);
   }

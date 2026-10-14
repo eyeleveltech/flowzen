@@ -4,6 +4,8 @@ import { ZEN_LOOKUPS, isZenLookup, runZenLookup } from './zenLookups.js';
 import { repeatLabel } from './taskRepeat.js';
 import { companyLink, rawLinkFor, retainerMonthLink, taskLink } from '../utils/recordLink.js';
 import { proposalProbability, STAGE_PROBABILITY_SELECT } from '../utils/stageProbability.js';
+import { dealStaleness, nextStepState, studioToday } from './salesFollowUp.js';
+import { BOARD_PERSON_SELECT, composeTeamBoard } from './teamBoard.js';
 
 /**
  * What Zen may look up, and how.
@@ -111,14 +113,17 @@ export const ZEN_TOOLS = [
   {
     name: 'getPipeline',
     description:
-      'Open proposals: client, kind, stage, value, how likely and how long it has sat. Use for "what is pending", "which deals have gone quiet".',
+      'Open proposals: client, kind, stage, value, how likely, the next step and its date, the last touch (last real contact), and whether it has gone stale. Use for "what is pending", "which deals have gone quiet", "which deals have no next step", "what is overdue".',
     parameters: {
       type: 'object',
       properties: {
         stage: {
           type: 'string',
-          enum: ['PROPOSAL_SENT', 'IN_NEGOTIATION', 'PROFORMA_ISSUED', 'VERBAL_YES'],
+          enum: ['PROSPECT', 'PROPOSAL_SENT', 'IN_NEGOTIATION', 'PROFORMA_ISSUED', 'VERBAL_YES'],
         },
+        missingNextStep: { type: 'boolean', description: 'Only open deals with no next step or no next step date.' },
+        stale: { type: 'boolean', description: "Only deals whose last touch is past the org's going-stale threshold." },
+        overdue: { type: 'boolean', description: 'Only deals whose next step date has passed.' },
         limit: { type: 'number' },
       },
     },
@@ -151,7 +156,7 @@ export const ZEN_TOOLS = [
   {
     name: 'getTeamLoad',
     description:
-      'How much each department is carrying in a month: open, late and done task counts, by department. Never names people or includes pay.',
+      'How much each department is carrying in a month: open, late and done task counts, by department. Also each person\'s "Now" (the task they said they are working on, or null) and "Next up" (the top of their own My Work list). Use for "who is on what", "what is Ravi working on". Never includes pay.',
     parameters: {
       type: 'object',
       properties: { month: { type: 'string', description: 'As 2026-09.' } },
@@ -416,39 +421,69 @@ export async function runZenTool(
     case 'getPipeline': {
       // The organisation's own stage weights and each deal's override — the
       // same figure the Pipeline board shows, not a fixed copy of the defaults.
-      const org = await prisma.organization.findUnique({ where: { id: organizationId }, select: STAGE_PROBABILITY_SELECT });
+      const org = await prisma.organization.findUnique({
+        where: { id: organizationId },
+        select: { ...STAGE_PROBABILITY_SELECT, dealStaleDays: true },
+      });
+      const staleDays = org?.dealStaleDays ?? 25;
+      const today = await studioToday(organizationId);
       const rows = await prisma.proposal.findMany({
         where: {
           organizationId,
           deletedAt: null,
+          outcome: null,
           stage: args.stage
             ? (String(args.stage) as never)
             : ({ notIn: ['WON', 'LOST', 'EXPIRED'] } as never),
         },
         select: {
+          id: true,
           kind: true,
           stage: true,
+          outcome: true,
           probabilityOverride: true,
-          updatedAt: true,
+          wonAt: true,
+          verbalYesAt: true,
+          createdAt: true,
+          nextStep: true,
+          nextStepDate: true,
+          lastTouchedAt: true,
           companyId: true,
           company: { select: { name: true } },
           owner: { select: { name: true } },
-          versions: { orderBy: { n: 'desc' }, take: 1, select: { value: true, scopeSummary: true } },
+          versions: { orderBy: { n: 'desc' }, select: { value: true, scopeSummary: true, sentAt: true } },
         },
         orderBy: { updatedAt: 'asc' },
-        take: limited(args.limit),
+        take: 500,
       });
-      return rows.map((p) => ({
-        client: p.company?.name ?? null,
-        kind: p.kind,
-        stage: p.stage,
-        value: money(p.versions[0]?.value),
-        scope: p.versions[0]?.scopeSummary ?? null,
-        probability: proposalProbability(p, org),
-        owner: p.owner?.name ?? null,
-        daysSinceItMoved: Math.max(0, Math.ceil((Date.now() - p.updatedAt.getTime()) / 86_400_000)),
-        link: companyLink(p.companyId, 'PROPOSALS'),
-      }));
+      const deals = rows
+        .map((p) => {
+          // The same last touch, staleness and next step the board shows.
+          const touch = dealStaleness(p, staleDays, today);
+          const step = nextStepState({ nextStep: p.nextStep, date: p.nextStepDate }, true, today);
+          return {
+            client: p.company?.name ?? null,
+            kind: p.kind,
+            stage: p.stage,
+            value: money(p.versions[0]?.value),
+            scope: p.versions[0]?.scopeSummary ?? null,
+            probability: proposalProbability(p, org),
+            owner: p.owner?.name ?? null,
+            nextStep: p.nextStep,
+            nextStepDate: day(p.nextStepDate),
+            noNextStep: step.missing,
+            nextStepOverdue: step.overdue,
+            lastTouched: day(touch.lastTouchAt),
+            lastTouchRecorded: touch.touchRecorded,
+            daysSinceTouch: touch.daysSinceTouch,
+            stale: touch.stale,
+            link: companyLink(p.companyId, 'PROPOSALS'),
+          };
+        })
+        .filter((d) => (args.missingNextStep ? d.noNextStep : true))
+        .filter((d) => (args.stale ? d.stale : true))
+        .filter((d) => (args.overdue ? d.nextStepOverdue : true));
+      return { staleAfterDays: staleDays, matching: deals.length, deals: deals.slice(0, limited(args.limit)) };
     }
 
     case 'getInvoices': {
@@ -557,11 +592,30 @@ export async function runZenTool(
         }
       }
       const order = [...departments.map((d) => d.id), ''];
+      // What each person said they are on now, and what is next on their own
+      // list — the Team screen's Board, for everybody. Now is what they said,
+      // so it carries no time.
+      const people = await prisma.user.findMany({
+        where: { organizationId, active: true },
+        orderBy: [{ department: { sortOrder: 'asc' } }, { name: 'asc' }],
+        select: BOARD_PERSON_SELECT,
+      });
+      const board = await composeTeamBoard(organizationId, people);
+      const titleOf = (id: string | null) => (id ? (board.tasks[id]?.title ?? null) : null);
       return {
         month,
         departments: [...by.entries()]
           .sort(([a], [b]) => order.indexOf(a) - order.indexOf(b))
           .map(([id, v]) => ({ department: departments.find((d) => d.id === id)?.name ?? 'No department', ...v, link: '/members' })),
+        people: board.people.map((p) => ({
+          name: p.name,
+          department: p.department ?? 'No department',
+          now: titleOf(p.nowTaskId),
+          nowLink: p.nowTaskId ? taskLink(p.nowTaskId) : null,
+          nextUp: titleOf(p.nextUpTaskId),
+          nextUpLink: p.nextUpTaskId ? taskLink(p.nextUpTaskId) : null,
+        })),
+        boardLink: '/members?tab=board',
       };
     }
 

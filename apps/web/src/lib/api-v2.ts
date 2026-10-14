@@ -308,6 +308,9 @@ export interface OrgConfig {
     fiscalYearStart: number;
     /** §14, and what the board's column headers print. WON is always 100. */
     stageProbabilities?: Record<string, number>;
+    /** Days since the last touch before a deal, or an active lead, counts as going stale. */
+    dealStaleDays?: number;
+    outreachStaleDays?: number;
     /**
      * Whether an AI key is on file — never the key itself.
      *
@@ -1774,9 +1777,10 @@ export const api = {
         success: boolean;
         entries: any[];
         /** Per status, following the search but NOT the status filter, so a chip says how many you would get by clicking it. */
-        counts: { ALL: number; NOT_CONTACTED: number; FOLLOW_UP: number; MEETING: number; INTERESTED: number; DEAD: number };
-        /** Follows no filter — how many cold names exist at all. */
-        summary: { cold: number };
+        counts: { ALL: number; NOT_CONTACTED: number; FOLLOW_UP: number; MEETING: number; INTERESTED: number; DEAD: number; MISSING_NEXT_STEP?: number };
+        /** `cold` follows no filter — how many cold names exist at all. `stale`: active leads past the threshold. */
+        summary: { cold: number; stale?: number };
+        staleDays?: number;
         meta: { total: number };
       }>(`/outreach?${new URLSearchParams(params)}`),
     create: (body: Record<string, unknown>) =>
@@ -1806,8 +1810,15 @@ export const api = {
      * This never creates a Company — that is `promote` below, a separate
      * deliberate step, and only from INTERESTED.
      */
-    updateStatus: (id: string, body: { status: string; remarks?: string | null; nextActionDate?: string | null }) =>
-      patch<{ success: boolean; entry: any }>(`/outreach/${id}/status`, body),
+    updateStatus: (
+      id: string,
+      body: { status: string; remarks?: string | null; nextActionDate?: string | null; nextStep?: string | null },
+    ) => patch<{ success: boolean; entry: any }>(`/outreach/${id}/status`, body),
+    touch: (id: string, body: TouchBody) => post<{ success: boolean; entry: any }>(`/outreach/${id}/touch`, body),
+    setLastContact: (id: string, lastTouchedAt: string) =>
+      patch<{ success: boolean; updated: number }>(`/outreach/${id}/last-contact`, { lastTouchedAt }),
+    bulkLastContact: (ids: string[], lastTouchedAt: string) =>
+      post<{ success: boolean; updated: number }>('/outreach/last-contact', { ids, lastTouchedAt }),
     promote: (id: string, body: Record<string, unknown> = {}) =>
       post<{ success: boolean; company: any; entry: any }>(`/outreach/${id}/promote`, body),
     import: (body: { csv?: string; dryRun?: boolean; force?: boolean }) =>
@@ -1816,7 +1827,14 @@ export const api = {
 
   pipeline: {
     getBoard: () =>
-      get<{ success: boolean; stages: string[]; columns: Record<string, any[]> }>('/proposals/pipeline'),
+      get<{
+        success: boolean;
+        stages: string[];
+        columns: Record<string, any[]>;
+        /** Open deals whose last touch is more than `staleDays` ago. */
+        staleCount?: number;
+        staleDays?: number;
+      }>('/proposals/pipeline'),
     funnel: () =>
       get<{
         success: boolean;
@@ -1832,8 +1850,16 @@ export const api = {
       post<{ success: boolean; proposal: any; version: any }>('/proposals', body),
     addVersion: (id: string, body: Record<string, unknown>) =>
       post<{ success: boolean; version: any }>(`/proposals/${id}/versions`, body),
-    updateStage: (id: string, stage: string) =>
-      patch<{ success: boolean; proposal: any }>(`/proposals/${id}/stage`, { stage }),
+    /** The one manual flag, Verbal yes. The deal stays open, so it carries its next step. */
+    updateStage: (id: string, stage: string, step: NextStepBody = {}) =>
+      patch<{ success: boolean; proposal: any }>(`/proposals/${id}/stage`, { stage, ...step }),
+    /** A call, WhatsApp, email or meeting: moves the last touch to now and sets the next step. */
+    touch: (id: string, body: TouchBody) => post<{ success: boolean; proposal: any }>(`/proposals/${id}/touch`, body),
+    /** Corrects the record — a date, not in the future. Needs no next step. */
+    setLastContact: (id: string, lastTouchedAt: string) =>
+      patch<{ success: boolean; updated: number }>(`/proposals/${id}/last-contact`, { lastTouchedAt }),
+    bulkLastContact: (ids: string[], lastTouchedAt: string) =>
+      post<{ success: boolean; updated: number }>('/proposals/last-contact', { ids, lastTouchedAt }),
     /** null clears the override, reverting to the stage-derived default. */
     setProbability: (id: string, probabilityOverride: number | null) =>
       patch<{ success: boolean; proposal: any }>(`/proposals/${id}/probability`, { probabilityOverride }),
@@ -1857,6 +1883,8 @@ export const api = {
         scopeSummary?: string;
         fileUrl?: string | null;
         sentAt?: string;
+        nextStep?: string | null;
+        nextStepDate?: string | null;
       },
     ) =>
       patch<{ success: boolean; proposal: any }>(`/proposals/${id}`, body),
@@ -1867,6 +1895,11 @@ export const api = {
     remove: (id: string) => del<{ success: boolean }>(`/proposals/${id}`),
     restore: (id: string) => post<{ success: boolean }>(`/proposals/${id}/restore`),
     trash: () => get<{ success: boolean; proposals: any[] }>('/proposals/trash'),
+  },
+
+  /** My Work's Follow-ups: my deals and leads with a next step due today, overdue, or tomorrow. */
+  followUps: {
+    list: () => getFull<{ success: boolean; today: string; items: FollowUpItem[] }>('/follow-ups'),
   },
 
   proformas: {
@@ -1987,6 +2020,12 @@ export const api = {
       post<{ success: boolean; task: any }>(`/tasks/${id}/wait`, { waitingOn }),
     resume: (id: string) =>
       post<{ success: boolean; task: any }>(`/tasks/${id}/resume`),
+    /**
+     * "Working on this now" — one of the caller's own open tasks becomes their
+     * one current task, replacing any other. A To do task moves to In progress.
+     * Clearing it is `me.clearFocus`.
+     */
+    focus: (id: string) => post<{ success: boolean; focus: MyFocus }>(`/tasks/${id}/focus`),
     /** Send a task for approval: opens the next round and moves it to In review. */
     submitReview: (id: string, body: { link?: string; note?: string }) =>
       post<{ success: boolean; status: string; review: TaskReviewRound }>(`/tasks/${id}/submit-review`, body),
@@ -2190,7 +2229,19 @@ export const api = {
     restore: (id: string) => post<{ success: boolean }>(`/costs/${id}/restore`),
   },
 
+  /** The caller's own things — for now, what they said they are working on. */
+  me: {
+    /** What I said I am working on now, or null. */
+    focus: () => get<{ success: boolean; focus: MyFocus | null }>('/me/focus'),
+    clearFocus: () => del<{ success: boolean }>('/me/focus'),
+  },
+
   team: {
+    /**
+     * Team → Board: one row per person — Now, Next up, plain counts — and
+     * "Needs attention". A Head gets the departments they lead.
+     */
+    board: (params: Record<string, string> = {}) => get<TeamBoard>(`/team/board?${new URLSearchParams(params)}`),
     /** The Approvals tab: the last 7 or 30 days, and what is waiting right now. */
     approvalsReport: (days: 7 | 30) => get<ApprovalsReport>(`/team/approvals-report?days=${days}`),
     capacity: (params: Record<string, string> = {}) =>
@@ -2728,6 +2779,54 @@ export type DepartmentPerson = { id: string; name: string; designation: string |
  * Whose people the caller manages (Departments Plan 3). `all` for Management,
  * for anybody without Team work, and for a Head who leads no department yet.
  */
+/** The task a person said they are working on now. No time goes with it. */
+export type MyFocus = { id: string; title: string; status: string };
+
+/** The counts on a Board row — each a list of task ids, so a count opens its tasks. */
+export type TeamBoardList = 'open' | 'dueThisWeek' | 'overdue' | 'waiting' | 'inReview' | 'doneThisWeek';
+
+export type TeamBoardReason = 'OVERDUE' | 'WAITING_LONG' | 'REVIEW_LONG' | 'URGENT_NOT_STARTED';
+
+export type TeamBoard = {
+  success: boolean;
+  /** The studio's today, and this week Monday to Sunday — "2026-10-14". */
+  today: string;
+  week: { from: string; to: string };
+  people: {
+    id: string;
+    name: string;
+    designation: string | null;
+    departmentId: string | null;
+    department: string | null;
+    nowTaskId: string | null;
+    nextUpTaskId: string | null;
+    lists: Record<TeamBoardList, string[]>;
+  }[];
+  /** Every task any row points at, ready for the task drawer. */
+  tasks: Record<
+    string,
+    {
+      id: string;
+      title: string;
+      status: string;
+      priority: string;
+      dueDate: string;
+      dueTime?: string | null;
+      waitingOn?: 'CLIENT' | 'ANOTHER_PERSON' | null;
+      waitingSince?: string | null;
+      completedAt?: string | null;
+      clientName: string;
+      projectName: string | null;
+      monthCardMonth: string | null;
+      assignees: { id: string; name: string; designation: string | null }[];
+      lastReview?: LastReview | null;
+      overdue: boolean;
+      [key: string]: unknown;
+    }
+  >;
+  attention: { taskId: string; reasons: TeamBoardReason[] }[];
+};
+
 export type TeamScope =
   | { all: true }
   | { all: false; departments: { id: string; name: string; peopleCount: number }[] };
@@ -2886,6 +2985,28 @@ export const formatMoney = (
     maximumFractionDigits: 0,
   }).format(Number(amount));
 };
+
+/** What a stage change on an open deal carries: what happens next, and by when. */
+export type NextStepBody = { nextStep?: string | null; nextStepDate?: string | null };
+
+/** A logged touch: how, what was said, and the next step. */
+export type TouchBody = {
+  channel: 'CALL' | 'WHATSAPP' | 'EMAIL' | 'MEETING' | 'OTHER';
+  note: string;
+  nextStep: string;
+  nextStepDate: string;
+};
+
+export interface FollowUpItem {
+  kind: 'DEAL' | 'LEAD';
+  id: string;
+  name: string;
+  nextStep: string | null;
+  date: string;
+  overdue: boolean;
+  dueToday: boolean;
+  link: string;
+}
 
 export interface PageMeta {
   page: number;

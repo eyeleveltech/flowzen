@@ -2,6 +2,7 @@ import { prisma } from '../lib/prisma.js';
 import type { AiTool } from './ai/types.js';
 import { composeApprovalsReport } from './approvalsReport.js';
 import { composeForecast } from './forecast.js';
+import { leadStaleness, nextStepState, studioToday } from './salesFollowUp.js';
 import { describe, resolveSubjects } from './activityLog.js';
 import { CHASER_RULES } from './alertRules.js';
 import { companyLink, rawLinkFor, retainerMonthLink, taskLink } from '../utils/recordLink.js';
@@ -150,7 +151,7 @@ export const ZEN_LOOKUPS = [
   {
     name: 'getOutreach',
     description:
-      'Outreach leads (cold names before they are companies): status, contact, owner, next follow-up date, and when they were last touched. Filter by status, owner, name, leads not touched for N days, or follow-ups now due.',
+      'Outreach leads (cold names before they are companies): status, contact, owner, the next step and its date, the last touch (last real contact), and whether it has gone stale. Filter by status, owner, name, leads not touched for N days, follow-ups now due, or active leads with no next step.',
     parameters: {
       type: 'object',
       properties: {
@@ -159,6 +160,7 @@ export const ZEN_LOOKUPS = [
         query: { type: 'string', description: 'Part of the lead name.' },
         notTouchedForDays: { type: 'number', description: 'Only leads with nothing recorded for at least this many days.' },
         followUpDue: { type: 'boolean', description: 'Only leads whose follow-up or meeting date has arrived or passed.' },
+        missingNextStep: { type: 'boolean', description: 'Only active leads (follow-up, meeting, interested) with no next step or no date.' },
         limit: { type: 'number' },
       },
     },
@@ -365,24 +367,28 @@ export async function runZenLookup(name: ZenLookupName, args: Record<string, unk
           source: true,
           remarks: true,
           nextActionDate: true,
+          nextStep: true,
+          lastTouchedAt: true,
           importedAt: true,
           owner: { select: { name: true } },
         },
         take: 500,
       });
-      const touched = leads.length
-        ? await prisma.activity.groupBy({
-            by: ['entityId'],
-            where: { organizationId, entityType: 'OutreachEntry', entityId: { in: leads.map((l) => l.id) } },
-            _max: { at: true },
-          })
-        : [];
-      const lastAt = new Map(touched.map((t) => [t.entityId, t._max.at]));
+      // The last touch the outreach list shows: a logged touch, a status
+      // change or a date set by hand — not any edit (Sales next step plan).
+      const org = await prisma.organization.findUnique({ where: { id: organizationId }, select: { outreachStaleDays: true } });
+      const staleDays = org?.outreachStaleDays ?? 10;
+      const studioDay = await studioToday(organizationId);
       const quiet = Number(args.notTouchedForDays) || 0;
       const rows = leads
         .map((l) => {
-          const last = lastAt.get(l.id) ?? l.importedAt;
+          const touch = leadStaleness(l, staleDays, studioDay);
+          const last = touch.lastTouchAt;
+          const step = nextStepState({ nextStep: l.nextStep, date: l.nextActionDate }, ['FOLLOW_UP', 'MEETING', 'INTERESTED'].includes(l.status), studioDay);
           return {
+            nextStep: l.nextStep,
+            noNextStep: step.missing,
+            stale: touch.stale,
             lead: l.name,
             contact: l.contactPersonName,
             industry: l.vertical,
@@ -399,6 +405,7 @@ export async function runZenLookup(name: ZenLookupName, args: Record<string, unk
         })
         .filter((r) => (quiet ? r.daysSinceTouched >= quiet : true))
         .filter((r) => (args.followUpDue ? r.followUpDue : true))
+        .filter((r) => (args.missingNextStep ? r.noNextStep : true))
         .sort((a, b) => b.daysSinceTouched - a.daysSinceTouched);
       return { matching: rows.length, leads: rows.slice(0, limited(args.limit)) };
     }

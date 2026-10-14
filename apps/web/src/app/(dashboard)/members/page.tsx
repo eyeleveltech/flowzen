@@ -27,6 +27,7 @@ import { useDepartments, useTeamScope } from '@/hooks/queries';
 import { TeamScopeLine } from '@/components/work/TeamScopeLine';
 import { Tabs, useTabState, type TabDef } from '@/components/ui/tabs';
 import { ApprovalsReport } from '@/components/work/ApprovalsReport';
+import { TeamBoard } from '@/components/work/TeamBoard';
 
 interface TeamMember {
   id: string;
@@ -81,13 +82,16 @@ export default function MembersPage() {
   const [openMemberId, setOpenMemberId] = useState<string | null>(null);
 
   /*
-   * Two views of the team. Team is the delivery table below, unchanged;
-   * Approvals is where approvals get stuck (Plan 3). `?tab=approvals` links
-   * straight to it. The whole screen already needs `work.team`, which is the
-   * report's own gate, so there is nothing further to hide.
+   * Three views of the team. Team is the delivery table below, unchanged;
+   * Board is what each person is on now, what is next and what needs
+   * attention (Team plan 1); Approvals is where approvals get stuck (Plan 3).
+   * `?tab=board` and `?tab=approvals` link straight to them. The whole screen
+   * already needs `work.team`, which is both tabs' own gate, so there is
+   * nothing further to hide.
    */
-  const tabs: TabDef<'team' | 'approvals'>[] = [
+  const tabs: TabDef<'team' | 'board' | 'approvals'>[] = [
     { key: 'team', label: 'Team' },
+    { key: 'board', label: 'Board' },
     { key: 'approvals', label: 'Approvals' },
   ];
   const [tab, setTab] = useTabState(tabs);
@@ -171,11 +175,36 @@ export default function MembersPage() {
    */
   usePageHeader('Team', tab === 'approvals' ? 'Approvals' : filterName);
 
+  /** By department — the Team and Board tabs share it, so switching keeps the choice. */
+  const deptSelect = filterOptions.length > 1 && (
+    <select
+      aria-label="Filter the team by department"
+      value={deptFilter}
+      onChange={e => setDeptFilter(e.target.value)}
+      className="border border-border rounded-lg px-3 py-1.5 text-sm text-body outline-none focus:border-primary bg-white"
+    >
+      <option value="ALL">All departments</option>
+      {filterOptions.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+    </select>
+  );
+
   return (
     <div className="page-shell">
       <Tabs className="mb-6" tabs={tabs} active={tab} onChange={setTab} />
 
       {tab === 'approvals' && <ApprovalsReport />}
+
+      {tab === 'board' && (
+        <TeamBoard
+          deptFilter={deptFilter}
+          header={
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <TeamScopeLine className="mr-auto" />
+              {deptSelect}
+            </div>
+          }
+        />
+      )}
 
       {tab === 'team' && (
       <>
@@ -218,17 +247,7 @@ export default function MembersPage() {
               </button>
             ))}
           </div>
-          {filterOptions.length > 1 && (
-            <select
-              aria-label="Filter the team by department"
-              value={deptFilter}
-              onChange={e => setDeptFilter(e.target.value)}
-              className="border border-border rounded-lg px-3 py-1.5 text-sm text-body outline-none focus:border-primary bg-white"
-            >
-              <option value="ALL">All departments</option>
-              {filterOptions.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
-          )}
+          {deptSelect}
           {/* By id, and encoded: "Video & Production" used to cut the link at the "&" and export nobody. */}
           <ExportCsvButton
             href={fileUrl(`/team/capacity?format=csv${deptFilter !== 'ALL' ? `&departmentId=${encodeURIComponent(deptFilter)}` : ''}`)}

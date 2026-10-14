@@ -14,7 +14,7 @@ import {
 } from "@hello-pangea/dnd";
 import { api, ApiError, formatMoney, fileUrl } from "@/lib/api-v2";
 import { Modal, ModalBody, ModalFooter } from "@/components/ui/modal";
-import { Plus, Trash2 } from "lucide-react";
+import { CalendarClock, ListChecks, MessageSquarePlus, Plus, Trash2 } from "lucide-react";
 import { RowMenu } from "@/components/ui/row-menu";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
@@ -31,6 +31,14 @@ import { NewProposalModal } from "@/components/clients/NewProposalModal";
 import { LoseProposalModal } from "@/components/clients/LoseProposalModal";
 import { NewRetainerModal } from "@/components/clients/NewRetainerModal";
 import { NewProjectModal } from "@/components/clients/NewProjectModal";
+import { NextStepLine } from "@/components/sales/NextStep";
+import {
+  LastContactModal,
+  LogTouchModal,
+  NextStepModal,
+  VerbalYesModal,
+  type SalesTarget,
+} from "@/components/sales/SalesDialogs";
 
 /*
  * The board starts where a number does.
@@ -82,6 +90,16 @@ interface PipelineCard {
    * out.
    */
   work?: { type: "RETAINER" | "PROJECT"; id: string; linked: boolean } | null;
+  /** What happens next, and by when (Sales next step plan). */
+  nextStep?: string | null;
+  nextStepDate?: string | null;
+  /** An open deal with no next step, or none dated. */
+  noNextStep?: boolean;
+  nextStepOverdue?: boolean;
+  /** Days since the last real contact — or, with none recorded, since it entered its stage. */
+  daysSinceTouch?: number;
+  /** Past the org's threshold since the last touch. */
+  stale?: boolean;
 }
 
 /**
@@ -223,6 +241,18 @@ export default function PipelinePage() {
     useState<PipelineCard | null>(null);
   const [raisingProformaFor, setRaisingProformaFor] =
     useState<PipelineCard | null>(null);
+  // Keeping a deal current: a touch, the next step, the real last contact.
+  const [touching, setTouching] = useState<SalesTarget | null>(null);
+  const [steppingCard, setSteppingCard] = useState<SalesTarget | null>(null);
+  const [lastContactFor, setLastContactFor] = useState<PipelineCard | null>(null);
+  const [verbalYesFor, setVerbalYesFor] = useState<PipelineCard | null>(null);
+  const salesTarget = (card: PipelineCard): SalesTarget => ({
+    kind: "DEAL",
+    id: card.id,
+    name: card.companyName,
+    nextStep: card.nextStep,
+    nextStepDate: card.nextStepDate,
+  });
 
   const { data: board, isPending } = useQuery({
     queryKey: ["pipeline", "board"],
@@ -274,9 +304,11 @@ export default function PipelinePage() {
       weighted: columns
         .filter((c) => c.stage !== "WON")
         .reduce((s, c) => s + c.weightedValue, 0),
-      goingStale: live.filter((c) => c.daysInStage > 25).length,
+      // Worked out on the server, from the last touch (Sales next step plan).
+      goingStale: board?.success ? (board.staleCount ?? 0) : 0,
+      staleDays: board?.success ? (board.staleDays ?? 25) : 25,
     };
-  }, [columns]);
+  }, [columns, board]);
 
   /** What the drag, override, version and proforma flows call after a change. */
   const load = useCallback(async () => {
@@ -360,25 +392,8 @@ export default function PipelinePage() {
     }
   };
 
-  const handleVerbalYes = async (card: PipelineCard) => {
-    const ok = await confirm({
-      title: "Flag verbal yes?",
-      message:
-        "The client has agreed verbally, before anything is signed. This is a manual flag only — winning still needs the actual win step.",
-      confirmText: "Flag it",
-      variant: "info",
-    });
-    if (!ok) return;
-    try {
-      await api.proposals.updateStage(card.id, "VERBAL_YES");
-      toast.success("Flagged verbal yes");
-      await load();
-    } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : "Could not flag verbal yes",
-      );
-    }
-  };
+  // Verbal yes leaves the deal open, so the dialog asks what happens next.
+  const handleVerbalYes = (card: PipelineCard) => setVerbalYesFor(card);
 
   const handleDragEnd = (result: DropResult) => {
     const { source, destination, draggableId } = result;
@@ -463,7 +478,8 @@ export default function PipelinePage() {
         <StatTile
           label="Going Stale"
           value={stats.goingStale}
-          note="over 25 days, no movement"
+          note={`no contact in over ${stats.staleDays} days`}
+          tone={stats.goingStale > 0 ? "warning" : undefined}
         />
       </StatRow>
 
@@ -616,11 +632,36 @@ export default function PipelinePage() {
                                   // Still stopped, so a click on the menu does
                                   // not start a drag of the card under it.
                                   onMouseDown={(e) => e.stopPropagation()}
+                                  // The menu renders in a portal, outside this
+                                  // card in the DOM — so the `closest` check
+                                  // above cannot see a click on one of its
+                                  // items, while React still bubbles that click
+                                  // up to the card, which opened the client page
+                                  // under the dialog the item had just opened.
+                                  onClick={(e) => e.stopPropagation()}
                                   className="-mr-1 -mt-0.5 shrink-0"
                                 >
                                   <RowMenu
                                     label={`Actions for ${card.companyName}`}
                                     actions={[
+                                      {
+                                        label: "Log touch",
+                                        icon: MessageSquarePlus,
+                                        visible: card.stage !== "WON" && card.stage !== "LOST",
+                                        onSelect: () => setTouching(salesTarget(card)),
+                                      },
+                                      {
+                                        label: "Set next step",
+                                        icon: ListChecks,
+                                        visible: card.stage !== "WON" && card.stage !== "LOST",
+                                        onSelect: () => setSteppingCard(salesTarget(card)),
+                                      },
+                                      {
+                                        label: "Set last contact date",
+                                        icon: CalendarClock,
+                                        visible: card.stage !== "WON" && card.stage !== "LOST",
+                                        onSelect: () => setLastContactFor(card),
+                                      },
                                       {
                                         label: "Delete proposal",
                                         icon: Trash2,
@@ -688,12 +729,31 @@ export default function PipelinePage() {
                                     {card.owner?.name?.split(" ")[0]}
                                   </span>
                                 </div>
-                                <span
-                                  className={`text-micro font-semibold ${card.daysInStage > 25 ? "text-warning-ink" : "text-secondary"}`}
-                                >
-                                  {card.daysInStage}d
-                                </span>
+                                {card.stage !== "WON" && card.stage !== "LOST" ? (
+                                  <span
+                                    className={`text-micro font-semibold ${card.stale ? "text-warning-ink" : "text-secondary"}`}
+                                    title={
+                                      card.stale
+                                        ? `Going stale — no contact in ${card.daysSinceTouch} days`
+                                        : `${card.daysSinceTouch ?? card.daysInStage} days since the last contact`
+                                    }
+                                  >
+                                    {card.daysSinceTouch ?? card.daysInStage}d
+                                  </span>
+                                ) : (
+                                  <span className="text-micro text-secondary">{card.daysInStage}d</span>
+                                )}
                               </div>
+                              {card.stage !== "WON" && card.stage !== "LOST" && (
+                                <NextStepLine
+                                  className="mb-1.5"
+                                  nextStep={card.nextStep}
+                                  nextStepDate={card.nextStepDate}
+                                  missing={card.noNextStep}
+                                  overdue={card.nextStepOverdue}
+                                  onClick={() => setSteppingCard(salesTarget(card))}
+                                />
+                              )}
                               {card.stage === "WON" ? (
                                 /*
                                   What is still missing.
@@ -864,6 +924,8 @@ export default function PipelinePage() {
           companyName={writingProposalFor.companyName}
           // Fills this deal in rather than creating a second one beside it.
           proposalId={writingProposalFor.id}
+          nextStep={writingProposalFor.nextStep}
+          nextStepDate={writingProposalFor.nextStepDate}
           onCancel={() => setWritingProposalFor(null)}
           onConfirm={() => {
             setWritingProposalFor(null);
@@ -924,6 +986,8 @@ export default function PipelinePage() {
         <AddVersionModal
           proposalId={addingVersionFor.id}
           nextVersionNumber={addingVersionFor.versionCount + 1}
+          nextStep={addingVersionFor.nextStep}
+          nextStepDate={addingVersionFor.nextStepDate}
           onCancel={() => setAddingVersionFor(null)}
           onConfirm={() => {
             setAddingVersionFor(null);
@@ -936,11 +1000,62 @@ export default function PipelinePage() {
         <NewProformaModal
           companyId={raisingProformaFor.companyId}
           companyName={raisingProformaFor.companyName}
-          source={{ type: "PROPOSAL", proposalId: raisingProformaFor.id }}
+          source={{
+            type: "PROPOSAL",
+            proposalId: raisingProformaFor.id,
+            nextStep: raisingProformaFor.nextStep,
+            nextStepDate: raisingProformaFor.nextStepDate,
+          }}
           defaultAmount={raisingProformaFor.quotedValue}
           onCancel={() => setRaisingProformaFor(null)}
           onConfirm={() => {
             setRaisingProformaFor(null);
+            void load();
+          }}
+        />
+      )}
+
+      {touching && (
+        <LogTouchModal
+          target={touching}
+          onClose={() => setTouching(null)}
+          onDone={() => {
+            setTouching(null);
+            void load();
+          }}
+        />
+      )}
+
+      {steppingCard && (
+        <NextStepModal
+          target={steppingCard}
+          onClose={() => setSteppingCard(null)}
+          onDone={() => {
+            setSteppingCard(null);
+            void load();
+          }}
+        />
+      )}
+
+      {lastContactFor && (
+        <LastContactModal
+          kind="DEAL"
+          ids={[lastContactFor.id]}
+          label={lastContactFor.companyName}
+          onClose={() => setLastContactFor(null)}
+          onDone={() => {
+            setLastContactFor(null);
+            void load();
+          }}
+        />
+      )}
+
+      {verbalYesFor && (
+        <VerbalYesModal
+          target={salesTarget(verbalYesFor)}
+          onClose={() => setVerbalYesFor(null)}
+          onDone={() => {
+            setVerbalYesFor(null);
             void load();
           }}
         />

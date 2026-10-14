@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { TableRowsSkeleton } from '@/components/ui/skeleton-loaders';
 import { financialYearStart, todayIn } from '@/lib/money';
+import { NextStepLine } from '@/components/sales/NextStep';
+import { LastContactModal } from '@/components/sales/SalesDialogs';
 import { ErrorNote, LoadError } from '@/components/ui/empty-state';
 import { plural } from '@/lib/utils';
 import Link from 'next/link';
@@ -76,6 +78,11 @@ interface ProposalItem {
   wonVersion?: { n: number; value: number } | null;
   /** When it was won — what puts its discount in a financial year. */
   wonAt?: string | null;
+  /** What happens next on an open deal, and by when (Sales next step plan). */
+  nextStep?: string | null;
+  nextStepDate?: string | null;
+  /** The last real contact — a touch, a version, a stage change — or a date set by hand. */
+  lastTouchedAt?: string | null;
   proformas: { id: string; number: string; status: string; amount: number }[];
   createdAt: string;
   updatedAt: string;
@@ -124,6 +131,13 @@ export default function ProposalsPage() {
   const deleted: DeletedProposal[] = trashData?.success ? (trashData.proposals as DeletedProposal[]) : [];
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  /*
+   * Live deals picked for "Set last contact date" — imported deals corrected
+   * in one go, so "going stale" counts from when they were really last spoken
+   * to rather than from the import (Sales next step plan, decision 4).
+   */
+  const [picked, setPicked] = useState<string[]>([]);
+  const [settingLastContact, setSettingLastContact] = useState(false);
   const confirm = useConfirmStore((st) => st.confirm);
 
   /*
@@ -427,13 +441,47 @@ export default function ProposalsPage() {
             </tbody>
           </table>
         ) : (
+          <>
+          {tab === 'LIVE' && canRestore && picked.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-subtle/60 px-5 py-2.5">
+              <p className="text-sm text-body">{plural(picked.length, 'deal')} selected</p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPicked([])}
+                  className="rounded-lg px-3 py-1.5 text-xs font-medium text-secondary hover:bg-subtle"
+                >
+                  Clear
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSettingLastContact(true)}
+                  className="rounded-lg border border-primary/30 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/5"
+                >
+                  Set last contact date
+                </button>
+              </div>
+            </div>
+          )}
           <table className="w-full data-table">
             <thead>
               <tr className="border-b border-border">
+                {tab === 'LIVE' && canRestore && (
+                  <th className="w-8">
+                    <input
+                      type="checkbox"
+                      aria-label="Select every live deal"
+                      checked={shown.length > 0 && picked.length === shown.length}
+                      onChange={(e) => setPicked(e.target.checked ? shown.map((x) => x.id) : [])}
+                    />
+                  </th>
+                )}
                 <th className="eyebrow text-left">Company</th>
                 <th className="eyebrow text-left">Kind</th>
                 <th className="eyebrow text-right">Current Value</th>
                 <th className="eyebrow text-left">Stage</th>
+                {tab === 'LIVE' && <th className="eyebrow text-left">Next step</th>}
+                {tab === 'LIVE' && <th className="eyebrow text-left">Last contact</th>}
                 <th className="eyebrow text-left">Sent</th>
                 <th className="eyebrow text-right">Waiting</th>
                 <th className="eyebrow text-left">Owner</th>
@@ -444,7 +492,7 @@ export default function ProposalsPage() {
               {loading ? (
                 <TableRowsSkeleton cols={canRestore ? 8 : 7} />
               ) : shown.length === 0 ? (
-                <tr><td colSpan={canRestore ? 8 : 7} className="px-5 py-16 text-center text-sm text-secondary">No proposals found.</td></tr>
+                <tr><td colSpan={canRestore ? 11 : 9} className="px-5 py-16 text-center text-sm text-secondary">No proposals found.</td></tr>
               ) : shown.map(p => {
                 const latestVersion = p.versions[0];
                 const v1 = p.versions[p.versions.length - 1];
@@ -453,8 +501,21 @@ export default function ProposalsPage() {
                 // Same false affordance as the invoice table: pointer cursor,
                 // no handler. Proposals have no page of their own, so the
                 // client is the link.
+                const stepDay = p.nextStepDate ? p.nextStepDate.slice(0, 10) : null;
                 return (
                   <tr key={p.id} className="hover:bg-subtle transition-colors">
+                    {tab === 'LIVE' && canRestore && (
+                      <td>
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${p.company.name}`}
+                          checked={picked.includes(p.id)}
+                          onChange={(e) =>
+                            setPicked((list) => (e.target.checked ? [...list, p.id] : list.filter((x) => x !== p.id)))
+                          }
+                        />
+                      </td>
+                    )}
                     <td className="">
                       <Link
                         href={`/companies/${p.company.id}`}
@@ -481,6 +542,21 @@ export default function ProposalsPage() {
                     <td className={`${STAGE_COLOR[p.stage] ?? 'text-body'}`}>
                       {STAGE_LABEL[p.stage] ?? p.stage}
                     </td>
+                    {tab === 'LIVE' && (
+                      <td className="max-w-56">
+                        <NextStepLine
+                          nextStep={p.nextStep}
+                          nextStepDate={stepDay}
+                          missing={!p.nextStep || !stepDay}
+                          overdue={Boolean(stepDay) && stepDay! < todayIn(tz)}
+                        />
+                      </td>
+                    )}
+                    {tab === 'LIVE' && (
+                      <td className="text-secondary whitespace-nowrap">
+                        {p.lastTouchedAt ? `${daysSince(p.lastTouchedAt)}d ago` : '—'}
+                      </td>
+                    )}
                     <td className="text-secondary">
                       {new Date(p.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
                     </td>
@@ -511,9 +587,24 @@ export default function ProposalsPage() {
               })}
             </tbody>
           </table>
+          </>
         )}
         </div>
       </div>
+
+      {settingLastContact && (
+        <LastContactModal
+          kind="DEAL"
+          ids={picked}
+          label={plural(picked.length, 'deal')}
+          onClose={() => setSettingLastContact(false)}
+          onDone={() => {
+            setSettingLastContact(false);
+            setPicked([]);
+            load();
+          }}
+        />
+      )}
     </div>
   );
 }

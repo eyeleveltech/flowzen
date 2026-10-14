@@ -129,6 +129,13 @@ model Organization {
   stageProbInNegotiation    Int      @default(60)
   stageProbProformaIssued   Int      @default(85)
   stageProbVerbalYes        Int      @default(90)
+
+  /// When a deal or a lead counts as "going stale": its last touch is more
+  /// than this many days ago. Deals: the board's "Going stale" count and the
+  /// PROPOSAL_STALLED alert's basis. Outreach: active leads (follow-up,
+  /// meeting, interested). Settings, not constants (Sales next step plan).
+  dealStaleDays             Int      @default(25)
+  outreachStaleDays         Int      @default(10)
   defaultTermsAndConditions String[] @default(["Monthly retainer fee applicable", "Ad spend to be borne separately by the client", "Work execution begins upon confirmation and payment"])
 
   /// CR-02 §2 — the seller block. Entered once here, printed on every proforma
@@ -245,6 +252,13 @@ model User {
   /// can do what /profile promises it does — end every OTHER session too.
   /// Null means "nothing has ever invalidated this account's sessions".
   sessionsValidFrom    DateTime?
+  /// "Working on now" (Team plan 1): the one task this person says they are
+  /// on. Only they set it; it clears itself when the task is finished,
+  /// cancelled, sent for approval, put on hold or deleted. No time is kept.
+  ///
+  /// Not unique: three people sharing a task can all be on it now.
+  focusTaskId          String?
+  focusTask            Task?      @relation("UserFocusTask", fields: [focusTaskId], references: [id], onDelete: SetNull)
   createdAt            DateTime   @default(now())
   updatedAt            DateTime   @updatedAt
 
@@ -292,6 +306,7 @@ model User {
   pushOutbox               PushOutbox[]
 
   @@index([organizationId, active])
+  @@index([focusTaskId])
   @@map("users")
 }
 
@@ -430,6 +445,15 @@ model OutreachEntry {
   /// called `followUpDate` — it holds meeting dates too, and that name already
   /// means something different on the company form.
   nextActionDate    DateTime?      @db.Date
+  /// What happens next with this lead, in a few words. Its date is
+  /// `nextActionDate`. Every active lead (follow-up, meeting, interested)
+  /// carries both; a status change or edit that leaves it active is refused
+  /// without them.
+  nextStep          String?
+  /// The last real contact: a logged touch or a status change, or a date set
+  /// by hand ("Set last contact date"). Not `updatedAt` — editing a phone
+  /// number is not talking to anybody. Staleness counts from here.
+  lastTouchedAt     DateTime?
   promotedCompanyId String?        @unique
   importedAt        DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
@@ -499,6 +523,15 @@ model Proposal {
   lostReason          String?
   probabilityOverride Int?
   verbalYesAt         DateTime?
+  /// What happens next on this deal, and by when. Every open deal carries
+  /// both; a stage change, a touch or an edit that leaves the deal open is
+  /// refused without them. Winning or losing it needs neither.
+  nextStep            String?
+  nextStepDate        DateTime?        @db.Date
+  /// The last real contact: a logged touch, a version sent, a stage change, a
+  /// proforma raised, or a date set by hand. Owner, probability and typo edits
+  /// do not move it. "Going stale" counts from here.
+  lastTouchedAt       DateTime?
   /// §16: soft delete only. A proposal logged by mistake leaves; one that
   /// was won or lost stays, because the funnel, the win rate and the
   /// handoff to a project or retainer all read outcomes that a delete
@@ -1317,6 +1350,8 @@ model Task {
   /// the work itself is copied from the latest task in the series.
   repeatId        String?
   repeat          TaskRepeat?      @relation(fields: [repeatId], references: [id], onDelete: SetNull)
+  /// Whoever said this is what they are working on now.
+  focusedBy       User[]           @relation("UserFocusTask")
 
   @@index([organizationId, assigneeId, status])
   @@index([dueDate, status])

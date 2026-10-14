@@ -73,7 +73,8 @@ describe('which rows the list carries', () => {
     await request(app).get('/api/outreach').set(...auth());
 
     const listWhere = (prisma.outreachEntry.findMany as any).mock.calls.at(-1)[0].where;
-    const countWhere = (prisma.outreachEntry.count as any).mock.calls.at(-1)[0].where;
+    // The first count is the list's total; the others are the banner and the chips.
+    const countWhere = (prisma.outreachEntry.count as any).mock.calls[0][0].where;
     expect(countWhere).toEqual(listWhere);
   });
 
@@ -136,7 +137,7 @@ describe('the numbers on the status chips', () => {
     const res = await request(app).get('/api/outreach?status=FOLLOW_UP').set(...auth());
 
     expect(res.status).toBe(200);
-    expect(res.body.counts).toEqual({ ALL: 4, NOT_CONTACTED: 1, FOLLOW_UP: 2, MEETING: 0, INTERESTED: 0, DEAD: 1 });
+    expect(res.body.counts).toEqual({ ALL: 4, NOT_CONTACTED: 1, FOLLOW_UP: 2, MEETING: 0, INTERESTED: 0, DEAD: 1, MISSING_NEXT_STEP: 0 });
 
     const facetWhere = (prisma.outreachEntry.groupBy as any).mock.calls.at(-1)[0].where;
     expect(facetWhere.status, 'the facet must not filter by the thing it is counting').toBeUndefined();
@@ -158,7 +159,7 @@ describe('the numbers on the status chips', () => {
     expect(res.body.meta.total).toBe(1);
     expect(res.body.summary.cold).toBe(7);
 
-    const coldWhere = (prisma.outreachEntry.count as any).mock.calls.at(-1)[0].where;
+    const coldWhere = (prisma.outreachEntry.count as any).mock.calls[1][0].where;
     expect(coldWhere.name, 'the banner does not follow the search').toBeUndefined();
   });
 });

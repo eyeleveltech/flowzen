@@ -31,6 +31,7 @@ import { Modal, ScrollingModalBody, ModalFooter } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Field, FieldCheckbox, FieldSelect } from '@/components/ui/field';
 import { ErrorNote } from '@/components/ui/empty-state';
+import { NextStepFields, nextStepBody, nextStepDraft, nextStepReady, useStudioToday } from '@/components/sales/NextStep';
 import {
   LineItemsEditor,
   blankLineItem,
@@ -49,7 +50,18 @@ import {
 } from '@/components/documents/DocumentFields';
 
 type Source =
-  | { type: 'PROPOSAL'; proposalId: string }
+  | {
+      type: 'PROPOSAL';
+      proposalId: string;
+      /** The deal's next step, to start from. */
+      nextStep?: string | null;
+      nextStepDate?: string | null;
+      /**
+       * False for a deal already won — a proforma then is billing, the deal is
+       * closed, and it needs no next step. Open by default.
+       */
+      dealOpen?: boolean;
+    }
   | { type: 'MILESTONE'; projectId: string; milestoneId: string }
   | { type: 'MONTH_CARD'; monthCardId: string; monthLabel: string };
 
@@ -140,7 +152,20 @@ export function NewProformaModal({
   const subtotal = linesSubtotal(lines);
   const parsedGstRate = Number(gstRatePercent);
   const gstRateValid = !gstApplicable || (Number.isFinite(parsedGstRate) && parsedGstRate >= 0 && parsedGstRate <= 28);
-  const canSave = Boolean(billingName.trim()) && linesAreValid(lines) && subtotal > 0 && gstRateValid && !busy;
+  // Raised against an open deal it moves the stage, and the deal stays open:
+  // what happens next, and by when (Sales next step plan).
+  const asksNextStep = source.type === 'PROPOSAL' && source.dealOpen !== false;
+  const today = useStudioToday();
+  const [step, setStep] = useState(
+    nextStepDraft(source.type === 'PROPOSAL' ? source.nextStep : null, source.type === 'PROPOSAL' ? source.nextStepDate : null),
+  );
+  const canSave =
+    Boolean(billingName.trim()) &&
+    linesAreValid(lines) &&
+    subtotal > 0 &&
+    gstRateValid &&
+    (!asksNextStep || nextStepReady(step, today)) &&
+    !busy;
 
   const handleSave = async () => {
     if (!canSave) return;
@@ -171,6 +196,7 @@ export function NewProformaModal({
         poDate: poDate || undefined,
         notes: notes.trim() || undefined,
         terms: terms.trim() || undefined,
+        ...(asksNextStep ? nextStepBody(step) : {}),
       });
       toast.success('Proforma raised');
       onConfirm();
@@ -199,6 +225,13 @@ export function NewProformaModal({
       >
         <ScrollingModalBody className="space-y-5">
           {error && <ErrorNote onDismiss={() => setError(null)}>{error}</ErrorNote>}
+
+          {asksNextStep && (
+            <section className="space-y-2">
+              <h3 className="eyebrow">After this</h3>
+              <NextStepFields value={step} onChange={setStep} disabled={busy} />
+            </section>
+          )}
 
           <section className="space-y-2">
             <h3 className="eyebrow">Billed to</h3>

@@ -89,6 +89,9 @@ const OPEN_PROPOSAL = {
   stage: 'PROPOSAL_SENT',
   outcome: null,
   deletedAt: null,
+  // An open deal carries its next step (Sales next step plan).
+  nextStep: 'Call to walk them through it',
+  nextStepDate: new Date('2099-01-05T00:00:00Z'),
   company: { id: 'co-1', name: 'Carlton Hotels' },
   versions: [V2],
   wonVersion: null,

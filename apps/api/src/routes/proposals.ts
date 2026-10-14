@@ -16,6 +16,23 @@ import { parsePagination } from '../utils/query.js';
 import { toCsv } from '../utils/csv.js';
 import { sendCsv } from '../utils/csvResponse.js';
 import { proposalProbability, STAGE_PROBABILITY_SELECT } from '../utils/stageProbability.js';
+import { asStoredDay, dayKey } from '../utils/moneyDates.js';
+import {
+  CHANNEL_LABEL,
+  DEAL_NEXT_STEP_REQUIRED,
+  bulkLastContactSchema,
+  dealStaleness,
+  hasNextStep,
+  lastContactRefusal,
+  lastContactSchema,
+  mergeNextStep,
+  nextStepDateRefusal,
+  nextStepFields,
+  nextStepState,
+  stageEnteredAt as dealStageEnteredAt,
+  studioToday,
+  touchSchema,
+} from '../services/salesFollowUp.js';
 
 export const proposalsRouter = Router();
 
@@ -64,8 +81,11 @@ proposalsRouter.get('/pipeline', requirePermission('pipeline.read'), async (req:
     // here so the board, the forecast and the web all weight a deal the same.
     const org = await prisma.organization.findUnique({
       where: { id: orgId },
-      select: STAGE_PROBABILITY_SELECT,
+      select: { ...STAGE_PROBABILITY_SELECT, dealStaleDays: true },
     });
+    // "Going stale" counts from the last touch, against the org's threshold.
+    const staleDays = org?.dealStaleDays ?? 25;
+    const today = await studioToday(orgId);
 
     const proposals = await prisma.proposal.findMany({
       where: {
@@ -132,21 +152,10 @@ proposalsRouter.get('/pipeline', requirePermission('pipeline.read'), async (req:
      * (losing a deal wrote none until today) would otherwise read as "never
      * moved". Same answer, one less thing that can be absent.
      */
-    const stageEnteredAt = (p: (typeof proposals)[number]): Date => {
-      if (p.stage === ProposalStage.WON && p.wonAt) return p.wonAt;
-      if (p.stage === ProposalStage.VERBAL_YES && p.verbalYesAt) return p.verbalYesAt;
-      if (p.stage === ProposalStage.PROFORMA_ISSUED) {
-        const raised = proformaRaisedAt.get(p.id);
-        if (raised) return raised;
-      }
-      // In negotiation is "more than one version", so it began at the latest
-      // one; Proposal sent began at the first. Both come off the versions,
-      // which are immutable, so neither can drift.
-      const sorted = [...p.versions].sort((a, b) => a.sentAt.getTime() - b.sentAt.getTime());
-      if (p.stage === ProposalStage.IN_NEGOTIATION && sorted.length > 1) return sorted[sorted.length - 1].sentAt;
-      if (sorted.length > 0) return sorted[0].sentAt;
-      return p.createdAt;
-    };
+    // In negotiation is "more than one version", so it began at the latest
+    // one; Proposal sent began at the first. Both come off the versions, which
+    // are immutable, so neither can drift. Shared with the stalled alert.
+    const stageEnteredAt = (p: (typeof proposals)[number]): Date => dealStageEnteredAt(p, proformaRaisedAt.get(p.id));
 
     /*
      * Whether a won deal has actually been set up as work.
@@ -250,6 +259,7 @@ proposalsRouter.get('/pipeline', requirePermission('pipeline.read'), async (req:
         // Null on a won deal means the work has not been set up yet.
         work: workByProposal.get(p.id) ?? null,
         updatedAt: p.updatedAt,
+        ...followUpFields(p, staleDays, today, proformaRaisedAt.get(p.id)),
       };
 
       /*
@@ -266,11 +276,66 @@ proposalsRouter.get('/pipeline', requirePermission('pipeline.read'), async (req:
       }
     }
 
-    res.json({ success: true, stages: PIPELINE_STAGES, columns });
+    // Open deals whose last touch is past the threshold — the board's tile.
+    const staleCount = Object.values(columns)
+      .flat()
+      .filter((c) => c.stale).length;
+
+    res.json({ success: true, stages: PIPELINE_STAGES, columns, staleDays, staleCount });
   } catch (error) {
     next(error);
   }
 });
+
+/**
+ * What a card says about following up: the next step and its date, whether it
+ * is missing or overdue, the last touch, and whether the deal has gone stale.
+ */
+function followUpFields(
+  p: Parameters<typeof dealStaleness>[0] & { nextStep: string | null; nextStepDate: Date | null },
+  staleDays: number,
+  today: string,
+  proformaRaisedAt?: Date,
+) {
+  const open = p.outcome === null;
+  const touch = dealStaleness(p, staleDays, today, proformaRaisedAt);
+  const step = nextStepState({ nextStep: p.nextStep, date: p.nextStepDate }, open, today);
+  return {
+    nextStep: p.nextStep,
+    nextStepDate: p.nextStepDate ? dayKey(p.nextStepDate) : null,
+    noNextStep: step.missing,
+    nextStepOverdue: step.overdue,
+    lastTouchedAt: p.lastTouchedAt,
+    /** The last touch, or with none recorded, when it entered its stage. */
+    lastTouchAt: touch.lastTouchAt,
+    daysSinceTouch: touch.daysSinceTouch,
+    stale: touch.stale,
+  };
+}
+
+/**
+ * The next step a save leaves on an open deal, checked: a date given must not
+ * be past, and an open deal must end up with both. Returns the refusal, or the
+ * columns to write.
+ */
+async function nextStepForSave(
+  orgId: string,
+  existing: { nextStep: string | null; nextStepDate: Date | null },
+  sent: { nextStep?: string | null; nextStepDate?: string | null },
+  staysOpen: boolean,
+): Promise<{ error: string } | { data: { nextStep?: string | null; nextStepDate?: Date | null } }> {
+  const today = await studioToday(orgId);
+  const pastDate = nextStepDateRefusal(sent.nextStepDate, today);
+  if (pastDate) return { error: pastDate };
+  const after = mergeNextStep({ nextStep: existing.nextStep, date: existing.nextStepDate }, sent);
+  if (staysOpen && !hasNextStep(after)) return { error: DEAL_NEXT_STEP_REQUIRED };
+  return {
+    data: {
+      ...(sent.nextStep !== undefined ? { nextStep: after.nextStep } : {}),
+      ...(sent.nextStepDate !== undefined ? { nextStepDate: after.date } : {}),
+    },
+  };
+}
 
 // ── 1b. Stage-to-Stage Conversion ───────────────────────────────────────────
 //
@@ -419,6 +484,8 @@ const proposalCreateSchema = z.object({
   initialValue: z.number().min(0, 'Proposal value cannot be negative').optional().default(0),
   scopeSummary: z.string().optional().default(''),
   fileUrl: z.string().url().optional().or(z.literal('')),
+  // A new deal is an open deal: it starts with what happens next.
+  ...nextStepFields,
 });
 
 proposalsRouter.post('/', requirePermission('pipeline.write'), async (req: AuthRequest, res: Response, next) => {
@@ -438,6 +505,17 @@ proposalsRouter.post('/', requirePermission('pipeline.write'), async (req: AuthR
       return;
     }
 
+    const step = await nextStepForSave(
+      orgId,
+      { nextStep: null, nextStepDate: null },
+      { nextStep: parsed.data.nextStep, nextStepDate: parsed.data.nextStepDate },
+      true,
+    );
+    if ('error' in step) {
+      res.status(400).json({ success: false, error: step.error, code: 'NEXT_STEP_REQUIRED' });
+      return;
+    }
+
     const result = await prisma.$transaction(async (tx) => {
       const proposal = await tx.proposal.create({
         data: {
@@ -446,6 +524,9 @@ proposalsRouter.post('/', requirePermission('pipeline.write'), async (req: AuthR
           kind,
           ownerId: ownerId || req.user!.userId,
           stage: ProposalStage.PROPOSAL_SENT,
+          ...step.data,
+          // Sending the proposal is contact.
+          lastTouchedAt: new Date(),
         },
       });
 
@@ -499,6 +580,8 @@ const versionCreateSchema = z.object({
    * what the client was told they were buying.
    */
   kind: z.nativeEnum(ProposalKind).optional(),
+  // A version moves the stage; the deal stays open, so it needs its next step.
+  ...nextStepFields,
 });
 
 proposalsRouter.post('/:id/versions', requirePermission('pipeline.write'), async (req: AuthRequest, res: Response, next) => {
@@ -524,6 +607,12 @@ proposalsRouter.post('/:id/versions', requirePermission('pipeline.write'), async
 
     if (proposal.outcome === ProposalOutcome.WON) {
       res.status(400).json({ success: false, error: 'Cannot add versions to a proposal that is already won.' });
+      return;
+    }
+
+    const step = await nextStepForSave(orgId, proposal, parsed.data, proposal.outcome === null);
+    if ('error' in step) {
+      res.status(400).json({ success: false, error: step.error, code: 'NEXT_STEP_REQUIRED' });
       return;
     }
 
@@ -559,6 +648,9 @@ proposalsRouter.post('/:id/versions', requirePermission('pipeline.write'), async
         stage: stageTo,
         // Only on the first version — see the schema note above.
         ...(parsed.data.kind && nextN === 1 ? { kind: parsed.data.kind } : {}),
+        ...step.data,
+        // A version sent is contact.
+        lastTouchedAt: new Date(),
       },
     });
 
@@ -610,9 +702,16 @@ proposalsRouter.post('/:id/versions', requirePermission('pipeline.write'), async
 // or an outcome — silently corrupting close-rate and pipeline-value math.
 // It is now that one flag, and nothing else.
 
+const verbalYesSchema = z.object({ ...nextStepFields });
+
 proposalsRouter.patch('/:id/stage', requirePermission('pipeline.write'), async (req: AuthRequest, res: Response, next) => {
   try {
     const { stage } = req.body;
+    const sentStep = verbalYesSchema.safeParse(req.body);
+    if (!sentStep.success) {
+      res.status(400).json({ success: false, error: sentStep.error.issues[0].message });
+      return;
+    }
     if (stage !== ProposalStage.VERBAL_YES) {
       res.status(400).json({
         success: false,
@@ -642,9 +741,16 @@ proposalsRouter.patch('/:id/stage', requirePermission('pipeline.write'), async (
       return;
     }
 
+    // Still open after a verbal yes: what happens next, and by when.
+    const step = await nextStepForSave(orgId, existing, sentStep.data, true);
+    if ('error' in step) {
+      res.status(400).json({ success: false, error: step.error, code: 'NEXT_STEP_REQUIRED' });
+      return;
+    }
+
     const updated = await prisma.proposal.update({
       where: { id },
-      data: { stage: ProposalStage.VERBAL_YES, verbalYesAt: new Date() },
+      data: { stage: ProposalStage.VERBAL_YES, verbalYesAt: new Date(), ...step.data, lastTouchedAt: new Date() },
     });
 
     await prisma.activity.create({
@@ -780,6 +886,7 @@ proposalsRouter.post('/:id/win', requirePermission('pipeline.write'), async (req
           outcome: ProposalOutcome.WON,
           wonVersionId: version.id,
           wonAt: new Date(),
+          lastTouchedAt: new Date(),
         },
       });
 
@@ -926,6 +1033,7 @@ proposalsRouter.post('/:id/lose', requirePermission('pipeline.write'), async (re
           stage: ProposalStage.LOST,
           outcome: ProposalOutcome.LOST,
           lostReason: parsed.data.lostReason.trim(),
+          lastTouchedAt: new Date(),
           // The record cannot claim both. A proposal saying it was won on v2
           // AND lost is the state that made this findable in the first place.
           ...(wasWon ? { wonVersionId: null, wonAt: null } : {}),
@@ -1034,6 +1142,9 @@ const proposalEditSchema = z
       .string()
       .refine((v) => !Number.isNaN(Date.parse(v)), 'That date is not a real date')
       .optional(),
+    // An edit leaves an open deal open, so it needs its next step. Editing it
+    // is not contact, so the last touch does not move.
+    ...nextStepFields,
   })
   .refine((v) => Object.values(v).some((x) => x !== undefined), {
     message: 'Nothing to change',
@@ -1049,7 +1160,7 @@ proposalsRouter.patch('/:id', requirePermission('pipeline.write'), async (req: A
 
     const orgId = req.user!.organizationId;
     const id = String(req.params.id);
-    const { ownerId, kind, companyId, value, scopeSummary, fileUrl, sentAt } = parsed.data;
+    const { ownerId, kind, companyId, value, scopeSummary, fileUrl, sentAt, nextStep, nextStepDate } = parsed.data;
 
     const existing = await prisma.proposal.findFirst({
       where: { id, organizationId: orgId, deletedAt: null },
@@ -1103,7 +1214,18 @@ proposalsRouter.patch('/:id', requirePermission('pipeline.write'), async (req: A
      * has touched in three weeks would come back looking freshly worked —
      * which is the one thing those two numbers exist to prevent.
      */
-    if (!ownerChanged && !kindChanged && !companyChanged && !versionChanged) {
+    const step = await nextStepForSave(orgId, existing, { nextStep, nextStepDate }, existing.outcome === null);
+    if ('error' in step) {
+      res.status(400).json({ success: false, error: step.error, code: 'NEXT_STEP_REQUIRED' });
+      return;
+    }
+    const stepChanged =
+      ('nextStep' in step.data && (step.data.nextStep ?? null) !== (existing.nextStep ?? null)) ||
+      ('nextStepDate' in step.data &&
+        (step.data.nextStepDate ? dayKey(step.data.nextStepDate) : null) !==
+          (existing.nextStepDate ? dayKey(existing.nextStepDate) : null));
+
+    if (!ownerChanged && !kindChanged && !companyChanged && !versionChanged && !stepChanged) {
       const { company: _company, versions: _versions, wonVersion: _won, ...unchanged } = existing;
       res.json({ success: true, proposal: unchanged });
       return;
@@ -1165,13 +1287,14 @@ proposalsRouter.patch('/:id', requirePermission('pipeline.write'), async (req: A
 
     const updated = await prisma.$transaction(async (tx) => {
       const proposal =
-        ownerChanged || kindChanged || companyChanged
+        ownerChanged || kindChanged || companyChanged || stepChanged
           ? await tx.proposal.update({
               where: { id },
               data: {
                 ...(ownerChanged ? { ownerId } : {}),
                 ...(kindChanged ? { kind } : {}),
                 ...(companyChanged ? { companyId } : {}),
+                ...(stepChanged ? step.data : {}),
               },
             })
           : await tx.proposal.findUniqueOrThrow({ where: { id } });
@@ -1182,7 +1305,7 @@ proposalsRouter.patch('/:id', requirePermission('pipeline.write'), async (req: A
           : version;
 
       const changed = {
-        ...changesBetween(existing, proposal, ['ownerId', 'kind']),
+        ...changesBetween(existing, proposal, ['ownerId', 'kind', 'nextStep', 'nextStepDate']),
         ...(companyChanged && newCompany ? { company: { from: existing.company.name, to: newCompany.name } } : {}),
         ...(versionChanged && version && correctedVersion
           ? changesBetween(version, correctedVersion, ['value', 'scopeSummary', 'fileUrl', 'sentAt'])
@@ -1212,6 +1335,138 @@ proposalsRouter.patch('/:id', requirePermission('pipeline.write'), async (req: A
     next(error);
   }
 });
+
+// ── 8b. Log a touch, and set the last contact date ──────────────────────────
+//
+// A call, a WhatsApp, an email or a meeting with the client is contact, and
+// nothing recorded it: "going stale" counted from the last version sent, so a
+// deal chased every week still read as untouched. A touch says how, what was
+// said, and what happens next — and moves the last touch to now.
+//
+// "Set last contact date" is for the record as it should have been: deals
+// imported with the import date as their history. A date, not in the future,
+// written to Activity with what it replaced. Correcting the record does not
+// need a next step.
+
+proposalsRouter.post('/:id/touch', requirePermission('pipeline.write'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const parsed = touchSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.issues[0].message });
+      return;
+    }
+    const orgId = req.user!.organizationId;
+    const id = String(req.params.id);
+    const existing = await prisma.proposal.findFirst({
+      where: { id, organizationId: orgId, deletedAt: null },
+      include: { company: { select: { name: true } } },
+    });
+    if (!existing) {
+      res.status(404).json({ success: false, error: 'Proposal not found' });
+      return;
+    }
+    if (existing.outcome) {
+      res.status(400).json({ success: false, error: 'This deal is closed. A new conversation with them is a new proposal.' });
+      return;
+    }
+    const pastDate = nextStepDateRefusal(parsed.data.nextStepDate, await studioToday(orgId));
+    if (pastDate) {
+      res.status(400).json({ success: false, error: pastDate });
+      return;
+    }
+
+    const { channel, note, nextStep, nextStepDate } = parsed.data;
+    const proposal = await prisma.$transaction(async (tx) => {
+      const updated = await tx.proposal.update({
+        where: { id },
+        data: { lastTouchedAt: new Date(), nextStep, nextStepDate: asStoredDay(nextStepDate) },
+      });
+      await tx.activity.create({
+        data: {
+          organizationId: orgId,
+          entityType: 'Proposal',
+          entityId: id,
+          actorId: req.user!.userId,
+          verb: 'touch_logged',
+          payload: { companyName: existing.company.name, channel, note, nextStep, nextStepDate },
+        },
+      });
+      return updated;
+    });
+    res.status(201).json({ success: true, proposal, message: `${CHANNEL_LABEL[channel]} logged.` });
+  } catch (error) {
+    next(error);
+  }
+});
+
+proposalsRouter.patch('/:id/last-contact', requirePermission('pipeline.write'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const parsed = lastContactSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.issues[0].message });
+      return;
+    }
+    const orgId = req.user!.organizationId;
+    const refusal = lastContactRefusal(parsed.data.lastTouchedAt, await studioToday(orgId));
+    if (refusal) {
+      res.status(400).json({ success: false, error: refusal });
+      return;
+    }
+    const result = await setDealLastContact(orgId, req.user!.userId, [String(req.params.id)], parsed.data.lastTouchedAt);
+    if (result.updated === 0) {
+      res.status(404).json({ success: false, error: 'Proposal not found' });
+      return;
+    }
+    res.json({ success: true, updated: result.updated });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** The same, for several deals at once — imported data corrected in one go. */
+proposalsRouter.post('/last-contact', requirePermission('pipeline.write'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const parsed = bulkLastContactSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.issues[0].message });
+      return;
+    }
+    const orgId = req.user!.organizationId;
+    const refusal = lastContactRefusal(parsed.data.lastTouchedAt, await studioToday(orgId));
+    if (refusal) {
+      res.status(400).json({ success: false, error: refusal });
+      return;
+    }
+    const result = await setDealLastContact(orgId, req.user!.userId, parsed.data.ids, parsed.data.lastTouchedAt);
+    res.json({ success: true, updated: result.updated });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** Sets the last contact date on this org's deals, one Activity row each with what it replaced. */
+async function setDealLastContact(orgId: string, actorId: string, ids: string[], date: string): Promise<{ updated: number }> {
+  const rows = await prisma.proposal.findMany({
+    where: { id: { in: ids }, organizationId: orgId, deletedAt: null },
+    select: { id: true, lastTouchedAt: true, company: { select: { name: true } } },
+  });
+  if (rows.length === 0) return { updated: 0 };
+  const at = asStoredDay(date);
+  await prisma.$transaction(async (tx) => {
+    await tx.proposal.updateMany({ where: { id: { in: rows.map((r) => r.id) } }, data: { lastTouchedAt: at } });
+    await tx.activity.createMany({
+      data: rows.map((r) => ({
+        organizationId: orgId,
+        entityType: 'Proposal',
+        entityId: r.id,
+        actorId,
+        verb: 'last_contact_set',
+        payload: { companyName: r.company.name, from: r.lastTouchedAt ? dayKey(r.lastTouchedAt) : null, to: date },
+      })),
+    });
+  });
+  return { updated: rows.length };
+}
 
 // ── 9. Delete a Proposal ────────────────────────────────────────────────────
 //

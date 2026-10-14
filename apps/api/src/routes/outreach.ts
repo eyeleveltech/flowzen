@@ -10,6 +10,23 @@ import { matchIndustry, resolveLeadSource, industrySchema, leadSourceSchema } fr
 import { sendCsv } from '../utils/csvResponse.js';
 import { checkForDuplicates } from '../services/duplicateCheck.js';
 import { changesBetween } from '../utils/activityDiff.js';
+import { asStoredDay, dayKey } from '../utils/moneyDates.js';
+import {
+  ACTIVE_OUTREACH,
+  CHANNEL_LABEL,
+  LEAD_NEXT_STEP_REQUIRED,
+  bulkLastContactSchema,
+  hasNextStep,
+  isActiveOutreach,
+  lastContactRefusal,
+  lastContactSchema,
+  leadStaleness,
+  mergeNextStep,
+  nextStepDateRefusal,
+  nextStepState,
+  studioToday,
+  touchSchema,
+} from '../services/salesFollowUp.js';
 
 export const outreachRouter = Router();
 
@@ -45,6 +62,17 @@ outreachRouter.get('/', requirePermission('company.read'), async (req: AuthReque
     const where: any = { organizationId: orgId, deletedAt: null };
     if (req.query.includePromoted !== 'true') where.promotedCompanyId = null;
 
+    // "Going stale" for a lead: active, and its last touch past the threshold.
+    const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { outreachStaleDays: true } });
+    const staleDays = org?.outreachStaleDays ?? 10;
+    const today = await studioToday(orgId);
+    const staleBefore = new Date(asStoredDay(today).getTime() - staleDays * 86_400_000);
+    // An active lead with no next step, or no date for it.
+    const missingNextStep = {
+      status: { in: ACTIVE_OUTREACH },
+      OR: [{ nextStep: null }, { nextStep: '' }, { nextActionDate: null }],
+    };
+
     /*
      * What every count on the screen is allowed to see, before either filter
      * narrows it: the organisation's un-promoted rows, matching the search.
@@ -65,6 +93,11 @@ outreachRouter.get('/', requirePermission('company.read'), async (req: AuthReque
       where.vertical = vertical;
     }
 
+    // The "Missing next step" filter: the active leads nobody has planned for.
+    if (req.query.missingNextStep === 'true') {
+      where.AND = [...(where.AND ?? []), missingNextStep];
+    }
+
     if (search && typeof search === 'string' && search.trim()) {
       where.name = { contains: search.trim(), mode: 'insensitive' };
       base.name = where.name;
@@ -74,7 +107,7 @@ outreachRouter.get('/', requirePermission('company.read'), async (req: AuthReque
     // what makes a chip's number answer "how many would I get if I clicked it".
     const statusFacetWhere = { ...base, ...(where.vertical ? { vertical: where.vertical } : {}) };
 
-    const [entries, total, statusFacets, coldTotal] = await Promise.all([
+    const [entries, total, statusFacets, coldTotal, missingTotal, staleTotal] = await Promise.all([
       prisma.outreachEntry.findMany({
         where,
         /*
@@ -112,6 +145,14 @@ outreachRouter.get('/', requirePermission('company.read'), async (req: AuthReque
       // Follows nothing. The banner says how many cold names exist, which is
       // not a statement about whatever is filtered on screen right now.
       prisma.outreachEntry.count({ where: { organizationId: orgId, promotedCompanyId: null, deletedAt: null } }),
+      prisma.outreachEntry.count({ where: { ...statusFacetWhere, AND: [missingNextStep] } }),
+      prisma.outreachEntry.count({
+        where: {
+          ...statusFacetWhere,
+          status: { in: ACTIVE_OUTREACH },
+          OR: [{ lastTouchedAt: { lt: staleBefore } }, { lastTouchedAt: null, importedAt: { lt: staleBefore } }],
+        },
+      }),
     ]);
 
     if (wantsCsv) {
@@ -132,7 +173,21 @@ outreachRouter.get('/', requirePermission('company.read'), async (req: AuthReque
 
     res.json({
       success: true,
-      entries,
+      entries: entries.map((e) => {
+        const active = isActiveOutreach(e.status);
+        const touch = leadStaleness(e, staleDays, today);
+        const step = nextStepState({ nextStep: e.nextStep, date: e.nextActionDate }, active, today);
+        return {
+          ...e,
+          /** The last touch, or with none recorded, when the lead was added. */
+          lastTouchAt: touch.lastTouchAt,
+          daysSinceTouch: touch.daysSinceTouch,
+          stale: touch.stale,
+          noNextStep: step.missing,
+          nextStepOverdue: step.overdue,
+        };
+      }),
+      staleDays,
       counts: {
         ALL: statusFacets.reduce((n, f) => n + f._count, 0),
         NOT_CONTACTED: byStatus(OutreachStatus.NOT_CONTACTED),
@@ -140,8 +195,9 @@ outreachRouter.get('/', requirePermission('company.read'), async (req: AuthReque
         MEETING: byStatus(OutreachStatus.MEETING),
         INTERESTED: byStatus(OutreachStatus.INTERESTED),
         DEAD: byStatus(OutreachStatus.DEAD),
+        MISSING_NEXT_STEP: missingTotal,
       },
-      summary: { cold: coldTotal },
+      summary: { cold: coldTotal, stale: staleTotal },
       meta: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
     });
   } catch (error) {
@@ -253,6 +309,14 @@ const outreachEditSchema = z
     contactPersonName: z.string().trim().nullable().optional(),
     phone: z.string().trim().nullable().optional(),
     email: z.string().trim().email('That email address does not look right').nullable().optional().or(z.literal('')),
+    // An active lead keeps its next step through an edit (Sales next step
+    // plan). Editing is not contact, so the last touch does not move.
+    nextStep: z.string().trim().max(300, 'Keep the next step short — a few words').nullable().optional(),
+    nextActionDate: z
+      .string()
+      .refine((v) => v === '' || /^\d{4}-\d{2}-\d{2}$/.test(v), 'That date is not a real date')
+      .nullable()
+      .optional(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: 'Nothing to change' });
 
@@ -282,7 +346,19 @@ outreachRouter.patch('/:id', requirePermission('company.write'), async (req: Aut
       return;
     }
 
-    const { name, vertical, source, ownerId, contactPersonName, phone, email } = parsed.data;
+    const { name, vertical, source, ownerId, contactPersonName, phone, email, nextStep, nextActionDate } = parsed.data;
+
+    // Still active afterwards: it needs its next step and date.
+    const pastDate = nextStepDateRefusal(nextActionDate, await studioToday(orgId));
+    if (pastDate) {
+      res.status(400).json({ success: false, error: pastDate });
+      return;
+    }
+    const step = mergeNextStep({ nextStep: existing.nextStep, date: existing.nextActionDate }, { nextStep, nextStepDate: nextActionDate });
+    if (isActiveOutreach(existing.status) && !hasNextStep(step)) {
+      res.status(400).json({ success: false, error: LEAD_NEXT_STEP_REQUIRED, code: 'NEXT_STEP_REQUIRED' });
+      return;
+    }
 
     if (ownerId) {
       const owner = await prisma.user.findFirst({
@@ -305,6 +381,8 @@ outreachRouter.patch('/:id', requirePermission('company.write'), async (req: Aut
         ...(contactPersonName !== undefined ? { contactPersonName: contactPersonName || null } : {}),
         ...(phone !== undefined ? { phone: phone || null } : {}),
         ...(email !== undefined ? { email: email || null } : {}),
+        ...(nextStep !== undefined ? { nextStep: step.nextStep } : {}),
+        ...(nextActionDate !== undefined ? { nextActionDate: step.date } : {}),
       },
       include: { owner: { select: { id: true, name: true, designation: true } } },
     });
@@ -317,6 +395,8 @@ outreachRouter.patch('/:id', requirePermission('company.write'), async (req: Aut
       'contactPersonName',
       'phone',
       'email',
+      'nextStep',
+      'nextActionDate',
     ]);
     if (Object.keys(changed).length > 0) {
       await prisma.activity.create({
@@ -368,9 +448,15 @@ const statusChangeSchema = z
     status: z.nativeEnum(OutreachStatus),
     remarks: z.string().trim().max(2000).optional().nullable(),
     nextActionDate: z.string().optional().nullable(),
+    /**
+     * What happens next, in a few words (Sales next step plan). Every active
+     * status — follow-up, meeting, interested — needs it and its date;
+     * marking a lead dead or not contacted needs neither.
+     */
+    nextStep: z.string().trim().max(300, 'Keep the next step short — a few words').optional().nullable(),
   })
   .superRefine((v, ctx) => {
-    const needsDate = v.status === OutreachStatus.FOLLOW_UP || v.status === OutreachStatus.MEETING;
+    const needsDate = isActiveOutreach(v.status);
     if (needsDate && !v.nextActionDate) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -378,8 +464,13 @@ const statusChangeSchema = z
         message:
           v.status === OutreachStatus.FOLLOW_UP
             ? 'When are you calling them back?'
-            : 'When is the meeting?',
+            : v.status === OutreachStatus.MEETING
+              ? 'When is the meeting?'
+              : 'When is the next step?',
       });
+    }
+    if (needsDate && !v.nextStep?.trim()) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['nextStep'], message: 'What happens next?' });
     }
     if (v.status === OutreachStatus.FOLLOW_UP && !v.remarks?.trim()) {
       ctx.addIssue({
@@ -416,8 +507,14 @@ outreachRouter.patch('/:id/status', requirePermission('company.write'), async (r
       return;
     }
 
-    const { status, remarks, nextActionDate } = parsed.data;
-    const carriesAction = status === OutreachStatus.FOLLOW_UP || status === OutreachStatus.MEETING;
+    const { status, remarks, nextActionDate, nextStep } = parsed.data;
+    // Follow-up, meeting and interested are worked: they carry a next step.
+    const carriesAction = isActiveOutreach(status);
+    const pastDate = carriesAction ? nextStepDateRefusal(nextActionDate?.slice(0, 10), await studioToday(orgId)) : null;
+    if (pastDate) {
+      res.status(400).json({ success: false, error: pastDate });
+      return;
+    }
 
     // The date and note belong to FOLLOW_UP and MEETING. Moving to any other
     // status clears them, because a "call back on" date sitting against a dead
@@ -429,6 +526,9 @@ outreachRouter.patch('/:id/status', requirePermission('company.write'), async (r
         status,
         remarks: carriesAction ? (remarks?.trim() || null) : null,
         nextActionDate: carriesAction && nextActionDate ? new Date(nextActionDate) : null,
+        nextStep: carriesAction ? nextStep?.trim() || null : null,
+        // A status change is contact.
+        lastTouchedAt: new Date(),
       },
       include: { owner: { select: { id: true, name: true, designation: true } } },
     });
@@ -448,6 +548,7 @@ outreachRouter.patch('/:id/status', requirePermission('company.write'), async (r
           // record; the column on the row is only ever the most recent one.
           remarks: remarks?.trim() || null,
           nextActionDate: carriesAction && nextActionDate ? nextActionDate : null,
+          nextStep: carriesAction ? nextStep?.trim() || null : null,
         },
       },
     });
@@ -457,6 +558,130 @@ outreachRouter.patch('/:id/status', requirePermission('company.write'), async (r
     next(error);
   }
 });
+
+// ── 3b. Log a touch, and set the last contact date ──────────────────────────
+//
+// The same two actions deals have. A touch is contact: how, what was said,
+// what happens next — and it moves the last touch to now. "Set last contact
+// date" corrects the record (imported names carry the import date); it needs
+// no next step and is written to Activity with what it replaced.
+
+outreachRouter.post('/:id/touch', requirePermission('company.write'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const parsed = touchSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.issues[0].message });
+      return;
+    }
+    const orgId = req.user!.organizationId;
+    const id = String(req.params.id);
+    const existing = await prisma.outreachEntry.findFirst({ where: { id, organizationId: orgId, deletedAt: null } });
+    if (!existing) {
+      res.status(404).json({ success: false, error: 'Outreach entry not found' });
+      return;
+    }
+    if (existing.promotedCompanyId) {
+      res.status(400).json({ success: false, error: 'This name is already a company. Log it on the company record instead.' });
+      return;
+    }
+    const pastDate = nextStepDateRefusal(parsed.data.nextStepDate, await studioToday(orgId));
+    if (pastDate) {
+      res.status(400).json({ success: false, error: pastDate });
+      return;
+    }
+    const { channel, note, nextStep, nextStepDate } = parsed.data;
+    const entry = await prisma.$transaction(async (tx) => {
+      const updated = await tx.outreachEntry.update({
+        where: { id },
+        data: { lastTouchedAt: new Date(), nextStep, nextActionDate: asStoredDay(nextStepDate) },
+        include: { owner: { select: { id: true, name: true, designation: true } } },
+      });
+      await tx.activity.create({
+        data: {
+          organizationId: orgId,
+          entityType: 'OutreachEntry',
+          entityId: id,
+          actorId: req.user!.userId,
+          verb: 'touch_logged',
+          payload: { name: existing.name, channel, note, nextStep, nextStepDate },
+        },
+      });
+      return updated;
+    });
+    res.status(201).json({ success: true, entry, message: `${CHANNEL_LABEL[channel]} logged.` });
+  } catch (error) {
+    next(error);
+  }
+});
+
+outreachRouter.patch('/:id/last-contact', requirePermission('company.write'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const parsed = lastContactSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.issues[0].message });
+      return;
+    }
+    const orgId = req.user!.organizationId;
+    const refusal = lastContactRefusal(parsed.data.lastTouchedAt, await studioToday(orgId));
+    if (refusal) {
+      res.status(400).json({ success: false, error: refusal });
+      return;
+    }
+    const result = await setLeadLastContact(orgId, req.user!.userId, [String(req.params.id)], parsed.data.lastTouchedAt);
+    if (result.updated === 0) {
+      res.status(404).json({ success: false, error: 'Outreach entry not found' });
+      return;
+    }
+    res.json({ success: true, updated: result.updated });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** The same, for several leads at once — an import corrected in one go. */
+outreachRouter.post('/last-contact', requirePermission('company.write'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const parsed = bulkLastContactSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.issues[0].message });
+      return;
+    }
+    const orgId = req.user!.organizationId;
+    const refusal = lastContactRefusal(parsed.data.lastTouchedAt, await studioToday(orgId));
+    if (refusal) {
+      res.status(400).json({ success: false, error: refusal });
+      return;
+    }
+    const result = await setLeadLastContact(orgId, req.user!.userId, parsed.data.ids, parsed.data.lastTouchedAt);
+    res.json({ success: true, updated: result.updated });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** Sets the last contact date on this org's leads, one Activity row each with what it replaced. */
+async function setLeadLastContact(orgId: string, actorId: string, ids: string[], date: string): Promise<{ updated: number }> {
+  const rows = await prisma.outreachEntry.findMany({
+    where: { id: { in: ids }, organizationId: orgId, deletedAt: null },
+    select: { id: true, name: true, lastTouchedAt: true },
+  });
+  if (rows.length === 0) return { updated: 0 };
+  const at = asStoredDay(date);
+  await prisma.$transaction(async (tx) => {
+    await tx.outreachEntry.updateMany({ where: { id: { in: rows.map((r) => r.id) } }, data: { lastTouchedAt: at } });
+    await tx.activity.createMany({
+      data: rows.map((r) => ({
+        organizationId: orgId,
+        entityType: 'OutreachEntry',
+        entityId: r.id,
+        actorId,
+        verb: 'last_contact_set',
+        payload: { name: r.name, from: r.lastTouchedAt ? dayKey(r.lastTouchedAt) : null, to: date },
+      })),
+    });
+  });
+  return { updated: rows.length };
+}
 
 // ── 4. Promote Outreach Entry to Prospect ───────────────────────────────────
 
@@ -770,7 +995,9 @@ outreachRouter.post('/import', requirePermission('company.write'), async (req: A
       contactPersonName: string | null;
       phone: string | null;
       email: string | null;
+      lastTouchedAt: Date | null;
     }[] = [];
+    const today = await studioToday(orgId);
 
     rows.forEach((row, index) => {
       const rowNum = index + 2; // header is row 1, so the first data row is 2 — matches what the person sees in their spreadsheet
@@ -823,6 +1050,26 @@ outreachRouter.post('/import', requirePermission('company.write'), async (req: A
       }
       const contactPersonName = (row.contactperson || row.contact_person || row.contactname || row.contact || '').trim();
 
+      /*
+       * "Last contacted" — the real date, so an import does not stamp every
+       * lead as touched today (Sales next step plan, decision 4). Optional.
+       * Accepted as 2026-09-14, 14/09/2026 or 14-09-2026.
+       */
+      const lastRaw = (row.lastcontacted || row.lastcontact || row.lastcontactdate || '').trim();
+      let lastTouchedAt: Date | null = null;
+      if (lastRaw) {
+        const day = parseImportDay(lastRaw);
+        if (!day) {
+          results.push({ row: rowNum, name, action: 'INVALID', reason: `"Last contacted" is not a date: "${lastRaw}"` });
+          return;
+        }
+        if (day > today) {
+          results.push({ row: rowNum, name, action: 'INVALID', reason: `"Last contacted" is in the future: ${day}` });
+          return;
+        }
+        lastTouchedAt = asStoredDay(day);
+      }
+
       seenInFile.add(key);
       toCreate.push({
         name,
@@ -831,6 +1078,7 @@ outreachRouter.post('/import', requirePermission('company.write'), async (req: A
         contactPersonName: contactPersonName || null,
         phone: phone || null,
         email: email || null,
+        lastTouchedAt,
       });
       results.push({ row: rowNum, name, action: dryRun ? 'WOULD_CREATE' : 'CREATED' });
     });
@@ -851,6 +1099,7 @@ outreachRouter.post('/import', requirePermission('company.write'), async (req: A
           contactPersonName: r.contactPersonName,
           phone: r.phone,
           email: r.email,
+          lastTouchedAt: r.lastTouchedAt,
         })),
       });
       created = outcome.count;
@@ -890,3 +1139,17 @@ outreachRouter.post('/import', requirePermission('company.write'), async (req: A
     next(error);
   }
 });
+
+/** A day from a spreadsheet cell: 2026-09-14, 14/09/2026 or 14-09-2026 (day first, as written in India). */
+export function parseImportDay(raw: string): string | null {
+  const v = raw.trim();
+  let y: number, m: number, d: number;
+  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(v);
+  const dmy = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/.exec(v);
+  if (iso) [y, m, d] = [Number(iso[1]), Number(iso[2]), Number(iso[3])];
+  else if (dmy) [d, m, y] = [Number(dmy[1]), Number(dmy[2]), Number(dmy[3])];
+  else return null;
+  const date = new Date(Date.UTC(y, m - 1, d));
+  if (date.getUTCFullYear() !== y || date.getUTCMonth() !== m - 1 || date.getUTCDate() !== d) return null;
+  return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}

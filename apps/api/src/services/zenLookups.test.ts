@@ -185,10 +185,28 @@ describe('what the existing lookups now get right', () => {
 
   it("weighs a deal by its own override, as the Pipeline board does", async () => {
     p.proposal.findMany.mockResolvedValue([
-      { kind: 'RETAINER', stage: 'PROPOSAL_SENT', probabilityOverride: 75, updatedAt: new Date(), companyId: 'co-1', company: { name: 'Acme' }, owner: null, versions: [{ value: 50000, scopeSummary: null }] },
+      {
+        kind: 'RETAINER',
+        stage: 'PROPOSAL_SENT',
+        outcome: null,
+        probabilityOverride: 75,
+        wonAt: null,
+        verbalYesAt: null,
+        createdAt: new Date('2026-09-01'),
+        nextStep: null,
+        nextStepDate: null,
+        lastTouchedAt: null,
+        updatedAt: new Date(),
+        companyId: 'co-1',
+        company: { name: 'Acme' },
+        owner: null,
+        versions: [{ value: 50000, scopeSummary: null, sentAt: new Date('2026-09-01') }],
+      },
     ]);
     const out = await run('getPipeline');
-    expect(out[0].probability).toBe(75);
-    expect(out[0].link).toBe('/companies/co-1?tab=PROPOSALS');
+    expect(out.deals[0].probability).toBe(75);
+    expect(out.deals[0].link).toBe('/companies/co-1?tab=PROPOSALS');
+    // Sales next step plan: Zen can answer "which deals have no next step?".
+    expect(out.deals[0].noNextStep).toBe(true);
   });
 });

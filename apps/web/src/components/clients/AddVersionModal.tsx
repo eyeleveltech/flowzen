@@ -15,15 +15,21 @@ import { Modal, ScrollingModalBody, ModalFooter } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { ErrorNote } from '@/components/ui/empty-state';
+import { NextStepFields, nextStepBody, nextStepDraft, nextStepReady, useStudioToday } from '@/components/sales/NextStep';
 
 type Props = {
   proposalId: string;
   nextVersionNumber: number;
+  /** The deal's current next step, to start from. The deal stays open, so it needs one. */
+  nextStep?: string | null;
+  nextStepDate?: string | null;
   onConfirm: () => void;
   onCancel: () => void;
 };
 
-export function AddVersionModal({ proposalId, nextVersionNumber, onConfirm, onCancel }: Props) {
+export function AddVersionModal({ proposalId, nextVersionNumber, nextStep, nextStepDate, onConfirm, onCancel }: Props) {
+  const today = useStudioToday();
+  const [step, setStep] = useState(nextStepDraft(nextStep, nextStepDate));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [value, setValue] = useState('');
@@ -31,7 +37,7 @@ export function AddVersionModal({ proposalId, nextVersionNumber, onConfirm, onCa
   const [fileUrl, setFileUrl] = useState('');
 
   const parsedValue = Number(value);
-  const canSave = Number.isFinite(parsedValue) && parsedValue >= 0 && !busy;
+  const canSave = Number.isFinite(parsedValue) && parsedValue >= 0 && nextStepReady(step, today) && !busy;
 
   const handleSave = async () => {
     if (!canSave) return;
@@ -42,6 +48,7 @@ export function AddVersionModal({ proposalId, nextVersionNumber, onConfirm, onCa
         value: parsedValue,
         scopeSummary: scopeSummary.trim(),
         fileUrl: fileUrl.trim() || undefined,
+        ...nextStepBody(step),
       });
       toast.success(`Version ${nextVersionNumber} added`);
       onConfirm();
@@ -96,6 +103,8 @@ export function AddVersionModal({ proposalId, nextVersionNumber, onConfirm, onCa
             disabled={busy}
             placeholder="Optional — link to the revised PDF/deck"
           />
+
+          <NextStepFields value={step} onChange={setStep} disabled={busy} />
         </ScrollingModalBody>
 
         <ModalFooter>

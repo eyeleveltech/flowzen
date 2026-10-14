@@ -415,6 +415,8 @@ const ACTION: Record<string, string> = {
   'OutreachEntry.outreach_added': 'added the lead',
   'OutreachEntry.outreach_edited': 'edited the lead',
   'OutreachEntry.outreach_status_changed': 'updated the lead',
+  'OutreachEntry.touch_logged': 'logged a touch with the lead',
+  'OutreachEntry.last_contact_set': 'set the last contact date for the lead',
   'OutreachEntry.outreach_promoted': 'promoted the lead',
   'OutreachEntry.deleted': 'deleted the lead',
   'OutreachEntry.restored': 'restored the lead',
@@ -427,6 +429,8 @@ const ACTION: Record<string, string> = {
   'Proposal.proposal_deleted': 'deleted the proposal for',
   'Proposal.proposal_restored': 'restored the proposal for',
   'Proposal.verbal_yes': 'recorded a verbal yes from',
+  'Proposal.touch_logged': 'logged a touch with',
+  'Proposal.last_contact_set': 'set the last contact date for the deal with',
   'Proposal.probability_overridden': 'changed the chance of winning',
 
   // Work
@@ -570,6 +574,9 @@ const actionFor = (entityType: string, verb: string): string => {
 const FIELD: Record<string, string> = {
   title: 'Title',
   name: 'Name',
+  nextStep: 'Next step',
+  nextStepDate: 'Next step date',
+  nextActionDate: 'Next step date',
   dueDate: 'Due date',
   dueTime: 'Due time',
   repeat: 'Repeat',
@@ -731,8 +738,17 @@ export function detailLines(
       lines.push(`Into ${p.into} · ${n} ${n === 1 ? 'person' : 'people'} moved`);
     }
   }
+  // A touch: how, what was said, and what happens next (Sales next step plan).
+  if (verb === 'touch_logged') {
+    const how: Record<string, string> = { CALL: 'Call', WHATSAPP: 'WhatsApp', EMAIL: 'Email', MEETING: 'Meeting', OTHER: 'Other' };
+    if (str(p.note)) lines.push(`${how[String(p.channel)] ?? 'Touch'}: ${p.note}`);
+    if (str(p.nextStep)) lines.push(`Next: ${p.nextStep}${str(p.nextStepDate) ? ` by ${p.nextStepDate}` : ''}`);
+  }
+  if (verb === 'last_contact_set') lines.push(`Last contact: ${str(p.from) ?? 'none'} → ${str(p.to) ?? '—'}`);
+
   if (
     verb !== 'document_emailed' &&
+    verb !== 'last_contact_set' &&
     entityType !== 'Asset' &&
     entityType !== 'CalendarEvent' &&
     entityType !== 'Department' &&

@@ -49,6 +49,7 @@ import { sendCsv } from '../utils/csvResponse.js';
 import { canSeeTask, taskInScope } from '../services/teamScope.js';
 import { findOpenTwin, twinDay, twinStatus } from '../services/taskDuplicates.js';
 import { pushReviewDecided, pushReviewSubmitted, pushTaskAssigned, pushTaskEdited } from '../services/push.js';
+import { clearFocusOff, clearFocusOn, ENDS_FOCUS, focusRefusal } from '../services/taskFocus.js';
 
 export const tasksRouter = Router();
 
@@ -1735,6 +1736,8 @@ tasksRouter.patch('/:id', requirePermission('work.own'), async (req: AuthRequest
     }
 
     const nextPeople = people ? [...new Set(people)] : null;
+    // Somebody taken off the task is no longer working on it now.
+    if (nextPeople) await clearFocusOff(id, nextPeople);
 
     const task = await prisma.task.update({
       where: { id },
@@ -1928,6 +1931,7 @@ tasksRouter.delete('/:id', requirePermission('work.own'), async (req: AuthReques
     }
 
     await prisma.task.update({ where: { id }, data: { deletedAt: new Date() } });
+    await clearFocusOn(id);
 
     await prisma.activity.create({
       data: {
@@ -1941,6 +1945,73 @@ tasksRouter.delete('/:id', requirePermission('work.own'), async (req: AuthReques
     });
 
     res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── Working on now ──────────────────────────────────────────────────────────
+//
+// A person says which of their own open tasks they are on (Team plan 1). One
+// at a time — choosing another replaces it — and only they can set it: a Head
+// does not say what somebody else is doing. A task still To do moves to In
+// progress, because saying you are on it is starting it.
+//
+// Nothing about it is timed or logged. The status change it makes is logged
+// like any other. Clearing it is `DELETE /api/me/focus`.
+
+tasksRouter.post('/:id/focus', requirePermission('work.own'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const me = req.user!.userId;
+    const id = String(req.params.id);
+
+    const task = await prisma.task.findFirst({
+      where: { id, organizationId: orgId, deletedAt: null },
+      select: { id: true, title: true, status: true, assignees: { select: { userId: true } } },
+    });
+    if (!task) {
+      res.status(404).json({ success: false, error: 'Task not found' });
+      return;
+    }
+    if (!task.assignees.some((a) => a.userId === me)) {
+      res.status(403).json({ success: false, error: 'Only the people on a task can say they are working on it.' });
+      return;
+    }
+    const refused = focusRefusal(task);
+    if (refused) {
+      res.status(400).json({ success: false, error: refused });
+      return;
+    }
+
+    const started = await prisma.$transaction(async (tx) => {
+      await tx.user.update({ where: { id: me }, data: { focusTaskId: id } });
+      if (task.status !== TaskStatus.TODO) return false;
+      // Conditional, so a status somebody else set a moment ago is not undone.
+      const moved = await tx.task.updateMany({
+        where: { id, status: TaskStatus.TODO },
+        data: { status: TaskStatus.IN_PROGRESS },
+      });
+      return moved.count > 0;
+    });
+
+    if (started) {
+      await prisma.activity.create({
+        data: {
+          organizationId: orgId,
+          entityType: 'Task',
+          entityId: id,
+          actorId: me,
+          verb: 'task_status_changed',
+          payload: { from: TaskStatus.TODO, to: TaskStatus.IN_PROGRESS },
+        },
+      });
+    }
+
+    res.json({
+      success: true,
+      focus: { id: task.id, title: task.title, status: started ? TaskStatus.IN_PROGRESS : task.status },
+    });
   } catch (error) {
     next(error);
   }
@@ -2022,6 +2093,8 @@ tasksRouter.patch('/:id/status', requirePermission('work.own'), async (req: Auth
         reopenCount,
       },
     });
+    // Done, cancelled or on hold: nobody is working on it now any more.
+    if (ENDS_FOCUS.includes(status as TaskStatus)) await clearFocusOn(id);
 
     const verb = isFinished && !wasFinished ? (status === 'DONE' ? 'task_completed' : 'task_cancelled') : !isFinished && wasFinished ? 'task_reopened' : 'task_status_changed';
     await prisma.activity.create({
@@ -2084,6 +2157,8 @@ tasksRouter.post('/:id/wait', requirePermission('work.own'), async (req: AuthReq
         waitingSince: new Date(),
       },
     });
+    // On hold is waiting, not working.
+    await clearFocusOn(id);
 
     await prisma.activity.create({
       data: {
@@ -2275,6 +2350,8 @@ tasksRouter.post('/:id/submit-review', requirePermission('work.own'), async (req
       },
     });
     await pushReviewSubmitted(req.user!, task, review.id);
+    // With the approver now, so nobody is working on it.
+    await clearFocusOn(id);
 
     res.status(201).json({ success: true, status: TaskStatus.IN_REVIEW, review });
   } catch (error) {
@@ -2381,6 +2458,7 @@ async function decideReview(
     },
   });
   await pushReviewDecided(req.user!, task, open, approved, feedback);
+  if (approved) await clearFocusOn(id);
 
   res.json({
     success: true,

@@ -20,7 +20,7 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
-import { api, type Department, type OrgConfig, type TeamScope } from '@/lib/api-v2';
+import { api, type Department, type MyFocus, type OrgConfig, type TeamScope } from '@/lib/api-v2';
 
 /** Query keys, in one place, so an invalidation elsewhere can find them. */
 export const qk = {
@@ -34,6 +34,7 @@ export const qk = {
   teamScoped: ['team', 'scoped'] as const,
   teamScope: ['team', 'scope'] as const,
   departments: ['departments'] as const,
+  myFocus: ['me', 'focus'] as const,
 };
 
 /**
@@ -92,6 +93,21 @@ export function useScopedTeamMembers() {
     gcTime: 60 * 60 * 1000,
   });
   return (data?.members ?? []) as TeamMemberOption[];
+}
+
+/**
+ * What the caller said they are working on now — the task drawer and My Work
+ * both read it, so the "Now" badge agrees wherever a task is opened. The app's
+ * 30-second default: it changes when its task is finished elsewhere, and every
+ * screen that changes a status invalidates it.
+ */
+export function useMyFocus(enabled = true): { focus: MyFocus | null; loaded: boolean } {
+  const { data, isSuccess } = useQuery({
+    queryKey: qk.myFocus,
+    queryFn: () => api.me.focus(),
+    enabled,
+  });
+  return { focus: data?.focus ?? null, loaded: isSuccess };
 }
 
 /**

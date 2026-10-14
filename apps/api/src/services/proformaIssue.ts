@@ -18,6 +18,7 @@ import { ProformaStatus, ProformaSourceType, type Proforma } from '@prisma/clien
 import { prisma } from '../lib/prisma.js';
 import { issueWithRetry } from '../utils/documentNumber.js';
 import { asStoredDay, moneyClock, orgToday } from '../utils/moneyDates.js';
+import { DEAL_NEXT_STEP_REQUIRED, hasNextStep, mergeNextStep, nextStepDateRefusal, nextStepFields } from './salesFollowUp.js';
 import { buildDocumentSnapshot } from './documentModel.js';
 import { documentFieldsSchema, cleanCustomFields, ORG_DOCUMENT_SELECT } from '../utils/documentSchemas.js';
 
@@ -54,6 +55,12 @@ export const proformaCreateSchema = z
     terms: z
       .string()
       .default('Advance payment request. Payment due within validity period. GST applicable as per statutory rates.'),
+    /**
+     * Raised against an open deal, a proforma moves it to Proforma issued and
+     * the deal stays open — so it needs its next step (Sales next step plan).
+     * Ignored for any other source.
+     */
+    ...nextStepFields,
     ...documentFieldsSchema,
   })
   .refine((v) => v.lineItems !== undefined || v.amount !== undefined, {
@@ -170,12 +177,23 @@ export async function issueProforma(orgId: string, actorId: string, input: Profo
 
   // A proposal: this organisation's. It was read and then updated by bare id,
   // so a proforma raised here could move another organisation's deal.
+  let dealStep: { nextStep?: string | null; nextStepDate?: Date | null } | null = null;
   if (sourceType === ProformaSourceType.PROPOSAL) {
     const proposal = await prisma.proposal.findFirst({
       where: { id: sourceId, organizationId: orgId },
-      select: { id: true },
+      select: { id: true, outcome: true, nextStep: true, nextStepDate: true },
     });
     if (!proposal) throw new ProformaRefusal(404, 'Proposal not found');
+    // Still open afterwards: what happens next, and by when. A proforma for a
+    // won deal is billing, and the deal is closed — it needs neither.
+    if (proposal.outcome === null) {
+      const today = orgToday((await moneyClock(orgId)).timezone);
+      const pastDate = nextStepDateRefusal(input.nextStepDate, today);
+      if (pastDate) throw new ProformaRefusal(400, pastDate);
+      const after = mergeNextStep({ nextStep: proposal.nextStep, date: proposal.nextStepDate }, input);
+      if (!hasNextStep(after)) throw new ProformaRefusal(400, DEAL_NEXT_STEP_REQUIRED);
+      dealStep = { nextStep: after.nextStep, nextStepDate: after.date };
+    }
   }
 
   // A retainer month: in this client's retainer, not already invoiced, and
@@ -307,6 +325,13 @@ export async function issueProforma(orgId: string, actorId: string, input: Profo
           await tx.proposal.updateMany({
             where: { id: sourceId, organizationId: orgId, stage: { not: 'WON' } },
             data: { stage: 'PROFORMA_ISSUED' },
+          });
+        }
+        // A proforma raised is contact, and the deal's next step goes with it.
+        if (dealStep) {
+          await tx.proposal.updateMany({
+            where: { id: sourceId, organizationId: orgId },
+            data: { ...dealStep, lastTouchedAt: new Date() },
           });
         }
       }

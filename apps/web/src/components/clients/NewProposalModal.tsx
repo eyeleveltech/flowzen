@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Field, FieldSelect } from '@/components/ui/field';
 import { ErrorNote } from '@/components/ui/empty-state';
 import { personOptions } from '@/lib/people';
+import { NextStepFields, nextStepBody, nextStepDraft, nextStepReady, useStudioToday } from '@/components/sales/NextStep';
 
 type Props = {
   companyId?: string;
@@ -38,11 +39,17 @@ type Props = {
    * field for it, and this is the first point anybody actually decides.
    */
   proposalId?: string;
+  /** That deal's next step, to start from. */
+  nextStep?: string | null;
+  nextStepDate?: string | null;
   onConfirm: (proposal: { id: string }) => void;
   onCancel: () => void;
 };
 
-export function NewProposalModal({ companyId, companyName, proposalId, onConfirm, onCancel }: Props) {
+export function NewProposalModal({ companyId, companyName, proposalId, nextStep, nextStepDate, onConfirm, onCancel }: Props) {
+  const today = useStudioToday();
+  // A deal is open from the moment it is quoted: it starts with what happens next.
+  const [step, setStep] = useState(nextStepDraft(nextStep, nextStepDate));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,6 +77,7 @@ export function NewProposalModal({ companyId, companyName, proposalId, onConfirm
     Boolean(selectedCompanyId) &&
     Number.isFinite(parsedValue) &&
     parsedValue >= 0 &&
+    nextStepReady(step, today) &&
     !busy;
 
   const handleSave = async () => {
@@ -83,6 +91,7 @@ export function NewProposalModal({ companyId, companyName, proposalId, onConfirm
           value: parsedValue,
           scopeSummary: scopeSummary.trim(),
           fileUrl: fileUrl.trim() || undefined,
+          ...nextStepBody(step),
         });
         toast.success('Proposal written — the deal moves to Proposal Sent');
         onConfirm({ id: proposalId });
@@ -94,6 +103,7 @@ export function NewProposalModal({ companyId, companyName, proposalId, onConfirm
           scopeSummary: scopeSummary.trim(),
           fileUrl: fileUrl.trim() || undefined,
           ownerId: ownerId || undefined,
+          ...nextStepBody(step),
         });
         const created = (res as { proposal?: { id: string } }).proposal;
         toast.success('Proposal created — v1 is live');
@@ -181,6 +191,8 @@ export function NewProposalModal({ companyId, companyName, proposalId, onConfirm
             placeholder="Defaults to you"
             options={personOptions(team)}
           />
+
+          <NextStepFields value={step} onChange={setStep} disabled={busy} />
         </ScrollingModalBody>
 
         <ModalFooter>

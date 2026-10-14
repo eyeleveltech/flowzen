@@ -66,6 +66,9 @@ const dealWith = (n: number) => {
     stage: n === 0 ? 'PROSPECT' : 'PROPOSAL_SENT',
     outcome: null,
     deletedAt: null,
+    // An open deal carries its next step (Sales next step plan).
+    nextStep: 'Call to walk them through it',
+    nextStepDate: new Date('2099-01-05T00:00:00Z'),
     versions: Array.from({ length: n }, (_, i) => ({ id: `v${i + 1}`, n: i + 1 })),
   });
 };

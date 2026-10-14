@@ -112,6 +112,8 @@ type Form = {
   stageProbInNegotiation: string;
   stageProbProformaIssued: string;
   stageProbVerbalYes: string;
+  dealStaleDays: string;
+  outreachStaleDays: string;
 };
 
 export default function SettingsPage() {
@@ -191,6 +193,8 @@ export default function SettingsPage() {
         stageProbInNegotiation: String(o.stageProbabilities?.IN_NEGOTIATION ?? 60),
         stageProbProformaIssued: String(o.stageProbabilities?.PROFORMA_ISSUED ?? 85),
         stageProbVerbalYes: String(o.stageProbabilities?.VERBAL_YES ?? 90),
+        dealStaleDays: String(o.dealStaleDays ?? 25),
+        outreachStaleDays: String(o.outreachStaleDays ?? 10),
       });
       setError(null);
       // Admin-only, so a refusal is expected for anyone below and is not worth
@@ -297,6 +301,8 @@ export default function SettingsPage() {
         stageProbInNegotiation: Number(form.stageProbInNegotiation),
         stageProbProformaIssued: Number(form.stageProbProformaIssued),
         stageProbVerbalYes: Number(form.stageProbVerbalYes),
+        dealStaleDays: Number(form.dealStaleDays),
+        outreachStaleDays: Number(form.outreachStaleDays),
       });
       // The org config is cached for an hour and read across the app. Without
       // this the other screens would show the old settings for the rest of the
@@ -546,6 +552,23 @@ export default function SettingsPage() {
                 <p className="text-micro text-secondary">
                   Won is always 100% and lost is always nothing — neither is a prediction.
                 </p>
+            </SectionCard>
+
+            <SectionCard
+              title="Going stale"
+              description={
+                <>
+                  How long since the last real contact — a logged call or message, a version sent, a stage
+                  change — before something counts as going stale. Deals feed the Pipeline board&apos;s
+                  &ldquo;Going stale&rdquo; count; leads in follow-up, meeting or interested are flagged on the
+                  Outreach list.
+                </>
+              }
+            >
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label="Deals (days)" value={form.dealStaleDays} onChange={(v) => set('dealStaleDays', v)} type="number" min="1" max="365" disabled={!canEdit} />
+                  <Field label="Outreach leads (days)" value={form.outreachStaleDays} onChange={(v) => set('outreachStaleDays', v)} type="number" min="1" max="365" disabled={!canEdit} />
+                </div>
             </SectionCard>
 
             <SectionCard

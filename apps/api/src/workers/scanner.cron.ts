@@ -10,6 +10,7 @@ import { rupees } from '../utils/money.js';
 import { pushNewAlerts } from '../services/push.js';
 import { expireLapsedProformas } from '../services/proformaExpiry.js';
 import { asStoredDay, moneyClock, orgToday } from '../utils/moneyDates.js';
+import { dealStaleness } from '../services/salesFollowUp.js';
 
 function median(values: number[]): number {
   if (values.length === 0) return 0;
@@ -46,14 +47,21 @@ export async function evaluateAgencyHealthRules(organizationId: string): Promise
   // owner, then management at 10 days." Both stages, the 5-day threshold,
   // and the actual follow-up task were all missing before; only a flat
   // 7-day/PROPOSAL_SENT-only/no-task alert existed.
+  //
+  // Counted from the LAST TOUCH now (Sales next step plan, decision 3), not
+  // from the last version: a call or a WhatsApp logged on the deal is contact,
+  // and a deal chased every week is not stalled. With no touch recorded it
+  // falls back to when the deal entered its stage, as the board does.
   const activeProposals = await prisma.proposal.findMany({
     where: { organizationId, deletedAt: null, stage: { in: ['PROPOSAL_SENT', 'IN_NEGOTIATION'] }, outcome: null },
-    include: { company: true, versions: { orderBy: { sentAt: 'desc' }, take: 1 } },
+    include: { company: true, versions: { orderBy: { sentAt: 'desc' } } },
   });
+  const stalledToday = orgToday((await moneyClock(organizationId)).timezone, now);
   for (const p of activeProposals) {
-    const lastVersion = p.versions[0];
-    if (!lastVersion) continue;
-    const daysSince = Math.floor((now.getTime() - lastVersion.sentAt.getTime()) / (1000 * 3600 * 24));
+    if (p.versions.length === 0) continue;
+    // The threshold here is the alert's own (5 days, escalated at 10); the
+    // board's "Going stale" uses the org setting. Only the starting point is shared.
+    const { daysSinceTouch: daysSince } = dealStaleness(p, 0, stalledToday);
     if (daysSince <= 5) continue;
     const escalated = daysSince > 10;
     alerts.push({
@@ -61,7 +69,7 @@ export async function evaluateAgencyHealthRules(organizationId: string): Promise
       severity: escalated ? AlertSeverity.HIGH : AlertSeverity.MED,
       entityType: 'Proposal',
       entityId: p.id,
-      message: `Proposal for ${p.company.name} has had no new version for ${daysSince} days${escalated ? ' — escalated to management' : ''}.`,
+      message: `Proposal for ${p.company.name} has had no contact for ${daysSince} days${escalated ? ' — escalated to management' : ''}.`,
     });
 
     // One follow-up task per stall, not one every hourly tick.

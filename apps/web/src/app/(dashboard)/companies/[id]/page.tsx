@@ -38,7 +38,10 @@ import {
   FolderPlus,
   FolderOpen,
   Briefcase,
+  MessageSquarePlus,
 } from 'lucide-react';
+import { NextStepLine, useStudioToday } from '@/components/sales/NextStep';
+import { LastContactModal, LogTouchModal, NextStepModal, VerbalYesModal, type SalesTarget } from '@/components/sales/SalesDialogs';
 import toast from 'react-hot-toast';
 import { api, ApiError, formatMoney, formatDate } from '@/lib/api-v2';
 import { Button } from '@/components/ui/button';
@@ -87,9 +90,23 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
   const [emailingProforma, setEmailingProforma] = useState<string | null>(null);
   const [isNewProposalOpen, setIsNewProposalOpen] = useState(false);
   const [addingVersionFor, setAddingVersionFor] = useState<any>(null);
+  const studioToday = useStudioToday();
   const [editingProposal, setEditingProposal] = useState<any>(null);
   const [losingProposal, setLosingProposal] = useState<any>(null);
   const [raisingProformaFor, setRaisingProformaFor] = useState<any>(null);
+  // Keeping a deal current (Sales next step plan): a touch, the next step, the
+  // real last contact, and the next step a verbal yes carries.
+  const [dealAction, setDealAction] = useState<{
+    action: 'TOUCH' | 'NEXT_STEP' | 'LAST_CONTACT' | 'VERBAL_YES';
+    target: SalesTarget;
+  } | null>(null);
+  const dealTarget = (prop: any): SalesTarget => ({
+    kind: 'DEAL',
+    id: prop.id,
+    name: company?.name ?? '',
+    nextStep: prop.nextStep ?? null,
+    nextStepDate: prop.nextStepDate ? String(prop.nextStepDate).slice(0, 10) : null,
+  });
   /*
    * Both optional, because work no longer only arrives from a won proposal.
    *
@@ -143,7 +160,14 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
       setProjectInitial({ name: str(v.name), gstPercent: num(v.gstPercent), startDate: str(v.startDate), endDate: str(v.endDate) });
       setCreatingProjectFor({ companyId: company.id, companyName: company.name, quotedValue: num(v.quotedValue), sourceProposalId: str(v.sourceProposalId) });
     } else if (zenForm.name === 'proposalProforma' && str(v.proposalId)) {
-      setRaisingProformaFor({ id: str(v.proposalId), defaultAmount: num(v.amount) ?? 0 });
+      const deal = (company.proposals ?? []).find((x: any) => x.id === str(v.proposalId));
+      setRaisingProformaFor({
+        id: str(v.proposalId),
+        defaultAmount: num(v.amount) ?? 0,
+        nextStep: deal?.nextStep ?? null,
+        nextStepDate: deal?.nextStepDate ? String(deal.nextStepDate).slice(0, 10) : null,
+        dealOpen: deal ? deal.outcome == null : true,
+      });
     }
     zenFormOpened();
   }, [zenForm, company, zenFormOpened]);
@@ -269,21 +293,10 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
     }
   };
 
-  const handleVerbalYes = async (proposalId: string) => {
-    const ok = await confirm({
-      title: 'Flag verbal yes?',
-      message: 'The client has agreed verbally, before anything is signed. This is a manual flag only — winning still needs the actual win step.',
-      confirmText: 'Flag it',
-      variant: 'info',
-    });
-    if (!ok) return;
-    try {
-      await api.proposals.updateStage(proposalId, 'VERBAL_YES');
-      toast.success('Flagged verbal yes');
-      await fetchDetail();
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Could not flag verbal yes');
-    }
+  // Verbal yes leaves the deal open, so its dialog asks what happens next.
+  const handleVerbalYes = (proposalId: string) => {
+    const prop = (company?.proposals ?? []).find((x: any) => x.id === proposalId);
+    if (prop) setDealAction({ action: 'VERBAL_YES', target: dealTarget(prop) });
   };
 
   /**
@@ -1166,10 +1179,55 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                   )}
 
                   {live && (
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-border">
+                      {/* What happens next on this deal — the plan for it, owed while it is open. */}
+                      <NextStepLine
+                        nextStep={prop.nextStep}
+                        nextStepDate={prop.nextStepDate ? String(prop.nextStepDate).slice(0, 10) : null}
+                        missing={!prop.nextStep || !prop.nextStepDate}
+                        overdue={Boolean(prop.nextStepDate) && String(prop.nextStepDate).slice(0, 10) < studioToday}
+                        onClick={() => setDealAction({ action: 'NEXT_STEP', target: dealTarget(prop) })}
+                      />
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setDealAction({ action: 'TOUCH', target: dealTarget(prop) })}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary border border-primary/30 rounded-lg hover:bg-primary/5 transition-colors"
+                        >
+                          <MessageSquarePlus className="w-3.5 h-3.5" />
+                          Log touch
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDealAction({ action: 'NEXT_STEP', target: dealTarget(prop) })}
+                          className="px-3 py-1.5 text-xs font-medium text-secondary hover:text-primary border border-border rounded-lg hover:bg-subtle transition-colors"
+                        >
+                          Next step
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDealAction({ action: 'LAST_CONTACT', target: dealTarget(prop) })}
+                          className="px-3 py-1.5 text-xs font-medium text-secondary hover:text-primary border border-border rounded-lg hover:bg-subtle transition-colors"
+                          title="When you were last really in touch — for correcting imported dates"
+                        >
+                          Set last contact date
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {live && (
                     <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-border">
                       <button
                         type="button"
-                        onClick={() => setAddingVersionFor({ id: prop.id, nextVersionNumber: latestN + 1 })}
+                        onClick={() =>
+                          setAddingVersionFor({
+                            id: prop.id,
+                            nextVersionNumber: latestN + 1,
+                            nextStep: prop.nextStep ?? null,
+                            nextStepDate: prop.nextStepDate ? String(prop.nextStepDate).slice(0, 10) : null,
+                          })
+                        }
                         className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-secondary hover:text-primary border border-border rounded-lg hover:bg-subtle transition-colors"
                       >
                         <FileText className="w-3.5 h-3.5" />
@@ -1181,6 +1239,9 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                           setRaisingProformaFor({
                             id: prop.id,
                             defaultAmount: Number(latestVersion?.value ?? 0),
+                            nextStep: prop.nextStep ?? null,
+                            nextStepDate: prop.nextStepDate ? String(prop.nextStepDate).slice(0, 10) : null,
+                            dealOpen: prop.outcome == null,
                           })
                         }
                         className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-secondary hover:text-primary border border-border rounded-lg hover:bg-subtle transition-colors"
@@ -1519,9 +1580,33 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
         <AddVersionModal
           proposalId={addingVersionFor.id}
           nextVersionNumber={addingVersionFor.nextVersionNumber}
+          nextStep={addingVersionFor.nextStep}
+          nextStepDate={addingVersionFor.nextStepDate}
           onCancel={() => setAddingVersionFor(null)}
           onConfirm={() => {
             setAddingVersionFor(null);
+            fetchDetail();
+          }}
+        />
+      )}
+
+      {dealAction?.action === 'TOUCH' && (
+        <LogTouchModal target={dealAction.target} onClose={() => setDealAction(null)} onDone={() => { setDealAction(null); fetchDetail(); }} />
+      )}
+      {dealAction?.action === 'NEXT_STEP' && (
+        <NextStepModal target={dealAction.target} onClose={() => setDealAction(null)} onDone={() => { setDealAction(null); fetchDetail(); }} />
+      )}
+      {dealAction?.action === 'VERBAL_YES' && (
+        <VerbalYesModal target={dealAction.target} onClose={() => setDealAction(null)} onDone={() => { setDealAction(null); fetchDetail(); }} />
+      )}
+      {dealAction?.action === 'LAST_CONTACT' && (
+        <LastContactModal
+          kind="DEAL"
+          ids={[dealAction.target.id]}
+          label={dealAction.target.name}
+          onClose={() => setDealAction(null)}
+          onDone={() => {
+            setDealAction(null);
             fetchDetail();
           }}
         />
@@ -1542,7 +1627,13 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
         <NewProformaModal
           companyId={company.id}
           companyName={company.name}
-          source={{ type: 'PROPOSAL', proposalId: raisingProformaFor.id }}
+          source={{
+            type: 'PROPOSAL',
+            proposalId: raisingProformaFor.id,
+            nextStep: raisingProformaFor.nextStep,
+            nextStepDate: raisingProformaFor.nextStepDate,
+            dealOpen: raisingProformaFor.dealOpen,
+          }}
           defaultAmount={raisingProformaFor.defaultAmount}
           onCancel={() => setRaisingProformaFor(null)}
           onConfirm={() => {
