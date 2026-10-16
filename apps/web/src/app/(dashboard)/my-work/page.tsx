@@ -37,13 +37,14 @@ import { StatTile, StatRow } from '@/components/ui/stat-tile';
 import { TaskDrawer, type DrawerTask } from '@/components/work/TaskDrawer';
 import { FollowUps } from '@/components/sales/FollowUps';
 import toast from 'react-hot-toast';
-import { CheckSquare, Plus, GripVertical } from 'lucide-react';
+import { CheckSquare, ChevronRight, Plus, GripVertical } from 'lucide-react';
 import type { TaskRepeatInfo } from '@/lib/repeat';
 import { RepeatMark } from '@/components/work/RepeatMark';
 import { NewTaskModal } from '@/components/work/NewTaskModal';
 import { taskTypeLabel } from '@/lib/task-type';
 import { NowBadge, canBeNow, useWorkingOnNow } from '@/components/work/WorkingOnNow';
 import { qk } from '@/hooks/queries';
+import { useRemembered } from '@/lib/remembered';
 
 
 type TStatus = 'TODO' | 'IN_PROGRESS' | 'IN_REVIEW' | 'ON_HOLD' | 'DONE' | 'CANCELLED';
@@ -74,6 +75,9 @@ interface TaskItem {
   /** Exactly one of these is ever set — the two are mutually exclusive in the data. */
   monthCardMonth?: string | null;
   projectName?: string | null;
+  /** Filed under an internal project — or neither, for "Internal — no project". */
+  internalProjectId?: string | null;
+  internalProjectName?: string | null;
   workingHoursText: string;
   workingMinutes: number;
   typeMedianMinutes: number | null;
@@ -143,6 +147,23 @@ const rowCells = (id: string) =>
   Array.from(
     document.querySelector<HTMLTableRowElement>(`tr[data-task-row="${CSS.escape(id)}"]`)?.cells ?? [],
   );
+
+/**
+ * The piece of work a task on this list belongs to, for "Group by Project or
+ * retainer": a client's retainer month or project, an internal project, or
+ * "Internal — no project" for the one-off studio jobs.
+ */
+const workGroupOf = (t: TaskItem): { key: string; label: string; sub?: string; rank: number } => {
+  if (t.monthCardMonth) return { key: `R:${t.clientName}:${t.monthCardMonth}`, label: t.clientName, sub: retainerLabel(t) ?? undefined, rank: 0 };
+  if (t.internalProjectId)
+    return { key: `IP:${t.internalProjectId}`, label: t.internalProjectName ?? t.projectName ?? 'Internal project', sub: 'Internal', rank: 2 };
+  if (t.projectName) return { key: `P:${t.clientName}:${t.projectName}`, label: t.projectName, sub: t.clientName, rank: 0 };
+  if (t.clientName && t.clientName !== 'Internal') return { key: `C:${t.clientName}`, label: `${t.clientName} — no project`, rank: 1 };
+  return { key: 'NO_PROJECT', label: 'Internal — no project', rank: 3 };
+};
+
+const GROUP_BY_KEYS = ['when', 'work'] as const;
+type GroupBy = (typeof GROUP_BY_KEYS)[number];
 
 const STATUS_OPTIONS = [
   { value: 'TODO', label: 'To do' },
@@ -254,6 +275,14 @@ export default function MyWorkPage() {
    * with it.
    */
   const { focus, busy: focusBusy, start: startNow, clear: clearNow } = useWorkingOnNow();
+  /*
+   * Group by When (the groups below, and the default) or by Project or
+   * retainer. Remembered per browser. Arranging by drag is a When thing: the
+   * order is per group of due dates.
+   */
+  const [groupBy, setGroupBy] = useRemembered<GroupBy>('flowzen.myWork.groupBy', 'when', GROUP_BY_KEYS);
+  /** Folded work groups, by key. */
+  const [folded, setFolded] = useState<Set<string>>(() => new Set());
 
   /*
    * /my-work?task=… — the WhatsApp approval link.
@@ -298,6 +327,25 @@ export default function MyWorkPage() {
     if (fresh && fresh !== selected) setSelected(fresh);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [everyTask]);
+
+  /*
+   * "Project or retainer": the work still to do — late, today, this week and
+   * later, in that order as the When view shows it — under what it belongs
+   * to. Client work first, then internal projects, then "Internal — no
+   * project".
+   */
+  const workGroups = useMemo(() => {
+    const groups = new Map<string, { key: string; label: string; sub?: string; rank: number; tasks: TaskItem[] }>();
+    for (const t of [...buckets.overdue, ...buckets.today, ...buckets.thisWeek, ...buckets.later]) {
+      const w = workGroupOf(t);
+      const g = groups.get(w.key) ?? { ...w, tasks: [] };
+      g.tasks.push(t);
+      groups.set(w.key, g);
+    }
+    return [...groups.values()].sort(
+      (a, b) => a.rank - b.rank || `${a.sub ?? ''} ${a.label}`.localeCompare(`${b.sub ?? ''} ${b.label}`),
+    );
+  }, [buckets]);
 
   // Derived from the tasks above rather than stored beside them — three more
   // pieces of state that could go stale against the list they describe.
@@ -638,11 +686,25 @@ export default function MyWorkPage() {
       </div>
 
       <Card padding="none" className="overflow-hidden">
-        <CardHeader>
+        <CardHeader className="flex-wrap gap-2">
           <CardTitle>Everything assigned to you</CardTitle>
-          <Button variant="secondary" size="sm" icon={Plus} onClick={() => setCreating(true)}>
-            Task for myself
-          </Button>
+          <div className="flex items-center gap-2">
+            <label className="flex items-center gap-2 text-micro text-secondary">
+              Group by
+              <select
+                aria-label="Group your tasks by"
+                value={groupBy}
+                onChange={(e) => setGroupBy(e.target.value as GroupBy)}
+                className="h-8 rounded-lg border border-border bg-white px-2.5 text-sm text-body outline-none focus:border-primary"
+              >
+                <option value="when">When</option>
+                <option value="work">Project or retainer</option>
+              </select>
+            </label>
+            <Button variant="secondary" size="sm" icon={Plus} onClick={() => setCreating(true)}>
+              Task for myself
+            </Button>
+          </div>
         </CardHeader>
 
         {/* What they said they are on — wherever that row is on the list. */}
@@ -703,14 +765,56 @@ export default function MyWorkPage() {
                   <th className="eyebrow text-left">Status</th>
                 </tr>
               </thead>
-              <DragDropContext onBeforeCapture={onBeforeCapture} onDragEnd={(r) => void onDragEnd(r)}>
-                {section('Overdue', buckets.overdue, 'overdue')}
-                {section('Due today', buckets.today, 'today')}
-                {section('Later this week', [...buckets.thisWeek, ...buckets.later], 'week')}
-                {/* Below the active work: open, but the approver's move. */}
-                {section('Waiting for approval', buckets.inReview)}
-                {section('Done this week', buckets.completed)}
-              </DragDropContext>
+              {groupBy === 'work' ? (
+                <>
+                  {/* The work still to do, under what it belongs to — in My Work's own order. */}
+                  {workGroups.map((g) => {
+                    const open = !folded.has(g.key);
+                    return (
+                      <tbody key={`work:${g.key}`} className="divide-y divide-border">
+                        <tr className="bg-surface">
+                          <td colSpan={8} className="border-y border-border">
+                            <button
+                              type="button"
+                              aria-expanded={open}
+                              onClick={() =>
+                                setFolded((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(g.key)) next.delete(g.key);
+                                  else next.add(g.key);
+                                  return next;
+                                })
+                              }
+                              className="flex w-full items-center gap-2 rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                            >
+                              <ChevronRight
+                                className={`h-4 w-4 shrink-0 text-secondary transition-transform motion-reduce:transition-none ${open ? 'rotate-90' : ''}`}
+                              />
+                              <span className="text-sm font-semibold text-primary">{g.label}</span>
+                              {g.sub && <span className="truncate text-micro text-secondary">{g.sub}</span>}
+                              <span className="ml-auto rounded-full border border-border bg-white px-2 py-0.5 text-micro font-semibold tabular-nums text-secondary">
+                                {g.tasks.length}
+                              </span>
+                            </button>
+                          </td>
+                        </tr>
+                        {open && g.tasks.map(row)}
+                      </tbody>
+                    );
+                  })}
+                  {section('Waiting for approval', buckets.inReview)}
+                  {section('Done this week', buckets.completed)}
+                </>
+              ) : (
+                <DragDropContext onBeforeCapture={onBeforeCapture} onDragEnd={(r) => void onDragEnd(r)}>
+                  {section('Overdue', buckets.overdue, 'overdue')}
+                  {section('Due today', buckets.today, 'today')}
+                  {section('Later this week', [...buckets.thisWeek, ...buckets.later], 'week')}
+                  {/* Below the active work: open, but the approver's move. */}
+                  {section('Waiting for approval', buckets.inReview)}
+                  {section('Done this week', buckets.completed)}
+                </DragDropContext>
+              )}
             </table>
           </div>
         )}

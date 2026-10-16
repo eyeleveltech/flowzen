@@ -56,7 +56,7 @@ export function useConfig() {
 }
 
 /** One person, as the owner and assignee pickers need them. */
-export type TeamMemberOption = { id: string; name: string; designation: string | null; dept: string };
+export type TeamMemberOption = { id: string; name: string; designation: string | null; dept: string; departmentId: string | null };
 
 /**
  * The roster behind every owner / assignee picker.

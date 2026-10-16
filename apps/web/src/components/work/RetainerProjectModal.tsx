@@ -3,14 +3,15 @@
 /**
  * A project inside a retainer.
  *
- * Deliberately short. It asks for a name, dates and an owner, and nothing else,
- * because there is nothing else: the retainer is already billed monthly through
- * its month cards, so this carries no value, no milestones and no invoice. A
- * form that offered a figure here would be inviting somebody to bill the same
- * work twice.
+ * Deliberately short: a name, an owner and what it covers. The retainer is
+ * billed monthly through its month cards, so this carries no value, no
+ * milestones and no invoice — a form that offered a figure here would be
+ * inviting somebody to bill the same work twice.
  *
- * The end date can be left empty. That is not a missing answer — it is what an
- * always-on stream looks like, as against a campaign that finishes.
+ * No dates either (2026-10-16). Every project in a retainer runs month by
+ * month — its tasks sit on the month card they are due in — so a start and an
+ * end were a second calendar nobody needed. Dates already saved on older
+ * projects are left as they are; this form no longer sends them.
  */
 
 import toast from 'react-hot-toast';
@@ -36,13 +37,10 @@ export function RetainerProjectModal({ retainerId, project, onSaved, onClose }: 
   const [error, setError] = useState<string | null>(null);
 
   const [name, setName] = useState(project?.name ?? '');
-  const [startDate, setStartDate] = useState(project?.startDate?.slice(0, 10) ?? '');
-  const [endDate, setEndDate] = useState(project?.endDate?.slice(0, 10) ?? '');
   const [ownerId, setOwnerId] = useState(project?.owner?.id ?? '');
   const [description, setDescription] = useState(project?.description ?? '');
 
-  const datesWrongWayRound = Boolean(startDate && endDate && endDate < startDate);
-  const canSave = name.trim().length > 0 && !datesWrongWayRound && !busy;
+  const canSave = name.trim().length > 0 && !busy;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,8 +49,6 @@ export function RetainerProjectModal({ retainerId, project, onSaved, onClose }: 
     setError(null);
     const body = {
       name: name.trim(),
-      startDate: startDate || null,
-      endDate: endDate || null,
       ownerId: ownerId || null,
       description: description.trim() || null,
     };
@@ -77,7 +73,7 @@ export function RetainerProjectModal({ retainerId, project, onSaved, onClose }: 
       open
       onClose={onClose}
       title={project ? `Edit ${project.name}` : 'Add a project'}
-      description="A named piece of work inside this retainer. The monthly fee already covers it, so it carries no value of its own."
+      description="A named piece of work inside this retainer, done month by month. The monthly fee already covers it, so it carries no value of its own."
     >
       <form className="flex h-full flex-col" onSubmit={submit}>
         <ScrollingModalBody className="space-y-4">
@@ -89,21 +85,8 @@ export function RetainerProjectModal({ retainerId, project, onSaved, onClose }: 
             onChange={setName}
             required
             disabled={busy}
-            placeholder="e.g. Diwali Campaign"
+            placeholder="e.g. Paid marketing, Social media management"
           />
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Starts" value={startDate} onChange={setStartDate} type="date" disabled={busy} />
-            <Field
-              label="Ends"
-              value={endDate}
-              onChange={setEndDate}
-              type="date"
-              disabled={busy}
-              hint="Leave empty if it runs on with no end."
-              error={datesWrongWayRound ? 'That is before the start date.' : undefined}
-            />
-          </div>
 
           <FieldSelect
             label="Owner"

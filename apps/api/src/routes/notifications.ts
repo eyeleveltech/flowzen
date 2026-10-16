@@ -175,10 +175,33 @@ export async function eventAlertClauses(orgId: string, userId: string, now = new
   return [{ rule: { in: EVENT_RULES }, entityType: 'CalendarEvent', entityId: { in: rows.map((r) => r.eventId) } }];
 }
 
+/**
+ * The rules that reach the OWNER of the thing, and nobody else.
+ *
+ * Not in RULE_PERMISSION, on purpose: "your internal project is past its
+ * target date" is a nudge to the one person answerable for it (Internal work
+ * plan, decision 5), not a fact for everybody who can see Live work.
+ */
+export const OWNER_RULES = ['INTERNAL_PROJECT_OVERDUE'] as const;
+
+/** The owner rules about the internal projects this person owns. */
+export async function ownerAlertClauses(orgId: string, userId: string): Promise<Prisma.AlertWhereInput[]> {
+  const owned = await prisma.internalProject.findMany({
+    where: { organizationId: orgId, ownerId: userId },
+    select: { id: true },
+  });
+  if (owned.length === 0) return [];
+  return [{ rule: { in: [...OWNER_RULES] }, entityType: 'InternalProject', entityId: { in: owned.map((p) => p.id) } }];
+}
+
 /** Everything reaching a person by who they are rather than what they may see. */
 export async function peopleAlertClauses(orgId: string, userId: string): Promise<Prisma.AlertWhereInput[]> {
-  const [approvals, events] = await Promise.all([approvalAlertClauses(orgId, userId), eventAlertClauses(orgId, userId)]);
-  return [...approvals, ...events];
+  const [approvals, events, owned] = await Promise.all([
+    approvalAlertClauses(orgId, userId),
+    eventAlertClauses(orgId, userId),
+    ownerAlertClauses(orgId, userId),
+  ]);
+  return [...approvals, ...events, ...owned];
 }
 
 /**
@@ -301,6 +324,7 @@ const SOURCE: Record<string, string> = {
   Asset: 'Assets',
   Organization: 'Time split',
   CalendarEvent: 'Calendar',
+  InternalProject: 'Internal work',
 };
 
 /** Where a row opens: utils/recordLink, shared with the calendar. */

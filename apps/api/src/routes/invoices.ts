@@ -216,6 +216,9 @@ invoicesRouter.get('/', requirePermission('money.status'), async (req: AuthReque
  *   PAYMENT   invoiced; waiting for the money
  *   DONE      paid
  *   NOT_YET   billed after the month, and the month is still running
+ *   NO_FEE    the month carries no fee — work before a retainer starts —
+ *             so there is nothing to bill. Shown on the retainer's own page,
+ *             never on the board.
  *
  * Money.figures, like every other screen that shows a client's fee.
  */
@@ -238,6 +241,8 @@ invoicesRouter.get('/retainer-billing', requirePermission('money.figures'), asyn
         ? { retainer: { organizationId: orgId, id: retainerId } }
         : {
             retainer: { organizationId: orgId },
+            // A month with no fee has nothing to bill, so it is not on the board.
+            revenue: { gt: 0 },
             OR: [
               { month },
               {
@@ -315,9 +320,11 @@ invoicesRouter.get('/retainer-billing', requirePermission('money.figures'), asyn
             : 'PAYMENT'
           : liveProforma
             ? 'INVOICE'
-            : !advance && running
-              ? 'NOT_YET'
-              : 'PROFORMA';
+            : Number(c.revenue) <= 0
+              ? 'NO_FEE'
+              : !advance && running
+                ? 'NOT_YET'
+                : 'PROFORMA';
 
         return {
           monthCardId: c.id,
@@ -401,7 +408,8 @@ invoicesRouter.get('/awaiting', requirePermission('money.figures'), async (req: 
 
     const thisMonth = orgToday((await moneyClock(orgId)).timezone).slice(0, 7);
 
-    const base = { retainer: { organizationId: orgId }, invoiceId: null };
+    // A month with no fee — work before a retainer starts — is never awaiting an invoice.
+    const base = { retainer: { organizationId: orgId }, invoiceId: null, revenue: { gt: 0 } };
 
     /**
      * "Owed now", as a query rather than a predicate over the rows we happened

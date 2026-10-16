@@ -18,7 +18,7 @@ import { ProformaStatus, ProformaSourceType, type Proforma } from '@prisma/clien
 import { prisma } from '../lib/prisma.js';
 import { issueWithRetry } from '../utils/documentNumber.js';
 import { asStoredDay, moneyClock, orgToday } from '../utils/moneyDates.js';
-import { DEAL_NEXT_STEP_REQUIRED, hasNextStep, mergeNextStep, nextStepDateRefusal, nextStepFields } from './salesFollowUp.js';
+import { mergeNextStep, nextStepDateRefusal, nextStepFields } from './salesFollowUp.js';
 import { buildDocumentSnapshot } from './documentModel.js';
 import { documentFieldsSchema, cleanCustomFields, ORG_DOCUMENT_SELECT } from '../utils/documentSchemas.js';
 
@@ -184,14 +184,14 @@ export async function issueProforma(orgId: string, actorId: string, input: Profo
       select: { id: true, outcome: true, nextStep: true, nextStepDate: true },
     });
     if (!proposal) throw new ProformaRefusal(404, 'Proposal not found');
-    // Still open afterwards: what happens next, and by when. A proforma for a
-    // won deal is billing, and the deal is closed — it needs neither.
+    // Still open afterwards: what happens next, and by when, if they said —
+    // optional, but a date given can't be past. A proforma for a won deal is
+    // billing, and the deal is closed: it carries neither.
     if (proposal.outcome === null) {
       const today = orgToday((await moneyClock(orgId)).timezone);
       const pastDate = nextStepDateRefusal(input.nextStepDate, today);
       if (pastDate) throw new ProformaRefusal(400, pastDate);
       const after = mergeNextStep({ nextStep: proposal.nextStep, date: proposal.nextStepDate }, input);
-      if (!hasNextStep(after)) throw new ProformaRefusal(400, DEAL_NEXT_STEP_REQUIRED);
       dealStep = { nextStep: after.nextStep, nextStepDate: after.date };
     }
   }

@@ -14,9 +14,7 @@ import { asStoredDay, dayKey } from '../utils/moneyDates.js';
 import {
   ACTIVE_OUTREACH,
   CHANNEL_LABEL,
-  LEAD_NEXT_STEP_REQUIRED,
   bulkLastContactSchema,
-  hasNextStep,
   isActiveOutreach,
   lastContactRefusal,
   lastContactSchema,
@@ -348,17 +346,13 @@ outreachRouter.patch('/:id', requirePermission('company.write'), async (req: Aut
 
     const { name, vertical, source, ownerId, contactPersonName, phone, email, nextStep, nextActionDate } = parsed.data;
 
-    // Still active afterwards: it needs its next step and date.
+    // The next step is optional (2026-10-16); a date given can't be past.
     const pastDate = nextStepDateRefusal(nextActionDate, await studioToday(orgId));
     if (pastDate) {
       res.status(400).json({ success: false, error: pastDate });
       return;
     }
     const step = mergeNextStep({ nextStep: existing.nextStep, date: existing.nextActionDate }, { nextStep, nextStepDate: nextActionDate });
-    if (isActiveOutreach(existing.status) && !hasNextStep(step)) {
-      res.status(400).json({ success: false, error: LEAD_NEXT_STEP_REQUIRED, code: 'NEXT_STEP_REQUIRED' });
-      return;
-    }
 
     if (ownerId) {
       const owner = await prisma.user.findFirst({
@@ -430,6 +424,9 @@ outreachRouter.patch('/:id', requirePermission('company.write'), async (req: Aut
  *               somebody is quietly parking.
  *   MEETING     date required, remarks optional (time, online or offline,
  *               who is going — useful, not load-bearing).
+ *   INTERESTED  neither required.
+ *
+ * The next step in words is optional on all three (2026-10-16).
  *
  * The other three statuses carry neither, so anything sent with them is
  * ignored rather than stored where nothing will ever show it.
@@ -448,29 +445,18 @@ const statusChangeSchema = z
     status: z.nativeEnum(OutreachStatus),
     remarks: z.string().trim().max(2000).optional().nullable(),
     nextActionDate: z.string().optional().nullable(),
-    /**
-     * What happens next, in a few words (Sales next step plan). Every active
-     * status — follow-up, meeting, interested — needs it and its date;
-     * marking a lead dead or not contacted needs neither.
-     */
+    /** What happens next, in a few words. Optional (2026-10-16). */
     nextStep: z.string().trim().max(300, 'Keep the next step short — a few words').optional().nullable(),
   })
   .superRefine((v, ctx) => {
-    const needsDate = isActiveOutreach(v.status);
+    // A callback and a meeting are their date; Interested needs none.
+    const needsDate = v.status === OutreachStatus.FOLLOW_UP || v.status === OutreachStatus.MEETING;
     if (needsDate && !v.nextActionDate) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['nextActionDate'],
-        message:
-          v.status === OutreachStatus.FOLLOW_UP
-            ? 'When are you calling them back?'
-            : v.status === OutreachStatus.MEETING
-              ? 'When is the meeting?'
-              : 'When is the next step?',
+        message: v.status === OutreachStatus.FOLLOW_UP ? 'When are you calling them back?' : 'When is the meeting?',
       });
-    }
-    if (needsDate && !v.nextStep?.trim()) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['nextStep'], message: 'What happens next?' });
     }
     if (v.status === OutreachStatus.FOLLOW_UP && !v.remarks?.trim()) {
       ctx.addIssue({
@@ -590,10 +576,16 @@ outreachRouter.post('/:id/touch', requirePermission('company.write'), async (req
       return;
     }
     const { channel, note, nextStep, nextStepDate } = parsed.data;
+    // Optional: left out, the next step stays as it was; blank, it is cleared.
+    const after = mergeNextStep({ nextStep: existing.nextStep, date: existing.nextActionDate }, { nextStep, nextStepDate });
     const entry = await prisma.$transaction(async (tx) => {
       const updated = await tx.outreachEntry.update({
         where: { id },
-        data: { lastTouchedAt: new Date(), nextStep, nextActionDate: asStoredDay(nextStepDate) },
+        data: {
+          lastTouchedAt: new Date(),
+          ...(nextStep !== undefined ? { nextStep: after.nextStep } : {}),
+          ...(nextStepDate !== undefined ? { nextActionDate: after.date } : {}),
+        },
         include: { owner: { select: { id: true, name: true, designation: true } } },
       });
       await tx.activity.create({

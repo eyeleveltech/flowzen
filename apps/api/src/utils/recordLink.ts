@@ -31,6 +31,7 @@ const SCREEN_PERMISSION: Record<string, PermissionKey | null> = {
   '/outreach': 'company.read',
   '/quotations': 'pipeline.read',
   '/live-work': 'work.all',
+  '/internal-projects': 'work.all',
   '/projects': 'work.all',
   '/retainers': 'work.all',
   '/money': 'money.figures',
@@ -47,6 +48,8 @@ export const rawLinkFor = (entityType: string, entityId: string, parentId?: stri
   switch (entityType) {
     case 'Project':
       return `/projects/${entityId}`;
+    case 'InternalProject':
+      return `/internal-projects/${entityId}`;
     case 'Retainer':
       return `/retainers/${entityId}`;
     case 'RetainerProject':

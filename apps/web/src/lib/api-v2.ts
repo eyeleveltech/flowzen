@@ -776,8 +776,41 @@ export interface InternalProject {
   description: string | null;
   owner: { id: string; name: string } | null;
   status: 'ACTIVE' | 'DONE';
+  /** Optional calendar days, as ISO timestamps at midnight UTC. */
+  startDate?: string | null;
+  targetDate?: string | null;
+  /** The owning department, if one was chosen. */
+  department?: { id: string; name: string } | null;
   taskCounts: { total: number; done: number; open: number; late: number };
+  /** How its work is going — see services/internalWork.ts on the API. */
+  progress: InternalProjectProgress;
 }
+
+export type InternalProjectProgress = {
+  /** DONE out of all non-cancelled tasks; null with no tasks at all. */
+  percentDone: number | null;
+  total: number;
+  done: number;
+  open: number;
+  overdue: number;
+  nextDue: { id: string; title: string; dueDate: string } | null;
+  /** Everyone with open tasks in it, by name, with their open counts. */
+  people: { id: string; name: string; open: number }[];
+  /** Days to the target date; negative once passed; null with no target. */
+  daysLeft: number | null;
+  /** Running, past its target, with work still open. */
+  pastTarget: boolean;
+};
+
+/** What a new or edited internal project sends. Dates are "YYYY-MM-DD", or null to clear. */
+export type InternalProjectBody = {
+  name: string;
+  description?: string | null;
+  ownerId?: string | null;
+  departmentId?: string | null;
+  startDate?: string | null;
+  targetDate?: string | null;
+};
 
 export interface Company {
   id: string;
@@ -1008,7 +1041,8 @@ export type RetainerBilling = 'IN_ADVANCE' | 'IN_ARREARS';
  * PAYMENT invoiced, waiting for the money · DONE paid · NOT_YET billed after
  * the month and the month is still running.
  */
-export type BillingStep = 'PROFORMA' | 'INVOICE' | 'PAYMENT' | 'DONE' | 'NOT_YET';
+/** NO_FEE: the month carries no fee (work before a retainer starts), so there is nothing to bill. */
+export type BillingStep = 'PROFORMA' | 'INVOICE' | 'PAYMENT' | 'DONE' | 'NOT_YET' | 'NO_FEE';
 
 export interface BillingProforma {
   id: string;
@@ -1941,14 +1975,18 @@ export const api = {
    * guarantee rather than a convention.
    */
   internalProjects: {
+    /**
+     * Every internal project with its progress, and `general`: the open and
+     * overdue internal tasks filed under no project (the caller's scope).
+     */
     list: (status?: string) =>
-      get<{ success: boolean; projects: InternalProject[] }>(
+      get<{ success: boolean; today: string; projects: InternalProject[]; general: { open: number; overdue: number } }>(
         `/internal-projects${status ? `?status=${status}` : ''}`,
       ),
     /** One bucket and the tasks under it — what the project page reads. */
     get: (id: string) =>
       get<{ success: boolean; project: any }>(`/internal-projects/${id}`),
-    create: (body: { name: string; description?: string | null; ownerId?: string | null }) =>
+    create: (body: InternalProjectBody) =>
       post<{ success: boolean; project: InternalProject }>('/internal-projects', body),
     update: (id: string, body: Record<string, unknown>) =>
       patch<{ success: boolean; project: InternalProject }>(`/internal-projects/${id}`, body),
@@ -1977,6 +2015,8 @@ export const api = {
         clients: { id: string; name: string }[];
         /** Whether anything has no client at all, so "Internal" is worth offering. */
         hasInternal: boolean;
+        /** Whether any internal task is filed under no project — "Internal — no project". */
+        hasNoProject: boolean;
         /**
          * Every project with work in it — one-off (`P:`), inside a retainer
          * (`RP:`) or internal (`IP:`) — with the client it is for.
@@ -2993,8 +3033,9 @@ export type NextStepBody = { nextStep?: string | null; nextStepDate?: string | n
 export type TouchBody = {
   channel: 'CALL' | 'WHATSAPP' | 'EMAIL' | 'MEETING' | 'OTHER';
   note: string;
-  nextStep: string;
-  nextStepDate: string;
+  /** Optional. Left out, it stays as it was; null clears it. */
+  nextStep?: string | null;
+  nextStepDate?: string | null;
 };
 
 export interface FollowUpItem {

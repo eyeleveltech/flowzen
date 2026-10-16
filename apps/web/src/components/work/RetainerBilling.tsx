@@ -121,6 +121,7 @@ export function BillingNext({
         </span>
       )}
       {step === 'NOT_YET' && <span className="text-xs text-secondary">Billable from {billableFrom(subject.month)}</span>}
+      {step === 'NO_FEE' && <span className="text-xs text-secondary">No fee this month — nothing to bill</span>}
 
       {/* The invoice's: correct it or a payment, or cancel it and go back a step. */}
       {invoice && (
@@ -279,6 +280,19 @@ export function RetainerBillingStrip({
       : subject.gstPercent === 0
         ? 'no GST'
         : `+ ${subject.gstPercent}% GST = ${money(subject.fee * (1 + subject.gstPercent / 100))}`;
+
+  // No fee this month — work before the retainer starts: one line, no steps.
+  if (step === 'NO_FEE') {
+    return (
+      <section
+        aria-label={`Billing for ${monthLabel(subject.month)}`}
+        className="mb-5 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 rounded-xl border border-border bg-white px-4 py-3.5"
+      >
+        <p className="eyebrow">Billing · {monthLabel(subject.month)}</p>
+        <p className="text-sm text-secondary">No fee this month — nothing to bill.</p>
+      </section>
+    );
+  }
 
   return (
     <section

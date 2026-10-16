@@ -3,11 +3,11 @@
 /**
  * The next step on a deal or a lead (Sales next step plan).
  *
- * Every open deal and every active lead (follow-up, meeting, interested)
- * carries what happens next and by when. The server refuses a stage change, a
- * status change, a touch or an edit that would leave one without it — these
- * are the fields every one of those forms uses, and the line every list
- * shows.
+ * What happens next on an open deal or an active lead (follow-up, meeting,
+ * interested), and by when. Optional everywhere since 2026-10-16 — nothing
+ * refuses a save without one — but a deal or lead without one shows a
+ * "No next step" badge, and a date given can't be in the past. These are the
+ * fields every form uses, and the line every list shows.
  */
 
 import { Field } from '@/components/ui/field';
@@ -22,9 +22,12 @@ export const nextStepDraft = (nextStep?: string | null, date?: string | null): N
   nextStepDate: date ? date.slice(0, 10) : '',
 });
 
-/** Both the words and the date — what the server needs. */
+/** Both the words and a date not in the past — for "Set next step", whose whole job is setting one. */
 export const nextStepReady = (d: NextStepDraft, today: string) =>
   Boolean(d.nextStep.trim()) && Boolean(d.nextStepDate) && d.nextStepDate >= today;
+
+/** What every other form checks: it may be left empty, but a date given can't be past. */
+export const nextStepOk = (d: NextStepDraft, today: string) => !d.nextStepDate || d.nextStepDate >= today;
 
 /** As the API takes it. */
 export const nextStepBody = (d: NextStepDraft) => ({
@@ -46,11 +49,14 @@ export function NextStepFields({
   value,
   onChange,
   disabled,
-  hint = 'Required while it is open. Winning, losing or marking it dead needs none.',
+  required = false,
+  hint = 'Optional. What happens next, and by when.',
 }: {
   value: NextStepDraft;
   onChange: (next: NextStepDraft) => void;
   disabled?: boolean;
+  /** Only "Set next step" asks for it — everywhere else it can be left for later. */
+  required?: boolean;
   hint?: string | null;
 }) {
   const today = useStudioToday();
@@ -60,7 +66,7 @@ export function NextStepFields({
       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_11rem]">
         <Field
           label="Next step"
-          required
+          required={required}
           value={value.nextStep}
           onChange={(v) => onChange({ ...value, nextStep: v })}
           placeholder="e.g. Call to walk them through v2"
@@ -69,7 +75,7 @@ export function NextStepFields({
         <Field
           label="By"
           type="date"
-          required
+          required={required}
           min={today}
           value={value.nextStepDate}
           onChange={(v) => onChange({ ...value, nextStepDate: v })}

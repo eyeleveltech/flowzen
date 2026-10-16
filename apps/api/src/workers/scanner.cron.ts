@@ -544,6 +544,8 @@ export async function evaluateAgencyHealthRules(organizationId: string): Promise
       retainer: { organizationId },
       status: 'CLOSED',
       invoiceId: null,
+      // A month with no fee — work before a retainer starts — has nothing to invoice.
+      revenue: { gt: 0 },
       closedAt: { lt: fiveDaysAgoForCards },
     },
     include: { retainer: { include: { company: true } } },
@@ -571,6 +573,8 @@ export async function evaluateAgencyHealthRules(organizationId: string): Promise
       where: {
         month: monthNow,
         invoiceId: null,
+        // No fee this month, nothing to ask for.
+        revenue: { gt: 0 },
         retainer: { organizationId, status: 'ACTIVE', billing: 'IN_ADVANCE' },
       },
       include: { retainer: { include: { company: true } } },
@@ -696,6 +700,35 @@ export async function evaluateAgencyHealthRules(organizationId: string): Promise
       entityType: 'Asset',
       entityId: a.id,
       message: `${a.tag} — ${a.name} is out of warranty on ${(a.warrantyUntil as Date).toISOString().slice(0, 10)}.`,
+    });
+  }
+
+  // RULE: INTERNAL_PROJECT_OVERDUE — Internal work plan, decision 5. A running
+  // internal project past its target date with work still open: ONE low bell
+  // for its owner, linking to the project. It stays open (and is not raised
+  // again) until the work is done, the date is moved or the project is closed.
+  // Nobody named as owner, nobody to tell. Who sees it is the bell's business:
+  // the owner only (OWNER_RULES in routes/notifications.ts).
+  const internalToday = orgToday((await moneyClock(organizationId)).timezone, now);
+  const pastTarget = await prisma.internalProject.findMany({
+    where: { organizationId, status: 'ACTIVE', ownerId: { not: null }, targetDate: { lt: asStoredDay(internalToday) } },
+    select: {
+      id: true,
+      name: true,
+      targetDate: true,
+      _count: { select: { tasks: { where: { deletedAt: null, status: { notIn: ['DONE', 'CANCELLED'] } } } } },
+    },
+  });
+  for (const ip of pastTarget) {
+    const open = ip._count.tasks;
+    if (open === 0) continue;
+    const target = new Intl.DateTimeFormat('en-IN', { timeZone: 'UTC', day: 'numeric', month: 'short' }).format(ip.targetDate as Date);
+    alerts.push({
+      rule: 'INTERNAL_PROJECT_OVERDUE',
+      severity: AlertSeverity.LOW,
+      entityType: 'InternalProject',
+      entityId: ip.id,
+      message: `${ip.name} passed its target date (${target}) with ${open} task${open === 1 ? '' : 's'} still open.`,
     });
   }
 

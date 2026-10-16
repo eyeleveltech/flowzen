@@ -20,7 +20,7 @@ import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Field, FieldSelect } from '@/components/ui/field';
 import { ErrorNote } from '@/components/ui/empty-state';
-import { NextStepFields, nextStepBody, nextStepDraft, nextStepReady, useStudioToday } from './NextStep';
+import { NextStepFields, nextStepBody, nextStepDraft, nextStepOk, nextStepReady, useStudioToday } from './NextStep';
 
 export type SalesTarget = {
   kind: 'DEAL' | 'LEAD';
@@ -46,13 +46,14 @@ export function LogTouchModal({ target, onClose, onDone }: { target: SalesTarget
   const [step, setStep] = useState(nextStepDraft(target.nextStep, target.nextStepDate));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const canSave = Boolean(note.trim()) && nextStepReady(step, today) && !busy;
+  // A note is enough; the next step is optional.
+  const canSave = Boolean(note.trim()) && nextStepOk(step, today) && !busy;
 
   const save = async () => {
     setBusy(true);
     setError(null);
     try {
-      const body: TouchBody = { channel, note: note.trim(), nextStep: step.nextStep.trim(), nextStepDate: step.nextStepDate };
+      const body: TouchBody = { channel, note: note.trim(), ...nextStepBody(step) };
       if (target.kind === 'DEAL') await api.proposals.touch(target.id, body);
       else await api.outreach.touch(target.id, body);
       toast.success(`${CHANNELS.find((c) => c.value === channel)?.label} logged`);
@@ -131,7 +132,7 @@ export function NextStepModal({ target, onClose, onDone }: { target: SalesTarget
       >
         <ModalBody className="space-y-4">
           {error && <ErrorNote onDismiss={() => setError(null)}>{error}</ErrorNote>}
-          <NextStepFields value={step} onChange={setStep} disabled={busy} hint="Setting it is not contact — to record a call or a message, use Log touch." />
+          <NextStepFields value={step} onChange={setStep} disabled={busy} required hint="Setting it is not contact — to record a call or a message, use Log touch." />
         </ModalBody>
         <ModalFooter>
           <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>
@@ -241,7 +242,7 @@ export function VerbalYesModal({ target, onClose, onDone }: { target: SalesTarge
   const [step, setStep] = useState(nextStepDraft(target.nextStep, target.nextStepDate));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const canSave = nextStepReady(step, today) && !busy;
+  const canSave = nextStepOk(step, today) && !busy;
 
   const save = async () => {
     setBusy(true);

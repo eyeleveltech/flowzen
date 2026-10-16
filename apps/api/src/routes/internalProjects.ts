@@ -12,6 +12,12 @@
  * that gets billed. That is the whole point of it, and the schema is what
  * keeps it true rather than a rule somebody has to remember.
  *
+ * Since the Internal work plan a project can also carry optional start and
+ * target dates and an owning department, and every read says how it is going:
+ * % done, open and overdue, the next task due, who is on it, and the days to
+ * its target (services/internalWork.ts). A one-off internal job needs none of
+ * this — it is filed under "No project" instead.
+ *
  * Gated on `work.all`, the same permission that opens the All tasks page:
  * naming a piece of the studio's own work is organising, not a commercial act.
  */
@@ -23,6 +29,9 @@ import { prisma } from '../lib/prisma.js';
 import { authenticate, requirePermission, type AuthRequest } from '../middleware/auth.js';
 import { TASK_PEOPLE, withPeople } from './tasks.js';
 import { withRepeatNext } from '../services/taskRepeat.js';
+import { taskInScope } from '../services/teamScope.js';
+import { isLate, NO_PROJECT_WHERE, projectProgress, UNFINISHED } from '../services/internalWork.js';
+import { asStoredDay, moneyClock, orgToday } from '../utils/moneyDates.js';
 
 export const internalProjectsRouter = Router();
 
@@ -31,40 +40,91 @@ export const internalProjectsRouter = Router();
 // everybody — the same shape every other router here uses.
 internalProjectsRouter.use(authenticate);
 
+/** A calendar day, "2026-10-20", or null to clear it. */
+const dayField = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a date like 2026-10-20')
+  .nullable()
+  .optional();
+
 const bodySchema = z.object({
   name: z.string().trim().min(1, 'Give it a name').max(120),
   description: z.string().trim().max(2000).optional().nullable(),
   ownerId: z.string().min(1).optional().nullable(),
   status: z.nativeEnum(InternalProjectStatus).optional(),
+  startDate: dayField,
+  targetDate: dayField,
+  departmentId: z.string().min(1).optional().nullable(),
 });
+type Body = z.infer<typeof bodySchema>;
 
-/** Cancelled work is neither outstanding nor finished. */
-const COUNTED = (s: string) => s !== 'CANCELLED';
+/** The studio's today — where it is, not where the server is. */
+const studioToday = async (orgId: string) => orgToday((await moneyClock(orgId)).timezone);
 
 /**
  * A row, with how its work is going.
  *
- * The same shape wherever one is listed, so a picker and a settings list
- * cannot disagree about how much is still open under a bucket.
+ * The same shape wherever one is listed, so a picker and the Live work list
+ * cannot disagree about how much is still open under a bucket. `taskCounts` is
+ * kept for the screens that read it; `progress` is the fuller answer.
  */
-function summarise<T extends { tasks: { status: string; dueDate: Date }[] }>(p: T) {
-  const today = new Date().toISOString().slice(0, 10);
-  const counted = p.tasks.filter((t) => COUNTED(t.status));
-  const done = counted.filter((t) => t.status === 'DONE').length;
-  const late = counted.filter(
-    (t) => t.status !== 'DONE' && new Date(t.dueDate).toISOString().slice(0, 10) < today,
-  ).length;
+function summarise<T extends { status: string; targetDate: Date | null; tasks: Parameters<typeof projectProgress>[1] }>(
+  p: T,
+  today: string,
+) {
+  const progress = projectProgress(p, p.tasks, today);
   const { tasks: _dropped, ...rest } = p;
   return {
     ...rest,
-    taskCounts: { total: counted.length, done, open: counted.length - done, late },
+    taskCounts: { total: progress.total, done: progress.done, open: progress.open, late: progress.overdue },
+    progress,
   };
 }
 
 const withTasks = {
   owner: { select: { id: true, name: true } },
-  tasks: { where: { deletedAt: null }, select: { status: true, dueDate: true } },
+  department: { select: { id: true, name: true } },
+  tasks: {
+    where: { deletedAt: null },
+    select: {
+      id: true,
+      title: true,
+      status: true,
+      dueDate: true,
+      assignees: { select: { user: { select: { id: true, name: true } } } },
+    },
+  },
 } as const;
+
+/**
+ * The dates and the department, checked. Null when they are fine, otherwise
+ * the sentence to answer with.
+ */
+async function fieldsRefusal(
+  orgId: string,
+  data: Partial<Body>,
+  existing?: { startDate: Date | null; targetDate: Date | null },
+): Promise<string | null> {
+  const day = (d: Date | null | undefined) => (d ? d.toISOString().slice(0, 10) : null);
+  const start = data.startDate !== undefined ? data.startDate : day(existing?.startDate);
+  const target = data.targetDate !== undefined ? data.targetDate : day(existing?.targetDate);
+  if (start && target && target < start) return "The target date can't be before the start date.";
+  if (data.departmentId) {
+    const dept = await prisma.department.findFirst({
+      where: { id: data.departmentId, organizationId: orgId, archivedAt: null },
+      select: { id: true },
+    });
+    if (!dept) return 'That department is not one of yours.';
+  }
+  return null;
+}
+
+/** The optional fields, as written to the row. */
+const optionalFields = (data: Partial<Body>) => ({
+  ...(data.startDate !== undefined ? { startDate: data.startDate ? asStoredDay(data.startDate) : null } : {}),
+  ...(data.targetDate !== undefined ? { targetDate: data.targetDate ? asStoredDay(data.targetDate) : null } : {}),
+  ...(data.departmentId !== undefined ? { departmentId: data.departmentId || null } : {}),
+});
 
 /**
  * GET /api/internal-projects
@@ -84,24 +144,44 @@ const withTasks = {
  * cost can point at one, so there is nothing here to protect: anybody who can
  * hold a task can see what the studio's own work is called. MAKING and
  * CHANGING them stays `work.all` — every route below this one.
+ *
+ * `general` is the open and overdue count of internal tasks filed under no
+ * project — the pinned "General — no project" card on Live work. Counted
+ * within the caller's scope, so it matches the All work list it opens.
  */
 internalProjectsRouter.get(
   '/',
   requirePermission('work.own'),
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
+      const orgId = req.user!.organizationId;
       const status = typeof req.query.status === 'string' ? req.query.status.toUpperCase() : null;
-      const rows = await prisma.internalProject.findMany({
-        where: {
-          organizationId: req.user!.organizationId,
-          ...(status && status in InternalProjectStatus
-            ? { status: status as InternalProjectStatus }
-            : {}),
-        },
-        orderBy: [{ status: 'asc' }, { name: 'asc' }],
-        include: withTasks,
+      const [rows, today] = await Promise.all([
+        prisma.internalProject.findMany({
+          where: {
+            organizationId: orgId,
+            ...(status && status in InternalProjectStatus ? { status: status as InternalProjectStatus } : {}),
+          },
+          orderBy: [{ status: 'asc' }, { name: 'asc' }],
+          include: withTasks,
+        }),
+        studioToday(orgId),
+      ]);
+      const general = await prisma.task.findMany({
+        where: await taskInScope(req.user!, {
+          organizationId: orgId,
+          deletedAt: null,
+          ...NO_PROJECT_WHERE,
+          status: { in: [...UNFINISHED] },
+        }),
+        select: { status: true, dueDate: true },
       });
-      res.json({ success: true, projects: rows.map(summarise) });
+      res.json({
+        success: true,
+        today,
+        projects: rows.map((r) => summarise(r, today)),
+        general: { open: general.length, overdue: general.filter((t) => isLate(t, today)).length },
+      });
     } catch (e) {
       next(e);
     }
@@ -120,47 +200,45 @@ internalProjectsRouter.get(
   requirePermission('work.all'),
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-      const project = await prisma.internalProject.findFirst({
-        where: { id: String(req.params.id), organizationId: req.user!.organizationId },
-        include: {
-          owner: { select: { id: true, name: true } },
-          tasks: {
-            where: { deletedAt: null },
-            orderBy: [{ status: 'asc' }, { dueDate: 'asc' }],
-            include: TASK_PEOPLE,
+      const orgId = req.user!.organizationId;
+      const [project, today] = await Promise.all([
+        prisma.internalProject.findFirst({
+          where: { id: String(req.params.id), organizationId: orgId },
+          include: {
+            owner: { select: { id: true, name: true } },
+            department: { select: { id: true, name: true } },
+            tasks: {
+              where: { deletedAt: null },
+              orderBy: [{ status: 'asc' }, { dueDate: 'asc' }],
+              include: TASK_PEOPLE,
+            },
           },
-        },
-      });
+        }),
+        studioToday(orgId),
+      ]);
       if (!project) {
         res.status(404).json({ success: false, error: 'Not found' });
         return;
       }
 
-      const today = new Date().toISOString().slice(0, 10);
-      const counted = project.tasks.filter((t) => COUNTED(t.status));
-      const done = counted.filter((t) => t.status === 'DONE').length;
+      const progress = projectProgress(project, project.tasks, today);
 
       res.json({
         success: true,
+        today,
         project: {
           ...project,
           tasks: await withRepeatNext(
-            req.user!.organizationId,
+            orgId,
             project.tasks.map((t) => ({
               ...withPeople(t),
               // The same flag every other task list computes, so a row reads the
               // same here as it does on My Work.
-              isOverdue: t.status !== 'DONE' && t.status !== 'CANCELLED' && t.dueDate.toISOString().slice(0, 10) < today,
+              isOverdue: isLate(t, today),
             })),
           ),
-          taskCounts: {
-            total: counted.length,
-            done,
-            open: counted.length - done,
-            late: counted.filter(
-              (t) => t.status !== 'DONE' && t.dueDate.toISOString().slice(0, 10) < today,
-            ).length,
-          },
+          taskCounts: { total: progress.total, done: progress.done, open: progress.open, late: progress.overdue },
+          progress,
         },
       });
     } catch (e) {
@@ -191,6 +269,11 @@ internalProjectsRouter.post(
         res.status(409).json({ success: false, error: `There is already one called '${parsed.data.name}'.` });
         return;
       }
+      const refused = await fieldsRefusal(orgId, parsed.data);
+      if (refused) {
+        res.status(400).json({ success: false, error: refused });
+        return;
+      }
 
       const project = await prisma.internalProject.create({
         data: {
@@ -198,6 +281,7 @@ internalProjectsRouter.post(
           name: parsed.data.name,
           description: parsed.data.description || null,
           ownerId: parsed.data.ownerId || null,
+          ...optionalFields(parsed.data),
         },
         include: withTasks,
       });
@@ -213,7 +297,7 @@ internalProjectsRouter.post(
         },
       });
 
-      res.status(201).json({ success: true, project: summarise(project) });
+      res.status(201).json({ success: true, project: summarise(project, await studioToday(orgId)) });
     } catch (e) {
       next(e);
     }
@@ -235,7 +319,7 @@ internalProjectsRouter.patch(
 
       const existing = await prisma.internalProject.findFirst({
         where: { id, organizationId: orgId },
-        select: { id: true, name: true, status: true },
+        select: { id: true, name: true, status: true, startDate: true, targetDate: true },
       });
       if (!existing) {
         res.status(404).json({ success: false, error: 'Not found' });
@@ -252,6 +336,11 @@ internalProjectsRouter.patch(
           return;
         }
       }
+      const refused = await fieldsRefusal(orgId, parsed.data, existing);
+      if (refused) {
+        res.status(400).json({ success: false, error: refused });
+        return;
+      }
 
       const project = await prisma.internalProject.update({
         where: { id },
@@ -260,6 +349,7 @@ internalProjectsRouter.patch(
           ...(parsed.data.description !== undefined ? { description: parsed.data.description || null } : {}),
           ...(parsed.data.ownerId !== undefined ? { ownerId: parsed.data.ownerId || null } : {}),
           ...(parsed.data.status !== undefined ? { status: parsed.data.status } : {}),
+          ...optionalFields(parsed.data),
         },
         include: withTasks,
       });
@@ -277,7 +367,7 @@ internalProjectsRouter.patch(
         });
       }
 
-      res.json({ success: true, project: summarise(project) });
+      res.json({ success: true, project: summarise(project, await studioToday(orgId)) });
     } catch (e) {
       next(e);
     }

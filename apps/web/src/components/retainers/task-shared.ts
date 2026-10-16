@@ -133,16 +133,6 @@ export const currentMonth = () => {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 };
 
-/** How long a project runs, in the words the card uses. */
-export function describeRun(p: RetainerProject): string {
-  const day = (iso: string) =>
-    new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
-  if (p.startDate && p.endDate) return `${day(p.startDate)} – ${day(p.endDate)}`;
-  if (p.startDate) return `from ${day(p.startDate)}`;
-  if (p.endDate) return `until ${day(p.endDate)}`;
-  return 'ongoing';
-}
-
 /**
  * Past its due date, and neither finished nor called off — nor waiting on an
  * approver, which is not its assignee's lateness.

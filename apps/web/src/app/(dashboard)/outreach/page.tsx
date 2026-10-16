@@ -94,19 +94,25 @@ const isOverdue = (iso: string) => new Date(iso).setHours(23, 59, 59, 999) < Dat
  * carries a next step and its date (Sales next step plan): Interested too,
  * since a lead asking for a quotation is the one most worth not dropping.
  */
-const CARRIES_ACTION: Partial<Record<OutreachStatus, { dateLabel: string; remarksRequired: boolean; remarksHint: string }>> = {
+const CARRIES_ACTION: Partial<
+  Record<OutreachStatus, { dateLabel: string; dateRequired: boolean; remarksRequired: boolean; remarksHint: string }>
+> = {
   FOLLOW_UP: {
     dateLabel: 'Call back on',
+    // A callback and a meeting are their date. The next step in words is optional.
+    dateRequired: true,
     remarksRequired: true,
     remarksHint: 'What did they say? Why do they want a callback?',
   },
   MEETING: {
     dateLabel: 'Meeting on',
+    dateRequired: true,
     remarksRequired: false,
     remarksHint: 'Time, online or offline, where, and who is going.',
   },
   INTERESTED: {
     dateLabel: 'Next step by',
+    dateRequired: false,
     remarksRequired: false,
     remarksHint: 'What they asked for — a quotation, a deck, a call with the founder.',
   },
@@ -974,12 +980,12 @@ export default function OutreachPage() {
         }
       >
         <ModalBody>
-          {/* What happens next, and by when — every lead being worked carries both. */}
+          {/* What happens next — optional. The date is the callback or the meeting. */}
           <Field
             label="Next step"
             value={actionNextStep}
             onChange={setActionNextStep}
-            required
+            hint="Optional"
             placeholder={actionFor?.status === 'MEETING' ? 'e.g. Pitch the retainer at their office' : 'e.g. Call back with the revised quote'}
           />
           <Field
@@ -988,7 +994,7 @@ export default function OutreachPage() {
             min={today}
             value={actionDate}
             onChange={setActionDate}
-            required
+            required={actionFor ? Boolean(CARRIES_ACTION[actionFor.status]?.dateRequired) : false}
             error={actionDate && actionDate < today ? "Can't be in the past" : undefined}
           />
           <Field
@@ -1010,9 +1016,8 @@ export default function OutreachPage() {
             variant="primary"
             loading={savingAction}
             disabled={
-              !actionDate ||
-              actionDate < today ||
-              !actionNextStep.trim() ||
+              (actionFor ? Boolean(CARRIES_ACTION[actionFor.status]?.dateRequired) && !actionDate : true) ||
+              Boolean(actionDate && actionDate < today) ||
               (actionFor ? Boolean(CARRIES_ACTION[actionFor.status]?.remarksRequired) && !actionRemarks.trim() : true)
             }
             onClick={() => void saveAction()}
@@ -1095,8 +1100,15 @@ export default function OutreachPage() {
           />
           {editActive && (
             <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_11rem]">
-              <Field label="Next step" value={editNextStep} onChange={setEditNextStep} required placeholder="What happens next" />
-              <Field label="By" type="date" min={today} value={editNextDate} onChange={setEditNextDate} required />
+              <Field label="Next step" value={editNextStep} onChange={setEditNextStep} hint="Optional" placeholder="What happens next" />
+              <Field
+                label="By"
+                type="date"
+                min={today}
+                value={editNextDate}
+                onChange={setEditNextDate}
+                error={editNextDate && editNextDate < today ? "Can't be in the past" : undefined}
+              />
             </div>
           )}
 
@@ -1153,7 +1165,7 @@ export default function OutreachPage() {
           <Button
             variant="primary"
             loading={savingEdit}
-            disabled={!editName.trim() || (editActive && (!editNextStep.trim() || !editNextDate))}
+            disabled={!editName.trim() || Boolean(editActive && editNextDate && editNextDate < today)}
             onClick={() => void saveEdit()}
           >
             Save changes

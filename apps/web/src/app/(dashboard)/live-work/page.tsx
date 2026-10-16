@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useConfig, qk } from '@/hooks/queries';
+import { useConfig, useDepartments, qk } from '@/hooks/queries';
 import { ErrorNote } from '@/components/ui/empty-state';
 import { plural } from '@/lib/utils';
 import Link from 'next/link';
@@ -15,6 +15,8 @@ import { getPriorityBadge, getPriorityLabel } from '@/lib/priority';
 import { StatTile, StatRow } from '@/components/ui/stat-tile';
 import { Tabs, useTabState, type TabDef } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import { PeopleOnIt, ProgressBar, TargetLine } from '@/components/work/InternalProjectBits';
+import type { InternalProject } from '@/lib/api-v2';
 
 interface LiveAlert { rule: string; severity: 'HIGH' | 'MED' | 'LOW'; message: string }
 
@@ -205,6 +207,36 @@ export default function LiveWorkPage() {
     queryFn: () => api.internalProjects.list(),
   });
   const internalProjects = internalData?.projects ?? [];
+  /** Internal tasks filed under no project — the pinned "General" card. */
+  const general = internalData?.general ?? { open: 0, overdue: 0 };
+  const { departments } = useDepartments();
+  /*
+   * The Internal list's own controls (Internal work plan, decision 6):
+   * department and status filters, and the order — target date first, since
+   * "what is due soonest" is the question a list of running work answers.
+   */
+  const [ipDept, setIpDept] = useState('ALL');
+  const [ipStatus, setIpStatus] = useState<'ACTIVE' | 'DONE' | 'ALL'>('ACTIVE');
+  const [ipSort, setIpSort] = useState<'target' | 'progress' | 'name'>('target');
+  const shownInternal = internalProjects
+    .filter((ip) => ipStatus === 'ALL' || ip.status === ipStatus)
+    .filter((ip) => ipDept === 'ALL' || (ipDept === 'NONE' ? !ip.department : ip.department?.id === ipDept))
+    .sort((a: InternalProject, b: InternalProject) => {
+      // Finished work last whatever the order, when both are shown.
+      if (a.status !== b.status) return a.status === 'ACTIVE' ? -1 : 1;
+      if (ipSort === 'target') {
+        // No target date goes last.
+        const at = a.targetDate ?? '9999';
+        const bt = b.targetDate ?? '9999';
+        if (at !== bt) return at < bt ? -1 : 1;
+      } else if (ipSort === 'progress') {
+        // Least done first — what needs a push. No tasks yet goes last.
+        const ap = a.progress.percentDone ?? 101;
+        const bp = b.progress.percentDone ?? 101;
+        if (ap !== bp) return ap - bp;
+      }
+      return a.name.localeCompare(b.name);
+    });
 
   /** What the create flows call once they have added something. */
   const load = useCallback(() => {
@@ -691,58 +723,182 @@ export default function LiveWorkPage() {
       )}
 
       {tab === 'INTERNAL' && (
-        <div className="border border-border rounded-xl overflow-hidden mt-6">
-          <div className="overflow-x-auto">
-            <table className="w-full data-table">
-              <thead>
-                <tr className="border-b border-border bg-subtle">
-                  <th className="eyebrow text-left">Internal project</th>
-                  <th className="eyebrow text-left">Owner</th>
-                  <th className="eyebrow text-right">Open</th>
-                  <th className="eyebrow text-right">Done</th>
-                  <th className="eyebrow text-right">Late</th>
-                  <th className="eyebrow text-left">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {internalProjects.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="px-5 py-12 text-center text-sm text-secondary">
-                      Nothing yet. Internal tasks work perfectly well without one — start a project when several
-                      belong together.
-                    </td>
-                  </tr>
-                )}
-                {/* Done last: still here to be found, out of the way of what is running. */}
-                {[...internalProjects]
-                  .sort((a, b) => (a.status === b.status ? a.name.localeCompare(b.name) : a.status === 'ACTIVE' ? -1 : 1))
-                  .map((ip) => (
-                    <tr
-                      key={ip.id}
-                      className={`cursor-pointer transition-colors hover:bg-subtle ${ip.status === 'DONE' ? 'text-secondary' : ''}`}
-                      onClick={() => router.push(`/internal-projects/${ip.id}`)}
-                    >
-                      <td className="font-medium text-primary">
-                        {ip.name}
-                        {ip.description && (
-                          <span className="block text-micro font-normal text-secondary">{ip.description}</span>
-                        )}
-                      </td>
-                      <td className="text-secondary">{ip.owner?.name ?? '—'}</td>
-                      <td className="text-right tabular-nums">{ip.taskCounts.open}</td>
-                      <td className="text-right tabular-nums text-secondary">{ip.taskCounts.done}</td>
-                      <td className={`text-right tabular-nums ${ip.taskCounts.late > 0 ? 'font-semibold text-danger' : 'text-secondary'}`}>
-                        {ip.taskCounts.late || '—'}
-                      </td>
-                      <td>
-                        <Badge tone={ip.status === 'ACTIVE' ? 'good' : 'neutral'}>
-                          {ip.status === 'ACTIVE' ? 'Active' : 'Done'}
-                        </Badge>
-                      </td>
-                    </tr>
+        <div className="mt-6 space-y-4">
+          {/*
+            Pinned first: the studio's one-off jobs, filed under no project on
+            purpose ("Renew domain"). Not a project, so not a row in the list —
+            a way to them, on All tasks.
+          */}
+          <Link
+            href="/all-work?noProject=1"
+            className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border bg-white px-5 py-4 outline-none transition-colors hover:bg-subtle focus-visible:ring-2 focus-visible:ring-primary/40"
+          >
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-primary">General — no project</p>
+              <p className="text-micro text-secondary">One-off studio jobs, like renewing the domain. Opens them on All tasks.</p>
+            </div>
+            <div className="flex shrink-0 gap-6 text-right">
+              <div>
+                <p className="text-lg font-semibold tabular-nums text-primary">{general.open}</p>
+                <p className="text-micro text-secondary">open</p>
+              </div>
+              <div>
+                <p className={`text-lg font-semibold tabular-nums ${general.overdue > 0 ? 'text-danger' : 'text-primary'}`}>
+                  {general.overdue}
+                </p>
+                <p className="text-micro text-secondary">overdue</p>
+              </div>
+            </div>
+          </Link>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              aria-label="Filter internal projects by department"
+              value={ipDept}
+              onChange={(e) => setIpDept(e.target.value)}
+              className="h-8 rounded-lg border border-border bg-white px-3 text-sm text-body outline-none focus:border-primary"
+            >
+              <option value="ALL">All departments</option>
+              {departments.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+              <option value="NONE">No department</option>
+            </select>
+            <select
+              aria-label="Filter internal projects by status"
+              value={ipStatus}
+              onChange={(e) => setIpStatus(e.target.value as 'ACTIVE' | 'DONE' | 'ALL')}
+              className="h-8 rounded-lg border border-border bg-white px-3 text-sm text-body outline-none focus:border-primary"
+            >
+              <option value="ACTIVE">Active</option>
+              <option value="DONE">Done</option>
+              <option value="ALL">All statuses</option>
+            </select>
+            <label className="ml-auto flex items-center gap-2 text-micro text-secondary">
+              Sort
+              <select
+                aria-label="Sort internal projects"
+                value={ipSort}
+                onChange={(e) => setIpSort(e.target.value as 'target' | 'progress' | 'name')}
+                className="h-8 rounded-lg border border-border bg-white px-3 text-sm text-body outline-none focus:border-primary"
+              >
+                <option value="target">Target date</option>
+                <option value="progress">Progress</option>
+                <option value="name">Name</option>
+              </select>
+            </label>
+          </div>
+
+          <div className="overflow-hidden rounded-xl border border-border">
+            {shownInternal.length === 0 ? (
+              <p className="px-5 py-12 text-center text-sm text-secondary">
+                {internalProjects.length === 0
+                  ? 'Nothing yet. One-off internal tasks need no project — start one when several jobs belong together.'
+                  : 'No internal projects match those filters.'}
+              </p>
+            ) : (
+              <>
+                {/* Wide: one table. */}
+                <div className="hidden overflow-x-auto md:block">
+                  <table className="w-full data-table">
+                    <thead>
+                      <tr className="border-b border-border bg-subtle">
+                        <th className="eyebrow text-left">Internal project</th>
+                        <th className="eyebrow text-left">Department</th>
+                        <th className="eyebrow text-left">Owner</th>
+                        <th className="eyebrow text-left">People</th>
+                        <th className="eyebrow text-left">Progress</th>
+                        <th className="eyebrow text-left">Target</th>
+                        <th className="eyebrow text-right">Open</th>
+                        <th className="eyebrow text-right">Overdue</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {shownInternal.map((ip) => (
+                        <tr
+                          key={ip.id}
+                          className={`cursor-pointer transition-colors hover:bg-subtle ${ip.status === 'DONE' ? 'text-secondary' : ''}`}
+                          onClick={() => router.push(`/internal-projects/${ip.id}`)}
+                        >
+                          <td className="font-medium text-primary">
+                            <Link
+                              href={`/internal-projects/${ip.id}`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="rounded-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-primary/40"
+                            >
+                              {ip.name}
+                            </Link>
+                            {ip.status === 'DONE' && (
+                              <Badge tone="neutral" className="ml-2">
+                                Done
+                              </Badge>
+                            )}
+                            {ip.description && (
+                              <span className="block max-w-xs truncate text-micro font-normal text-secondary">{ip.description}</span>
+                            )}
+                          </td>
+                          <td className="text-secondary">{ip.department?.name ?? '—'}</td>
+                          <td className="text-secondary">{ip.owner?.name ?? '—'}</td>
+                          <td className="max-w-[10rem] truncate">
+                            <PeopleOnIt people={ip.progress.people} />
+                          </td>
+                          <td className="w-40">
+                            <ProgressBar progress={ip.progress} />
+                          </td>
+                          <td className="whitespace-nowrap">
+                            <TargetLine targetDate={ip.targetDate} progress={ip.progress} status={ip.status} />
+                          </td>
+                          <td className="text-right tabular-nums">{ip.progress.open}</td>
+                          <td className={`text-right tabular-nums ${ip.progress.overdue > 0 ? 'font-semibold text-danger' : 'text-secondary'}`}>
+                            {ip.progress.overdue}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* A phone: one card per project. */}
+                <ul className="divide-y divide-border md:hidden">
+                  {shownInternal.map((ip) => (
+                    <li key={ip.id}>
+                      <Link
+                        href={`/internal-projects/${ip.id}`}
+                        className="block space-y-2 bg-white px-4 py-4 outline-none transition-colors hover:bg-subtle focus-visible:bg-subtle"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-primary">{ip.name}</p>
+                            <p className="truncate text-micro text-secondary">
+                              {[ip.department?.name, ip.owner?.name].filter(Boolean).join(' · ') || 'No department or owner'}
+                            </p>
+                          </div>
+                          {ip.status === 'DONE' ? (
+                            <Badge tone="neutral">Done</Badge>
+                          ) : (
+                            <TargetLine targetDate={ip.targetDate} progress={ip.progress} status={ip.status} className="shrink-0 text-right text-sm" />
+                          )}
+                        </div>
+                        <ProgressBar progress={ip.progress} />
+                        <p className="text-micro text-secondary">
+                          <span className="text-body">{ip.progress.open} open</span>
+                          {' · '}
+                          <span className={ip.progress.overdue > 0 ? 'font-semibold text-danger' : ''}>{ip.progress.overdue} overdue</span>
+                          {ip.progress.people.length > 0 && (
+                            <>
+                              {' · '}
+                              <PeopleOnIt people={ip.progress.people} />
+                            </>
+                          )}
+                        </p>
+                      </Link>
+                    </li>
                   ))}
-              </tbody>
-            </table>
+                </ul>
+              </>
+            )}
           </div>
         </div>
       )}

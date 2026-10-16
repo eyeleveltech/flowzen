@@ -423,6 +423,7 @@ export const RULE_TITLE: Record<string, string> = {
   ASSET_HELD_BY_INACTIVE_USER: 'Gear with a former member',
   ASSET_REPAIR_STALE: 'Gear stuck at repair',
   ASSET_WARRANTY_EXPIRING: 'Warranty ending',
+  INTERNAL_PROJECT_OVERDUE: 'Internal project past its date',
 };
 
 /**

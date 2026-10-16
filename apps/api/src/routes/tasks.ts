@@ -50,6 +50,7 @@ import { canSeeTask, taskInScope } from '../services/teamScope.js';
 import { findOpenTwin, twinDay, twinStatus } from '../services/taskDuplicates.js';
 import { pushReviewDecided, pushReviewSubmitted, pushTaskAssigned, pushTaskEdited } from '../services/push.js';
 import { clearFocusOff, clearFocusOn, ENDS_FOCUS, focusRefusal } from '../services/taskFocus.js';
+import { NO_PROJECT_WHERE } from '../services/internalWork.js';
 
 export const tasksRouter = Router();
 
@@ -744,7 +745,14 @@ tasksRouter.get('/all', requirePermission('work.all'), async (req: AuthRequest, 
      * would make it two.
      */
     const clients = list(companyId);
-    if (clients.length > 0) {
+    /*
+     * `noProject=1` is "Internal — no project" (Internal work plan): the
+     * studio's one-off jobs, filed under no internal project. One more choice
+     * in the same OR as the clients — "Internal — no project and Carlton" is
+     * one question — not a second filter that would AND them to nothing.
+     */
+    const noProject = req.query.noProject === '1' || req.query.noProject === 'true';
+    if (clients.length > 0 || noProject) {
       const named = clients.filter((c) => c !== 'INTERNAL');
       const or: any[] = [];
       if (named.length > 0) {
@@ -756,6 +764,7 @@ tasksRouter.get('/all', requirePermission('work.all'), async (req: AuthRequest, 
       if (clients.includes('INTERNAL')) {
         or.push({ AND: [{ projectId: null }, { monthCardId: null }, { companyId: null }] });
       }
+      if (noProject) or.push({ ...NO_PROJECT_WHERE });
       and.push({ OR: or });
     }
 
@@ -984,7 +993,7 @@ tasksRouter.get('/all', requirePermission('work.all'), async (req: AuthRequest, 
      * clearing first — the same fault the team screen's department filter had.
      */
     const withTasks = { some: { deletedAt: null } };
-    const [projectClients, retainerClients, followUpClients, internalCount, retainerProjects, internalProjects] =
+    const [projectClients, retainerClients, followUpClients, internalCount, noProjectCount, retainerProjects, internalProjects] =
       await Promise.all([
         /*
          * Projects still running, and any finished one that still has tasks.
@@ -1017,6 +1026,7 @@ tasksRouter.get('/all', requirePermission('work.all'), async (req: AuthRequest, 
         prisma.task.count({
           where: { organizationId: orgId, deletedAt: null, projectId: null, monthCardId: null, companyId: null },
         }),
+        prisma.task.count({ where: { organizationId: orgId, deletedAt: null, ...NO_PROJECT_WHERE } }),
         prisma.retainerProject.findMany({
           where: {
             retainer: { organizationId: orgId },
@@ -1065,6 +1075,8 @@ tasksRouter.get('/all', requirePermission('work.all'), async (req: AuthRequest, 
       tasks: rows,
       clients: Array.from(byId, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)),
       hasInternal: internalCount > 0,
+      // Whether "Internal — no project" is worth offering.
+      hasNoProject: noProjectCount > 0,
       projects: projectOptions,
       counts: {
         total: rows.length,

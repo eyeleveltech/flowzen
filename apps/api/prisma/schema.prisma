@@ -790,16 +790,25 @@ model InternalProject {
   /// required, and plenty of internal work is simply the studio's.
   ownerId        String?
   status         InternalProjectStatus @default(ACTIVE)
+  /// Optional dates (Internal work plan). The target drives "12 days left" /
+  /// "Overdue by 3 days" and the owner's one reminder once it has passed with
+  /// work still open. Calendar days, like a task's due date.
+  startDate      DateTime?             @db.Date
+  targetDate     DateTime?             @db.Date
+  /// Which department owns it, if any. The owner stays the person answerable.
+  departmentId   String?
   createdAt      DateTime              @default(now())
   updatedAt      DateTime              @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   owner        User?        @relation("InternalProjectOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  department   Department?  @relation("DepartmentInternalProjects", fields: [departmentId], references: [id], onDelete: SetNull)
   tasks        Task[]
 
   /// One bucket per name, so the list cannot quietly grow two "Hiring"s.
   @@unique([organizationId, name])
   @@index([organizationId, status])
+  @@index([departmentId])
   @@map("internal_projects")
 }
 
@@ -2259,6 +2268,7 @@ model Department {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   head         User?        @relation("DepartmentHead", fields: [headId], references: [id], onDelete: SetNull)
   members      User[]       @relation("DepartmentMembers")
+  internalProjects InternalProject[] @relation("DepartmentInternalProjects")
 
   @@unique([organizationId, name])
   @@index([organizationId, archivedAt])

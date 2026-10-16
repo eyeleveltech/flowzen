@@ -106,6 +106,7 @@ const RULES: Record<string, { words: string; area: string }> = {
   RETAINER_EXPIRING: { words: 'Retainer renewal coming up', area: 'work' },
   RETAINER_NO_CONTRACT: { words: 'Retainer with no contract term', area: 'work' },
   PROJECT_BEHIND_SCHEDULE: { words: 'Project behind schedule', area: 'work' },
+  INTERNAL_PROJECT_OVERDUE: { words: 'Internal project past its target date', area: 'work' },
   CLIENT_QUIET: { words: 'Client gone quiet', area: 'clients' },
   TASK_OVERDUE: { words: 'Task overdue', area: 'team' },
   TASK_AGING: { words: 'Task taking much longer than usual', area: 'team' },

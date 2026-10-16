@@ -19,10 +19,8 @@ import { proposalProbability, STAGE_PROBABILITY_SELECT } from '../utils/stagePro
 import { asStoredDay, dayKey } from '../utils/moneyDates.js';
 import {
   CHANNEL_LABEL,
-  DEAL_NEXT_STEP_REQUIRED,
   bulkLastContactSchema,
   dealStaleness,
-  hasNextStep,
   lastContactRefusal,
   lastContactSchema,
   mergeNextStep,
@@ -314,21 +312,19 @@ function followUpFields(
 }
 
 /**
- * The next step a save leaves on an open deal, checked: a date given must not
- * be past, and an open deal must end up with both. Returns the refusal, or the
- * columns to write.
+ * The next step a save leaves on a deal. Optional everywhere since 2026-10-16
+ * — a deal without one shows "No next step", nothing refuses it — but a date
+ * given must not be past. Returns the refusal, or the columns to write.
  */
 async function nextStepForSave(
   orgId: string,
   existing: { nextStep: string | null; nextStepDate: Date | null },
   sent: { nextStep?: string | null; nextStepDate?: string | null },
-  staysOpen: boolean,
 ): Promise<{ error: string } | { data: { nextStep?: string | null; nextStepDate?: Date | null } }> {
   const today = await studioToday(orgId);
   const pastDate = nextStepDateRefusal(sent.nextStepDate, today);
   if (pastDate) return { error: pastDate };
   const after = mergeNextStep({ nextStep: existing.nextStep, date: existing.nextStepDate }, sent);
-  if (staysOpen && !hasNextStep(after)) return { error: DEAL_NEXT_STEP_REQUIRED };
   return {
     data: {
       ...(sent.nextStep !== undefined ? { nextStep: after.nextStep } : {}),
@@ -509,10 +505,9 @@ proposalsRouter.post('/', requirePermission('pipeline.write'), async (req: AuthR
       orgId,
       { nextStep: null, nextStepDate: null },
       { nextStep: parsed.data.nextStep, nextStepDate: parsed.data.nextStepDate },
-      true,
     );
     if ('error' in step) {
-      res.status(400).json({ success: false, error: step.error, code: 'NEXT_STEP_REQUIRED' });
+      res.status(400).json({ success: false, error: step.error });
       return;
     }
 
@@ -610,9 +605,9 @@ proposalsRouter.post('/:id/versions', requirePermission('pipeline.write'), async
       return;
     }
 
-    const step = await nextStepForSave(orgId, proposal, parsed.data, proposal.outcome === null);
+    const step = await nextStepForSave(orgId, proposal, parsed.data);
     if ('error' in step) {
-      res.status(400).json({ success: false, error: step.error, code: 'NEXT_STEP_REQUIRED' });
+      res.status(400).json({ success: false, error: step.error });
       return;
     }
 
@@ -741,10 +736,10 @@ proposalsRouter.patch('/:id/stage', requirePermission('pipeline.write'), async (
       return;
     }
 
-    // Still open after a verbal yes: what happens next, and by when.
-    const step = await nextStepForSave(orgId, existing, sentStep.data, true);
+    // What happens next after a verbal yes, if they said.
+    const step = await nextStepForSave(orgId, existing, sentStep.data);
     if ('error' in step) {
-      res.status(400).json({ success: false, error: step.error, code: 'NEXT_STEP_REQUIRED' });
+      res.status(400).json({ success: false, error: step.error });
       return;
     }
 
@@ -1214,9 +1209,9 @@ proposalsRouter.patch('/:id', requirePermission('pipeline.write'), async (req: A
      * has touched in three weeks would come back looking freshly worked —
      * which is the one thing those two numbers exist to prevent.
      */
-    const step = await nextStepForSave(orgId, existing, { nextStep, nextStepDate }, existing.outcome === null);
+    const step = await nextStepForSave(orgId, existing, { nextStep, nextStepDate });
     if ('error' in step) {
-      res.status(400).json({ success: false, error: step.error, code: 'NEXT_STEP_REQUIRED' });
+      res.status(400).json({ success: false, error: step.error });
       return;
     }
     const stepChanged =
@@ -1376,10 +1371,16 @@ proposalsRouter.post('/:id/touch', requirePermission('pipeline.write'), async (r
     }
 
     const { channel, note, nextStep, nextStepDate } = parsed.data;
+    // Optional: left out, the next step stays as it was; blank, it is cleared.
+    const after = mergeNextStep({ nextStep: existing.nextStep, date: existing.nextStepDate }, { nextStep, nextStepDate });
     const proposal = await prisma.$transaction(async (tx) => {
       const updated = await tx.proposal.update({
         where: { id },
-        data: { lastTouchedAt: new Date(), nextStep, nextStepDate: asStoredDay(nextStepDate) },
+        data: {
+          lastTouchedAt: new Date(),
+          ...(nextStep !== undefined ? { nextStep: after.nextStep } : {}),
+          ...(nextStepDate !== undefined ? { nextStepDate: after.date } : {}),
+        },
       });
       await tx.activity.create({
         data: {

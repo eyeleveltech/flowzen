@@ -111,15 +111,6 @@ type Retainer = {
  * A missing end date is not missing information — it is what an always-on
  * stream looks like, so it reads "from 1 Sep" rather than "1 Sep – —".
  */
-function describeRun(p: RetainerProject): string {
-  const day = (iso: string) =>
-    new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
-  if (p.startDate && p.endDate) return `${day(p.startDate)} – ${day(p.endDate)}`;
-  if (p.startDate) return `from ${day(p.startDate)}`;
-  if (p.endDate) return `until ${day(p.endDate)}`;
-  return 'ongoing';
-}
-
 type Task = {
   id: string;
   title: string;
@@ -561,7 +552,14 @@ export default function RetainerMonthCardPage() {
       gstPercent: retainer.gstPercent ?? null,
       proforma,
       invoice,
-      step: billingStepFor({ billing, month: monthCard.month, monthOpen: monthCard.status === 'OPEN', proforma, invoice }),
+      step: billingStepFor({
+        billing,
+        month: monthCard.month,
+        monthOpen: monthCard.status === 'OPEN',
+        proforma,
+        invoice,
+        fee: Number(monthCard.revenue ?? 0),
+      }),
     };
   })();
 
@@ -740,17 +738,14 @@ export default function RetainerMonthCardPage() {
             {project.name}
           </span>
           <div className="flex shrink-0 items-center gap-1.5">
-            {/* The one the monthly work lands in, so it reads as the floor of
-                the retainer rather than as another campaign. */}
-            {project.isDefault && <Badge tone="info">Monthly</Badge>}
+            {/* Every project in a retainer is monthly work: its tasks sit on
+                the month card they are due in. */}
+            <Badge tone="info">Monthly</Badge>
             {project.status === 'DONE' && <Badge tone="neutral">Done</Badge>}
           </div>
         </div>
 
-        <p className="mt-0.5 text-micro text-secondary">
-          {describeRun(project)}
-          {project.owner && ` · ${project.owner.name}`}
-        </p>
+        <p className="mt-0.5 text-micro text-secondary">{project.owner ? project.owner.name : 'No owner named'}</p>
 
         {/* Progress, and the two facts that change what you do next: how much
             is left, and how much of it is already late. */}
@@ -977,7 +972,11 @@ export default function RetainerMonthCardPage() {
                       retainer.gstPercent != null && revenue
                         ? `+${retainer.gstPercent}% GST = ${money(Number(revenue) * (1 + Number(retainer.gstPercent) / 100))}`
                         : null,
-                      monthCard.invoice ? `invoiced ${date(monthCard.invoice.dueAt)}` : 'not invoiced yet',
+                      monthCard.invoice
+                        ? `invoiced ${date(monthCard.invoice.dueAt)}`
+                        : Number(revenue ?? 0) <= 0
+                          ? 'no fee this month — nothing to bill'
+                          : 'not invoiced yet',
                     ]
                       .filter(Boolean)
                       .join(' · ')

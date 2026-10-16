@@ -51,6 +51,7 @@ Everybody's own list: every task they are on, as lead or helper. Cancelled and d
   4. **Waiting for approval:** In review, longest waiting first.
   5. **Done this week**.
 - **Arranging:** a person can drag tasks into their own order within the first three groups. New tasks land at the top.
+- **Group by:** "When" (the groups above, the default) or "Project or retainer" (the work still to do, under the retainer, project or internal project it belongs to, with "Internal — no project" for one-off studio jobs). Groups fold open and shut and show a count. The choice is remembered in that browser. Dragging works in "When" only.
 - **On each row:** change the due date (click the date) and the status (To do, In progress, On hold, Done, Cancelled). Clicking the task opens its drawer: details, the approval block, Edit and Delete.
 - **Approver panels:** approvers also see "Waiting for your approval" (with Approve and Request changes) and "Sent back — add your changes".
 - **"Task for myself"** creates a task.
@@ -100,7 +101,8 @@ Team work (Heads and Management). The Team tab is the delivery view; the Approva
 
 All work (Heads and Management; a Head sees their departments' work).
 
-- **Filters:** search, Person, Department, Client (including "Internal"), Project, Type of work (including "Not set"), Status and "Overdue only". Status starts on "Unfinished" (To do, In progress, In review, On hold).
+- **Filters:** search, Person, Department, Client (including "Internal", and "Internal — no project" for internal tasks filed under no project), Project, Type of work (including "Not set"), Status and "Overdue only". Status starts on "Unfinished" (To do, In progress, In review, On hold). /all-work?noProject=1 opens on "Internal — no project".
+- **Group by:** None (the default), Project or retainer, Client, Person, Department, or Due (Overdue, Today, This week, Later, Earlier). Each group folds open and shut and shows a count; the filters still apply inside. A task with two people is under both in Person and Department. The choice is remembered in that browser. Grouping is of the tasks shown, so past the 500-task limit it says so.
 - **Tiles:** "Open" (To do + In progress), "Overdue", "On hold" and "Nobody on it".
 - **Sorting:** click a column header.
 - **Limits:** the list shows up to 500 tasks, and Export CSV gives up to 5,000.
@@ -145,13 +147,13 @@ Companies access. Cold names, before they are companies.
 - **Status tabs:** All, Not contacted, Follow up, Meeting, Interested, Dead. A link can carry ?status=.
 - **New lead:** a name, plus a phone or an email, then "Add to the list". Import CSV checks the file first, then adds the names.
 - **Changing status:**
-  - Follow up, Meeting and Interested are "active": each asks for a **next step** (a few words) and its date. Follow up also asks for remarks. A next step date can't be in the past.
+  - Follow up, Meeting and Interested are "active". Follow up needs a call-back date and remarks; Meeting needs its date; Interested needs neither. Each can also carry a **next step** (a few words) — optional. A date can't be in the past.
   - Not contacted and Dead need neither; moving to them clears the next step.
   - The next step and its date show under the name, red once the date has passed, and the date appears on the Calendar's Sales layer. It creates no task and no alert.
-  - An active lead with no next step shows a "No next step" badge. The "Missing next step" filter lists them. Editing an active lead also needs its next step.
+  - An active lead with no next step shows a "No next step" badge, and the "Missing next step" filter lists them. Nothing refuses a save without one.
 - **Last touch:** the last real contact — a logged touch, a status change, or a date set by hand. Editing a phone number is not contact. Each active lead shows "Last contact Nd ago"; with none recorded it counts from the day the lead was added.
 - **Going stale:** an active lead whose last touch is more than 10 days ago (Settings → Organisation → Going stale). The banner says how many.
-- **Log touch** (row button or menu): how (Call, WhatsApp, Email, Meeting, Other), a short note, and the next step and date. It moves the last touch to now and is in the lead's history.
+- **Log touch** (row button or menu): how (Call, WhatsApp, Email, Meeting, Other) and a short note, both required, plus the next step and date if there is one. It moves the last touch to now and is in the lead's history.
 - **Set last contact date** (row menu, or tick several rows): for correcting the record — imported names carry the import date. A date, not in the future. The CSV import also reads an optional "Last contacted" column.
 - **Delete:** goes to Trash.
 - **Becoming a company:** see "Lead to client" below. Only an Interested lead can be promoted.
@@ -176,9 +178,9 @@ Pipeline access (BD, Management). The "Sales pipeline" board.
   - Lost → Mark lost
   - Backward moves are refused, and Lost is final.
 - **Each card:** value, retainer or one-time, owner, days since the last touch (amber once going stale), the next step and its date (red when overdue, a "No next step" badge when missing), and "N% likely". Click "N% likely" to override this deal's probability.
-- **Next step:** every open deal (no outcome) has a short next step and a date. Adding a version, raising a proforma, flagging verbal yes, writing a promoted lead's first proposal, or editing the deal is refused without one. Winning or losing needs none.
+- **Next step:** an open deal (no outcome) can carry a short next step and a date. It is optional everywhere — a new proposal, a version, a proforma, verbal yes, an edit, Log touch — and a deal without one shows "No next step". A next step date can't be in the past.
 - **Last touch:** the latest of a logged touch, a version sent, a stage change or a proforma raised, or a date set by hand. Owner, probability and correction edits don't count. With none recorded, it falls back to when the deal entered its stage.
-- **Card menu (⋯):** Log touch (how, a note, and the next step), Set next step, Set last contact date. The client's Proposals tab has the same buttons on each open deal.
+- **Card menu (⋯):** Log touch (how and a note; the next step if there is one), Set next step, Set last contact date. The client's Proposals tab has the same buttons on each open deal.
 - **Tiles:**
   - "Live Deals" and "Full Pipeline" count every card not in Won, so lost deals are included.
   - "Going Stale": open deals whose last touch is more than 25 days ago (Settings → Organisation → Going stale).
@@ -216,7 +218,12 @@ All work (Heads and Management). Everything being delivered.
   - At Risk: retainers with no term or renewing within 45 days, plus flagged projects.
 - **Retainers:** active ones, with this month's tasks done and late, most late first.
 - **Projects:** On track, Over estimate, Behind schedule, Flagged, Delivered, Cancelled.
-- **"+ New internal project":** creates studio work with no client and no money.
+- **Internal tab:**
+  - A pinned card first, **"General — no project"**: open and overdue internal tasks filed under no project. Clicking it opens All tasks on "Internal — no project".
+  - Then one row per internal project: name, department, owner, the people with open tasks in it, a progress bar (% done), the target date or "N days left" / "Overdue by N days" (red), and open and overdue counts.
+  - Filters: department and status (Active, Done, All). Sort: target date (the default; no date last), progress, or name.
+- **"+ New internal project":** creates studio work with no client and no money: name, owner, department, start date, target date and a description — all but the name optional.
+- **An internal project's page** (/internal-projects/{id}): its dates and days left, department, owner, % done, open and overdue counts, the next task due, "People on this" (everyone with open tasks in it, with their counts), its tasks, and Edit (name, owner, department, dates, description), Mark done / Reopen and New task.
 - **Retainers and projects are not created automatically.** Winning a deal does not create them; somebody sets them up.
 
 ## Monday brief (/brief)
@@ -446,7 +453,7 @@ Shown only when Settings → Integrations has it on. Per person and per device:
 
 ## Lead to client
 1. [Outreach list](/outreach) → "New lead" → a name and a phone or email → "Add to the list".
-2. Work it with the status: Follow up (a next step, a date and remarks) or Meeting (a next step and a date). After each call or message, "Log touch".
+2. Work it with the status: Follow up (a call-back date and remarks) or Meeting (its date), with a next step if you have one. After each call or message, "Log touch".
 3. When they want a quote, press "Mark interested" and say what happens next.
 4. Press "Promote to company", check the details, then "Promote". A matching phone or email blocks a duplicate.
 5. It is now a Prospect in [Companies](/companies). It becomes a Client only when a proposal is won.
@@ -504,9 +511,15 @@ The renewal date is the start date plus the term.
 For a Prospect, use "Add sample" instead. Sample work has no billing, but its costs still count.
 
 ## Tasks
+- **Where every task belongs — one of these:**
+  - **Client work:** a retainer (monthly) or a one-time project. Required, because billing and profit need it.
+  - **Internal (the studio's own work):** an internal project (e.g. "Hiring", "Website revamp"), or **No project** for a one-off studio job (e.g. "Renew domain", "Fix office Wi-Fi").
+  - A no-project task is a task like any other: on the person's My Work, All tasks, the Team board and the calendar, seen by them, their Head and Management.
 - **Create:** "Task for myself" on My Work, "+ Task" on a project or retainer, "New task" on an internal project, "Create → Task" on the Calendar, or "Assign a task" on Team.
 - **The form:**
   - Fill in "What needs doing?" and "Belongs to": internal, or a client's work.
+  - Internal asks "Which internal project?" — the first choice is "No project (general internal task)", and one has to be picked. It works even when no internal projects exist.
+  - A client's work asks for the company and which job (a retainer's work or a project).
   - Everyone listed is on the task; the first is the lead. Only Team work holders can assign other people.
   - A due date is required; a time is optional.
   - Priority: Low, Medium, High or Urgent.
@@ -604,6 +617,7 @@ The scanner checks hourly and clears an alert once its condition stops. An alert
   - **Project over estimate** (money figures): heading for a loss.
 - **Delivery and clients:**
   - **Project behind schedule** (all work): time elapsed is more than 15 points ahead of tasks done.
+  - **Internal project past its target date** (its owner only, low): a running internal project past its target date with tasks still open. Once — it stays until the work is done, the date moves or the project is marked done. It links to the project.
   - **Client quiet** (companies access): a client with work and no task update, invoice, meeting, call, email or WhatsApp logged in 21 days.
 - **Assets** (everybody):
   - **Asset overdue:** a checkout past due. It is high from 3 days late.

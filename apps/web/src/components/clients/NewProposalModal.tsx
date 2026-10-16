@@ -20,7 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Field, FieldSelect } from '@/components/ui/field';
 import { ErrorNote } from '@/components/ui/empty-state';
 import { personOptions } from '@/lib/people';
-import { NextStepFields, nextStepBody, nextStepDraft, nextStepReady, useStudioToday } from '@/components/sales/NextStep';
+import { NextStepFields, nextStepBody, nextStepDraft, nextStepOk, useStudioToday } from '@/components/sales/NextStep';
 
 type Props = {
   companyId?: string;
@@ -48,7 +48,8 @@ type Props = {
 
 export function NewProposalModal({ companyId, companyName, proposalId, nextStep, nextStepDate, onConfirm, onCancel }: Props) {
   const today = useStudioToday();
-  // A deal is open from the moment it is quoted: it starts with what happens next.
+  // What happens next — optional here: a deal can be written down before
+  // anybody knows. A date given still can't be in the past.
   const [step, setStep] = useState(nextStepDraft(nextStep, nextStepDate));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -77,7 +78,7 @@ export function NewProposalModal({ companyId, companyName, proposalId, nextStep,
     Boolean(selectedCompanyId) &&
     Number.isFinite(parsedValue) &&
     parsedValue >= 0 &&
-    nextStepReady(step, today) &&
+    nextStepOk(step, today) &&
     !busy;
 
   const handleSave = async () => {

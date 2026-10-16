@@ -26,6 +26,8 @@
 import { useMemo, useState } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import { ChevronRight } from 'lucide-react';
 import { api, fileUrl, formatDate } from '@/lib/api-v2';
 import { useConfig, useDepartments, useTeamMembers } from '@/hooks/queries';
 import { usePageHeader } from '@/hooks/usePageHeader';
@@ -50,6 +52,9 @@ import { personOption } from '@/lib/people';
 import { RepeatMark } from '@/components/work/RepeatMark';
 import type { TaskRepeatInfo } from '@/lib/repeat';
 import { TASK_TYPE_OPTIONS, taskTypeLabel } from '@/lib/task-type';
+import { useRemembered } from '@/lib/remembered';
+import { todayIn } from '@/lib/money';
+import { byClient, byDepartment, byDue, byPerson, byWork, type TaskGroup } from '@/lib/task-groups';
 
 const STATUS_OPTIONS = [
   /*
@@ -72,6 +77,27 @@ const STATUS_OPTIONS = [
 
 /** The drawer's own list: real statuses only, so it cannot set "Unfinished". */
 const DRAWER_STATUS_OPTIONS = STATUS_OPTIONS.filter((o) => o.value && o.value !== 'UNFINISHED');
+
+/**
+ * "Internal — no project" in the client filter: internal tasks filed under no
+ * project. Sent as `noProject=1`, in the same OR as the clients.
+ */
+const NO_PROJECT = 'INTERNAL_NO_PROJECT';
+
+/** Group by — None is the list as it was. Remembered per browser. */
+const GROUP_BY = [
+  { value: 'none', label: 'None' },
+  { value: 'work', label: 'Project or retainer' },
+  { value: 'client', label: 'Client' },
+  { value: 'person', label: 'Person' },
+  { value: 'department', label: 'Department' },
+  { value: 'due', label: 'Due' },
+] as const;
+type GroupBy = (typeof GROUP_BY)[number]['value'];
+const GROUP_BY_KEYS = GROUP_BY.map((g) => g.value);
+
+/** The server's cap on the list — grouping past it would be grouping part of the work. */
+const LIST_CAP = 500;
 
 const STATUS_TONE: Record<string, string> = {
   TODO: 'border-border text-secondary',
@@ -102,6 +128,9 @@ type Task = {
   companyId: string | null;
   projectId: string | null;
   projectName: string | null;
+  /** Which kind of project it is under — exactly one, or none. */
+  retainerProjectId?: string | null;
+  internalProjectId?: string | null;
   monthCardMonth: string | null;
   retainerId: string | null;
   workingHoursText: string | null;
@@ -129,7 +158,12 @@ export default function AllWorkPage() {
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [depts, setDepts] = useState<string[]>([]);
   const [statuses, setStatuses] = useState<string[]>(['UNFINISHED']);
-  const [clients, setClients] = useState<string[]>([]);
+  // `?noProject=1` — Live work's "General — no project" card — opens on it.
+  const searchParams = useSearchParams();
+  const [clients, setClients] = useState<string[]>(() => (searchParams.get('noProject') === '1' ? [NO_PROJECT] : []));
+  const [groupBy, setGroupBy] = useRemembered<GroupBy>('flowzen.allWork.groupBy', 'none', GROUP_BY_KEYS);
+  /** Folded groups, by group-by and key, so each grouping folds on its own. */
+  const [folded, setFolded] = useState<Set<string>>(() => new Set());
   const [projects, setProjects] = useState<string[]>([]);
   const [types, setTypes] = useState<string[]>([]);
   const [overdueOnly, setOverdueOnly] = useState(false);
@@ -156,7 +190,9 @@ export default function AllWorkPage() {
     if (assigneeIds.length > 0) p.assigneeId = assigneeIds.join(',');
     // Ids, so a name with a comma in it is still one department.
     if (depts.length > 0) p.departmentId = depts.join(',');
-    if (clients.length > 0) p.companyId = clients.join(',');
+    const named = clients.filter((c) => c !== NO_PROJECT);
+    if (named.length > 0) p.companyId = named.join(',');
+    if (clients.includes(NO_PROJECT)) p.noProject = '1';
     if (projects.length > 0) p.project = projects.join(',');
     if (statuses.length > 0) p.status = statuses.join(',');
     if (types.length > 0) p.taskType = types.join(',');
@@ -242,150 +278,29 @@ export default function AllWorkPage() {
       }
     : null;
 
-  return (
-    <div className="page-shell space-y-6">
-      {error && (
-        <ErrorNote onDismiss={() => void refetch()}>
-          {error instanceof Error ? error.message : 'Could not load the work'}
-        </ErrorNote>
-      )}
+  /*
+   * The groups, from the list as fetched — so the filters, the sort and a
+   * Head's scope all hold inside them. A task with two people is under both
+   * when grouped by person, and under each of their departments.
+   */
+  const departmentOf = (personId: string) => team.find((m) => m.id === personId)?.departmentId ?? null;
+  const groups: TaskGroup<Task>[] | null =
+    groupBy === 'none'
+      ? null
+      : groupBy === 'work'
+        ? byWork(tasks)
+        : groupBy === 'client'
+          ? byClient(tasks)
+          : groupBy === 'person'
+            ? byPerson(tasks, assigneeIds)
+            : groupBy === 'department'
+              ? byDepartment(tasks, departmentOf, departments, depts)
+              : byDue(tasks, todayIn(config?.organization.timezone ?? 'Asia/Kolkata'));
 
-      {/* A Head sees their departments' work; this says so. */}
-      <TeamScopeLine />
-
-      <StatRow>
-        <StatTile label="Open" value={counts.open} note="still owed" />
-        <StatTile label="Overdue" value={counts.overdue} note="past the date" tone={counts.overdue > 0 ? 'danger' : undefined} />
-        <StatTile label="On hold" value={counts.waiting} note="waiting on somebody" />
-        <StatTile label="Nobody on it" value={counts.unassigned} note="no assignee" tone={counts.unassigned > 0 ? 'warning' : undefined} />
-      </StatRow>
-
-      <Card padding="none">
-        {/* ── What you are looking at ── */}
-        <div className="flex flex-wrap items-end gap-3 border-b border-border p-4">
-          <Field
-            label="Search"
-            className="min-w-[12rem] flex-1"
-            value={q}
-            onChange={setQ}
-            placeholder="Find a task by name…"
-          />
-          <div className="w-48">
-            <span className="eyebrow mb-1.25 block" id="filter-person">
-              Person
-            </span>
-            <MultiSelect
-              ariaLabel="Filter by person"
-              value={assigneeIds}
-              onChange={setAssigneeIds}
-              placeholder="Anybody"
-              options={team.map((m) => personOption(m))}
-            />
-          </div>
-          <div className="w-48">
-            <span className="eyebrow mb-1.25 block">Department</span>
-            {/*
-              The department records, edited in Settings → Departments — the
-              same list every screen offers, chosen by id.
-            */}
-            <MultiSelect
-              ariaLabel="Filter by department"
-              value={depts}
-              onChange={setDepts}
-              placeholder="Any department"
-              options={departments.map((d) => ({ value: d.id, label: d.name }))}
-            />
-          </div>
-          <div className="w-48">
-            <span className="eyebrow mb-1.25 block">Client</span>
-            {/*
-              Internal first, and deliberately: work with no client — the
-              showreel, our own site — is the one thing nobody is looking for
-              by name, and burying it under twenty company names is how it
-              goes unnoticed. The list holds the clients that actually have
-              work, taken from every task rather than the filtered ones.
-            */}
-            <MultiSelect
-              ariaLabel="Filter by client"
-              value={clients}
-              onChange={setClients}
-              placeholder="Any client"
-              options={[
-                ...(data?.hasInternal ? [{ value: 'INTERNAL', label: 'Internal' }] : []),
-                ...((data?.clients ?? []) as { id: string; name: string }[]).map((c) => ({
-                  value: c.id,
-                  label: c.name,
-                })),
-              ]}
-            />
-          </div>
-          <div className="w-52">
-            <span className="eyebrow mb-1.25 block">Project</span>
-            <MultiSelect
-              ariaLabel="Filter by project"
-              value={projects}
-              onChange={setProjects}
-              placeholder="Any project"
-              options={projectOptions}
-            />
-          </div>
-          <div className="w-48">
-            <span className="eyebrow mb-1.25 block">Type of work</span>
-            <MultiSelect
-              ariaLabel="Filter by type of work"
-              value={types}
-              onChange={setTypes}
-              placeholder="Any type"
-              options={[...TASK_TYPE_OPTIONS, { value: 'NONE', label: 'Not set' }]}
-            />
-          </div>
-          <div className="w-44">
-            <span className="eyebrow mb-1.25 block">Status</span>
-            <MultiSelect
-              ariaLabel="Filter by status"
-              value={statuses}
-              onChange={setStatuses}
-              placeholder="Any status"
-              options={STATUS_OPTIONS.filter((o) => o.value)}
-            />
-          </div>
-          <Button
-            type="button"
-            variant={overdueOnly ? 'primary' : 'secondary'}
-            onClick={() => setOverdueOnly((v) => !v)}
-            aria-pressed={overdueOnly}
-          >
-            Overdue only
-          </Button>
-          <ExportCsvButton href={fileUrl(`/tasks/all?format=csv&${new URLSearchParams(params)}`)} />
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full data-table">
-            <thead>
-              <tr className="border-b border-border bg-subtle">
-                <SortableTH label="Assigned" column="assigned" sort={sort} onSort={sortBy} />
-                <SortableTH label="Task" column="task" sort={sort} onSort={sortBy} />
-                <SortableTH label="Type of work" column="type" sort={sort} onSort={sortBy} />
-                <SortableTH label="For" column="for" sort={sort} onSort={sortBy} />
-                <SortableTH label="Who" column="who" sort={sort} onSort={sortBy} />
-                <SortableTH label="Due" column="due" sort={sort} onSort={sortBy} />
-                <SortableTH label="Status" column="status" sort={sort} onSort={sortBy} />
-                <SortableTH label="Elapsed" column="elapsed" sort={sort} onSort={sortBy} align="right" />
-              </tr>
-            </thead>
-            <tbody className={`divide-y divide-border transition-opacity ${isPlaceholderData ? 'opacity-60' : ''}`}>
-              {isPending && <TableRowsSkeleton rows={6} cols={8} />}
-              {!isPending && tasks.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="px-5 py-12 text-center text-sm text-secondary">
-                    {filtered ? 'Nothing matches those filters.' : 'No work on anybody’s plate.'}
-                  </td>
-                </tr>
-              )}
-              {tasks.map((t) => (
+  /** One task's row. Its key is the group's too, since a task can sit in two groups. */
+  const taskRow = (t: Task, key: string = t.id) => (
                 <tr
-                  key={t.id}
+                  key={key}
                   className="group/row cursor-pointer transition-colors hover:bg-subtle"
                   onClick={() => setOpenTask(t)}
                 >
@@ -494,7 +409,209 @@ export default function AllWorkPage() {
                   </td>
                   <td className="text-right text-secondary">{t.workingHoursText ?? '—'}</td>
                 </tr>
+  );
+
+  return (
+    <div className="page-shell space-y-6">
+      {error && (
+        <ErrorNote onDismiss={() => void refetch()}>
+          {error instanceof Error ? error.message : 'Could not load the work'}
+        </ErrorNote>
+      )}
+
+      {/* A Head sees their departments' work; this says so. */}
+      <TeamScopeLine />
+
+      <StatRow>
+        <StatTile label="Open" value={counts.open} note="still owed" />
+        <StatTile label="Overdue" value={counts.overdue} note="past the date" tone={counts.overdue > 0 ? 'danger' : undefined} />
+        <StatTile label="On hold" value={counts.waiting} note="waiting on somebody" />
+        <StatTile label="Nobody on it" value={counts.unassigned} note="no assignee" tone={counts.unassigned > 0 ? 'warning' : undefined} />
+      </StatRow>
+
+      <Card padding="none">
+        {/* ── What you are looking at ── */}
+        <div className="flex flex-wrap items-end gap-3 border-b border-border p-4">
+          <Field
+            label="Search"
+            className="min-w-[12rem] flex-1"
+            value={q}
+            onChange={setQ}
+            placeholder="Find a task by name…"
+          />
+          <div className="w-48">
+            <span className="eyebrow mb-1.25 block" id="filter-person">
+              Person
+            </span>
+            <MultiSelect
+              ariaLabel="Filter by person"
+              value={assigneeIds}
+              onChange={setAssigneeIds}
+              placeholder="Anybody"
+              options={team.map((m) => personOption(m))}
+            />
+          </div>
+          <div className="w-48">
+            <span className="eyebrow mb-1.25 block">Department</span>
+            {/*
+              The department records, edited in Settings → Departments — the
+              same list every screen offers, chosen by id.
+            */}
+            <MultiSelect
+              ariaLabel="Filter by department"
+              value={depts}
+              onChange={setDepts}
+              placeholder="Any department"
+              options={departments.map((d) => ({ value: d.id, label: d.name }))}
+            />
+          </div>
+          <div className="w-48">
+            <span className="eyebrow mb-1.25 block">Client</span>
+            {/*
+              Internal first, and deliberately: work with no client — the
+              showreel, our own site — is the one thing nobody is looking for
+              by name, and burying it under twenty company names is how it
+              goes unnoticed. The list holds the clients that actually have
+              work, taken from every task rather than the filtered ones.
+            */}
+            <MultiSelect
+              ariaLabel="Filter by client"
+              value={clients}
+              onChange={setClients}
+              placeholder="Any client"
+              options={[
+                ...(data?.hasInternal ? [{ value: 'INTERNAL', label: 'Internal' }] : []),
+                // Internal work filed under no project — one-off studio jobs.
+                ...(data?.hasNoProject || clients.includes(NO_PROJECT)
+                  ? [{ value: NO_PROJECT, label: 'Internal — no project' }]
+                  : []),
+                ...((data?.clients ?? []) as { id: string; name: string }[]).map((c) => ({
+                  value: c.id,
+                  label: c.name,
+                })),
+              ]}
+            />
+          </div>
+          <div className="w-52">
+            <span className="eyebrow mb-1.25 block">Project</span>
+            <MultiSelect
+              ariaLabel="Filter by project"
+              value={projects}
+              onChange={setProjects}
+              placeholder="Any project"
+              options={projectOptions}
+            />
+          </div>
+          <div className="w-48">
+            <span className="eyebrow mb-1.25 block">Type of work</span>
+            <MultiSelect
+              ariaLabel="Filter by type of work"
+              value={types}
+              onChange={setTypes}
+              placeholder="Any type"
+              options={[...TASK_TYPE_OPTIONS, { value: 'NONE', label: 'Not set' }]}
+            />
+          </div>
+          <div className="w-44">
+            <span className="eyebrow mb-1.25 block">Status</span>
+            <MultiSelect
+              ariaLabel="Filter by status"
+              value={statuses}
+              onChange={setStatuses}
+              placeholder="Any status"
+              options={STATUS_OPTIONS.filter((o) => o.value)}
+            />
+          </div>
+          <Button
+            type="button"
+            variant={overdueOnly ? 'primary' : 'secondary'}
+            onClick={() => setOverdueOnly((v) => !v)}
+            aria-pressed={overdueOnly}
+          >
+            Overdue only
+          </Button>
+          <label className="flex flex-col">
+            <span className="eyebrow mb-1.25 block">Group by</span>
+            <select
+              aria-label="Group the tasks by"
+              value={groupBy}
+              onChange={(e) => setGroupBy(e.target.value as GroupBy)}
+              className="h-9 rounded-lg border border-border bg-white px-3 text-sm text-body outline-none focus:border-primary"
+            >
+              {GROUP_BY.map((g) => (
+                <option key={g.value} value={g.value}>
+                  {g.label}
+                </option>
               ))}
+            </select>
+          </label>
+          <ExportCsvButton href={fileUrl(`/tasks/all?format=csv&${new URLSearchParams(params)}`)} />
+        </div>
+
+        {groups && tasks.length >= LIST_CAP && (
+          <p className="border-b border-border bg-warning-tint/40 px-4 py-2 text-micro text-warning-ink">
+            Grouped within the {LIST_CAP} tasks shown — the list stops there. Narrow the filters to see the rest.
+          </p>
+        )}
+
+        <div className="overflow-x-auto">
+          <table className="w-full data-table">
+            <thead>
+              <tr className="border-b border-border bg-subtle">
+                <SortableTH label="Assigned" column="assigned" sort={sort} onSort={sortBy} />
+                <SortableTH label="Task" column="task" sort={sort} onSort={sortBy} />
+                <SortableTH label="Type of work" column="type" sort={sort} onSort={sortBy} />
+                <SortableTH label="For" column="for" sort={sort} onSort={sortBy} />
+                <SortableTH label="Who" column="who" sort={sort} onSort={sortBy} />
+                <SortableTH label="Due" column="due" sort={sort} onSort={sortBy} />
+                <SortableTH label="Status" column="status" sort={sort} onSort={sortBy} />
+                <SortableTH label="Elapsed" column="elapsed" sort={sort} onSort={sortBy} align="right" />
+              </tr>
+            </thead>
+            <tbody className={`divide-y divide-border transition-opacity ${isPlaceholderData ? 'opacity-60' : ''}`}>
+              {isPending && <TableRowsSkeleton rows={6} cols={8} />}
+              {!isPending && tasks.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="px-5 py-12 text-center text-sm text-secondary">
+                    {filtered ? 'Nothing matches those filters.' : 'No work on anybody’s plate.'}
+                  </td>
+                </tr>
+              )}
+              {groups
+                ? groups.flatMap((g) => {
+                    const id = `${groupBy}:${g.key}`;
+                    const open = !folded.has(id);
+                    return [
+                      <tr key={`group:${id}`} className="bg-subtle/60">
+                        <td colSpan={8}>
+                          <button
+                            type="button"
+                            aria-expanded={open}
+                            onClick={() =>
+                              setFolded((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(id)) next.delete(id);
+                                else next.add(id);
+                                return next;
+                              })
+                            }
+                            className="flex w-full items-center gap-2 rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                          >
+                            <ChevronRight
+                              className={`h-4 w-4 shrink-0 text-secondary transition-transform motion-reduce:transition-none ${open ? 'rotate-90' : ''}`}
+                            />
+                            <span className={`text-sm font-semibold ${g.tone === 'bad' ? 'text-danger' : 'text-primary'}`}>{g.label}</span>
+                            {g.sub && <span className="truncate text-micro text-secondary">{g.sub}</span>}
+                            <span className="ml-auto rounded-full border border-border bg-white px-2 py-0.5 text-micro font-semibold tabular-nums text-secondary">
+                              {g.tasks.length}
+                            </span>
+                          </button>
+                        </td>
+                      </tr>,
+                      ...(open ? g.tasks.map((t) => taskRow(t, `${id}:${t.id}`)) : []),
+                    ];
+                  })
+                : tasks.map((t) => taskRow(t))}
             </tbody>
           </table>
         </div>

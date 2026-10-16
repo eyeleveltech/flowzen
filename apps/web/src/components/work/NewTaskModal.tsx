@@ -8,6 +8,7 @@
 
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import Link from 'next/link';
 import { api, ApiError } from '@/lib/api-v2';
 import { useTeamMembers } from '@/hooks/queries';
 import { Button } from '@/components/ui/button';
@@ -23,6 +24,9 @@ import { DueTimeField } from '@/components/work/DueTimeField';
 import { repeatOptions, REPEAT_HINT } from '@/lib/repeat';
 
 const PRIORITY_OPTIONS = Object.entries(PRIORITY_CONFIG).map(([value, cfg]) => ({ value, label: cfg.label }));
+
+/** "No project" in the internal picker — a choice, sent as no internal project at all. */
+const NO_PROJECT = 'none';
 
 /**
  * One thing a task can be filed against.
@@ -92,12 +96,10 @@ export function NewTaskModal({
   const [companyId, setCompanyId] = useState('');
   const [targetKey, setTargetKey] = useState('');
   /*
-   * Which piece of the studio's own work, when this is not a client's.
-   *
-   * Optional on purpose. A retainer task must name a project because the
-   * database insists; most internal work genuinely belongs to nothing —
-   * "Office Wi-Fi vendor renewal" is not a programme — and forcing a bucket on
-   * it would only breed empty ones.
+   * Which internal project, when this is the studio's own work — or
+   * NO_PROJECT, for a one-off job like "Renew domain" (Internal work plan).
+   * Empty means nothing chosen yet, which the form does not accept: "No
+   * project" is a decision, not a field somebody skipped.
    */
   const [internalProjectId, setInternalProjectId] = useState('');
   const [saving, setSaving] = useState(false);
@@ -107,7 +109,7 @@ export function NewTaskModal({
     if (open) {
       setTitle(''); setDueDate(initialDueDate ?? '');
     setDueTime(initialDueTime ?? ''); setRepeat(''); setPriority('MEDIUM'); setDescription('');
-      setScope('INTERNAL'); setCompanyId(''); setTargetKey(''); setError(null);
+      setScope('INTERNAL'); setCompanyId(''); setTargetKey(''); setInternalProjectId(''); setError(null);
       setTaskType(''); setNeedsApproval(false);
       // Nobody, until somebody says otherwise — see tasks.ts on why this
     // field means nothing when it is filled in by default.
@@ -163,7 +165,8 @@ export function NewTaskModal({
         // What the work is for, alongside the month that bills it. Omitted for
         // a one-time project, which is its own answer to both questions.
         retainerProjectId: scope === 'CLIENT' ? selectedTarget?.retainerProjectId : undefined,
-        internalProjectId: scope === 'INTERNAL' ? internalProjectId || undefined : undefined,
+        // "No project" is sent as no internal project at all.
+        internalProjectId: scope === 'INTERNAL' && internalProjectId !== NO_PROJECT ? internalProjectId || undefined : undefined,
         projectId: scope === 'CLIENT' ? selectedTarget?.projectId : undefined,
         dueDate,
         dueTime: dueTime || undefined,
@@ -199,39 +202,43 @@ export function NewTaskModal({
               { value: 'INTERNAL', label: 'Internal — no client' },
               { value: 'CLIENT', label: 'A client’s work' },
             ]}
+            hint="Client work → a retainer or project · Internal → an internal project, or No project for one-off studio jobs."
           />
 
           {/*
-            Which piece of the studio's own work, before anything else.
+            Which internal project — or No project, as a deliberate choice.
 
-            This was optional at first, on the reasoning that plenty of internal
-            work belongs to nothing in particular. In practice an optional field
-            is a skipped field, and the flat list of internal tasks it existed to
-            fix stayed flat. So the answer comes first and the task follows.
-
-            With none created yet it says so and points at where they are made,
-            rather than showing a required dropdown with nothing in it.
+            When this was optional, people skipped it and internal work became
+            one flat list; when it was required, a one-off job like "Renew
+            domain" had to be filed under a project made up for it. So "No
+            project" is the first option and one has to be picked: never blank,
+            never forced into a bucket. It is there even when no internal
+            projects exist yet; making one is a hint, not a blocker.
           */}
-          {scope === 'INTERNAL' &&
-            (internalProjects.length > 0 ? (
+          {scope === 'INTERNAL' && (
+            <div>
               <FieldSelect
-                label="Which work"
+                label="Which internal project?"
                 value={internalProjectId}
                 onChange={setInternalProjectId}
                 required
                 placeholder="Choose…"
-                options={internalProjects.map((p) => ({ value: p.id, label: p.name }))}
-                hint="The studio's own work — a hiring round, the website, compliance."
+                options={[
+                  { value: NO_PROJECT, label: 'No project (general internal task)' },
+                  ...internalProjects.map((p) => ({ value: p.id, label: p.name })),
+                ]}
               />
-            ) : (
-              <p className="rounded-xl border border-border bg-subtle/40 px-3 py-2.5 text-xs text-secondary">
-                There is no internal work to file this under yet. Add one on{' '}
-                <a href="/live-work?tab=internal" className="font-medium text-primary hover:underline">
-                  Live work → Internal
-                </a>{' '}
-                first.
-              </p>
-            ))}
+              {internalProjects.length === 0 && (
+                <p className="mt-1 text-micro text-secondary">
+                  No internal projects yet. Several jobs that belong together? Start one on{' '}
+                  <Link href="/live-work?tab=internal" className="font-medium text-primary hover:underline">
+                    Live work → Internal
+                  </Link>
+                  .
+                </p>
+              )}
+            </div>
+          )}
 
           {scope === 'CLIENT' && (
             <>

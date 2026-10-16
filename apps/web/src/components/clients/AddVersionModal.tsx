@@ -15,7 +15,7 @@ import { Modal, ScrollingModalBody, ModalFooter } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { ErrorNote } from '@/components/ui/empty-state';
-import { NextStepFields, nextStepBody, nextStepDraft, nextStepReady, useStudioToday } from '@/components/sales/NextStep';
+import { NextStepFields, nextStepBody, nextStepDraft, nextStepOk, useStudioToday } from '@/components/sales/NextStep';
 
 type Props = {
   proposalId: string;
@@ -37,7 +37,7 @@ export function AddVersionModal({ proposalId, nextVersionNumber, nextStep, nextS
   const [fileUrl, setFileUrl] = useState('');
 
   const parsedValue = Number(value);
-  const canSave = Number.isFinite(parsedValue) && parsedValue >= 0 && nextStepReady(step, today) && !busy;
+  const canSave = Number.isFinite(parsedValue) && parsedValue >= 0 && nextStepOk(step, today) && !busy;
 
   const handleSave = async () => {
     if (!canSave) return;

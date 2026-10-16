@@ -17,7 +17,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, Pencil, Plus, Trash2 } from 'lucide-react';
 import { api, ApiError, formatDate } from '@/lib/api-v2';
 import { useConfig, useTeamMembers } from '@/hooks/queries';
 import { usePageHeader } from '@/hooks/usePageHeader';
@@ -33,6 +33,9 @@ import { withDueTime } from '@/lib/due-time';
 import { RepeatMark } from '@/components/work/RepeatMark';
 import { useConfirmStore } from '@/stores/confirm';
 import { taskTypeLabel } from '@/lib/task-type';
+import { NewInternalProjectModal } from '@/components/work/NewInternalProjectModal';
+import { calendarDay, daysLeftLabel, ProgressBar } from '@/components/work/InternalProjectBits';
+import { plural } from '@/lib/utils';
 
 const STATUS_OPTIONS = [
   { value: 'TODO', label: 'To do' },
@@ -60,6 +63,8 @@ export default function InternalProjectPage() {
   const confirm = useConfirmStore((st) => st.confirm);
 
   const [adding, setAdding] = useState(false);
+  /** The edit form: name, owner, department, dates, description. */
+  const [editing, setEditing] = useState(false);
   const [selected, setSelected] = useState<any>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -167,9 +172,43 @@ export default function InternalProjectPage() {
               <p className="mt-1 text-sm text-secondary">
                 {project.description || 'The studio’s own work — no client, no billing.'}
               </p>
-              <p className="mt-0.5 text-micro text-secondary">
-                {project.owner ? `Owned by ${project.owner.name}` : 'No owner named'}
-              </p>
+              {/* Who, which team, and when — each said once. */}
+              {(() => {
+                const left = daysLeftLabel(project.progress, project.status);
+                return (
+                  <dl className="mt-3 flex flex-wrap gap-x-6 gap-y-2 text-sm">
+                    <div>
+                      <dt className="eyebrow">Owner</dt>
+                      <dd className="mt-0.5 text-body">{project.owner?.name ?? 'Nobody named'}</dd>
+                    </div>
+                    <div>
+                      <dt className="eyebrow">Department</dt>
+                      <dd className="mt-0.5 text-body">{project.department?.name ?? 'None'}</dd>
+                    </div>
+                    <div>
+                      <dt className="eyebrow">Dates</dt>
+                      <dd className="mt-0.5 text-body">
+                        {project.startDate ? `${calendarDay(project.startDate)} → ` : ''}
+                        {project.targetDate ? calendarDay(project.targetDate, true) : 'No target date'}
+                        {left && (
+                          <span
+                            className={
+                              left.tone === 'bad'
+                                ? 'font-semibold text-danger'
+                                : left.tone === 'warn'
+                                  ? 'font-semibold text-warning-ink'
+                                  : 'text-secondary'
+                            }
+                          >
+                            {' '}
+                            · {left.text}
+                          </span>
+                        )}
+                      </dd>
+                    </div>
+                  </dl>
+                );
+              })()}
             </div>
             {canWrite && (
               <div className="flex shrink-0 items-center gap-2">
@@ -184,6 +223,13 @@ export default function InternalProjectPage() {
                     <Trash2 className="h-4 w-4" />
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={() => setEditing(true)}
+                  className="flex h-8 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-medium text-body transition-colors hover:bg-subtle"
+                >
+                  <Pencil className="h-3.5 w-3.5" /> Edit
+                </button>
                 <button
                   type="button"
                   onClick={() => void setProjectStatus(project.status === 'DONE' ? 'ACTIVE' : 'DONE')}
@@ -204,16 +250,53 @@ export default function InternalProjectPage() {
             )}
           </div>
 
-          <StatRow className="mb-8">
-            <StatTile dense label="Open" value={project.taskCounts.open} note="still to do" />
-            <StatTile dense label="Done" value={project.taskCounts.done} note="finished" />
+          {/* How it is going: % done, what is open and late, and what is next. */}
+          <StatRow className="mb-4">
             <StatTile
               dense
-              label="Late"
-              value={project.taskCounts.late}
-              note={project.taskCounts.late > 0 ? 'past their due date' : 'nothing overdue'}
+              label="Done"
+              value={project.progress.percentDone === null ? '—' : `${project.progress.percentDone}%`}
+              note={
+                project.progress.total === 0
+                  ? 'no tasks yet'
+                  : `${project.progress.done} of ${plural(project.progress.total, 'task')}`
+              }
+            />
+            <StatTile dense label="Open" value={project.progress.open} note="still to do" />
+            <StatTile
+              dense
+              label="Overdue"
+              value={project.progress.overdue}
+              note={project.progress.overdue > 0 ? 'past their due date' : 'nothing overdue'}
+              tone={project.progress.overdue > 0 ? 'danger' : 'default'}
+            />
+            <StatTile
+              dense
+              label="Next due"
+              value={project.progress.nextDue ? calendarDay(project.progress.nextDue.dueDate) : '—'}
+              note={project.progress.nextDue?.title ?? 'nothing open'}
             />
           </StatRow>
+          <div className="mb-8 space-y-3">
+            <ProgressBar progress={project.progress} />
+            {/* Everyone with open work in it — by name, with how many are theirs. */}
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="eyebrow">People on this</span>
+              {project.progress.people.length === 0 ? (
+                <span className="text-secondary">Nobody has open work in it.</span>
+              ) : (
+                project.progress.people.map((person: { id: string; name: string; open: number }) => (
+                  <span
+                    key={person.id}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-border bg-white px-2.5 py-0.5 text-xs text-body"
+                  >
+                    {person.name}
+                    <span className="tabular-nums text-secondary">{person.open} open</span>
+                  </span>
+                ))
+              )}
+            </div>
+          </div>
 
           <Card padding="none">
             <CardBody className="p-0">
@@ -275,6 +358,18 @@ export default function InternalProjectPage() {
             </CardBody>
           </Card>
         </>
+      )}
+
+      {project && (
+        <NewInternalProjectModal
+          open={editing}
+          project={project}
+          onClose={() => setEditing(false)}
+          onCreated={() => {
+            setEditing(false);
+            reload();
+          }}
+        />
       )}
 
       {project && (

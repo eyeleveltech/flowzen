@@ -371,14 +371,17 @@ export function TaskDrawer({
                     : undefined
                 }
               />
+              {/* The same choice as the New task form: an internal project, or No project. */}
               {task.workType === 'INTERNAL' && internalProjects.length > 0 && (
                 <FieldSelect
-                  label="Which work"
-                  value={internalProjectId}
-                  onChange={setInternalProjectId}
-                  placeholder="Not part of anything"
-                  options={internalProjects.map((ip) => ({ value: ip.id, label: ip.name }))}
-                  hint="The studio's own work — a hiring round, the website, compliance."
+                  label="Which internal project?"
+                  value={internalProjectId || 'none'}
+                  onChange={(v) => setInternalProjectId(v === 'none' ? '' : v)}
+                  options={[
+                    { value: 'none', label: 'No project (general internal task)' },
+                    ...internalProjects.map((ip) => ({ value: ip.id, label: ip.name })),
+                  ]}
+                  hint="An internal project, or No project for a one-off studio job."
                 />
               )}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

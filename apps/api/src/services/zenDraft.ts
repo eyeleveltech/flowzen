@@ -82,6 +82,8 @@ export type TaskDraft = {
     monthCardId?: string;
     retainerProjectId?: string;
     projectId?: string;
+    /** Internal work filed under an internal project. Absent is "No project". */
+    internalProjectId?: string;
     assigneeId: string;
     priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
     notes?: string;
@@ -115,6 +117,8 @@ export type DraftArgs = {
   dueDate?: string;
   client?: string;
   workstream?: string;
+  /** Internal work only: which internal project. Left out, it is "No project". */
+  internalProject?: string;
   assignee?: string;
   priority?: string;
   notes?: string;
@@ -249,14 +253,54 @@ export async function draftTask(
   const shows: TaskDraft['shows'] = {
     title: body.title,
     client: null,
-    belongsTo: 'Internal work',
+    belongsTo: 'Internal — no project (general internal task)',
     assignedTo: `${assignee.name} — ${assignee.dept}`,
     due: dueDate,
     priority,
     notes: body.notes ?? null,
   };
 
-  if (!args.client?.trim()) return finish();
+  /*
+   * ── internal: an internal project, or No project ───────────────────────────
+   *
+   * Every task belongs to a client's work or to the studio's own, never both.
+   * The studio's own goes under an internal project ("Hiring") or under No
+   * project — a deliberate choice for a one-off job like "Renew the domain",
+   * which is what leaving the project out means.
+   */
+  if (args.client?.trim() && args.internalProject?.trim()) {
+    return {
+      needs: ['client', 'internalProject'],
+      because: "A task is either a client's work or the studio's own internal work — not both.",
+      candidates: {},
+    };
+  }
+  if (!args.client?.trim()) {
+    if (!args.internalProject?.trim()) return finish();
+    const running = await prisma.internalProject.findMany({
+      where: { organizationId, status: 'ACTIVE' },
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    });
+    const typed = args.internalProject.trim().toLowerCase();
+    const named = running.filter((p) => p.name.toLowerCase().includes(typed));
+    if (named.length !== 1) {
+      return {
+        needs: ['internalProject'],
+        because:
+          named.length === 0
+            ? `No running internal project matches "${args.internalProject}".`
+            : `"${args.internalProject}" matches more than one internal project.`,
+        candidates: {
+          internalProjects: (named.length ? named : running).map((p) => p.name),
+          orNoProject: 'leave the internal project out for a one-off job (No project)',
+        },
+      };
+    }
+    body.internalProjectId = named[0].id;
+    shows.belongsTo = `Internal — ${named[0].name}`;
+    return finish();
+  }
 
   /* ── which client ───────────────────────────────────────────────────────── */
   const companies = await prisma.company.findMany({
@@ -416,6 +460,11 @@ export const ZEN_DRAFT_TOOLS: AiTool[] = [
         client: {
           type: 'string',
           description: 'The client it is for. Leave out for internal work with no client.',
+        },
+        internalProject: {
+          type: 'string',
+          description:
+            'Internal work only: which internal project it belongs to (e.g. "Hiring"). Leave out for a one-off internal job — it is then filed under "No project". Never together with client.',
         },
         workstream: {
           type: 'string',

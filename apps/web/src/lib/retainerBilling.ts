@@ -18,12 +18,15 @@ export function billingStepFor(args: {
   monthOpen: boolean;
   proforma: BillingProforma | null;
   invoice: Pick<BillingInvoice, 'status'> | null;
+  /** The month's fee. Nothing — work before a retainer starts — means nothing to bill. */
+  fee?: number;
   now?: Date;
 }): BillingStep {
   const now = args.now ?? new Date();
   const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   if (args.invoice) return args.invoice.status === 'PAID' ? 'DONE' : 'PAYMENT';
   if (isLiveProforma(args.proforma)) return 'INVOICE';
+  if (args.fee !== undefined && args.fee <= 0) return 'NO_FEE';
   // Billed after the month: nothing to ask for while it is still running.
   if (args.billing === 'IN_ARREARS' && args.monthOpen && args.month >= thisMonth) return 'NOT_YET';
   return 'PROFORMA';

@@ -31,7 +31,7 @@ import { Modal, ScrollingModalBody, ModalFooter } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Field, FieldCheckbox, FieldSelect } from '@/components/ui/field';
 import { ErrorNote } from '@/components/ui/empty-state';
-import { NextStepFields, nextStepBody, nextStepDraft, nextStepReady, useStudioToday } from '@/components/sales/NextStep';
+import { NextStepFields, nextStepBody, nextStepDraft, nextStepOk, useStudioToday } from '@/components/sales/NextStep';
 import {
   LineItemsEditor,
   blankLineItem,
@@ -164,7 +164,7 @@ export function NewProformaModal({
     linesAreValid(lines) &&
     subtotal > 0 &&
     gstRateValid &&
-    (!asksNextStep || nextStepReady(step, today)) &&
+    (!asksNextStep || nextStepOk(step, today)) &&
     !busy;
 
   const handleSave = async () => {

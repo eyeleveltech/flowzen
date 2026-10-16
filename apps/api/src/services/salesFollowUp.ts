@@ -29,7 +29,7 @@ export const CHANNEL_LABEL: Record<TouchChannel, string> = {
   OTHER: 'Other',
 };
 
-/** A lead that is being worked: it needs a next step. Not contacted yet and dead ones do not. */
+/** A lead that is being worked. Its next step is optional (2026-10-16), but shown when missing. */
 export const ACTIVE_OUTREACH: OutreachStatus[] = [OutreachStatus.FOLLOW_UP, OutreachStatus.MEETING, OutreachStatus.INTERESTED];
 export const isActiveOutreach = (status: OutreachStatus | string) => (ACTIVE_OUTREACH as string[]).includes(status);
 
@@ -45,16 +45,15 @@ export const nextStepFields = {
     .nullable(),
 };
 
-/** What a touch carries: how, what was said, and what happens next. All required. */
+/**
+ * What a touch carries: how, and what was said — both required — and,
+ * optionally, what happens next. Left out, the next step stays as it was;
+ * blank, it is cleared.
+ */
 export const touchSchema = z.object({
   channel: z.enum(TOUCH_CHANNELS, { errorMap: () => ({ message: 'Pick how you were in touch' }) }),
   note: z.string({ required_error: 'Add a short note — what was said' }).trim().min(1, 'Add a short note — what was said').max(1000),
-  nextStep: z
-    .string({ required_error: 'What happens next?' })
-    .trim()
-    .min(1, 'What happens next?')
-    .max(300, 'Keep the next step short — a few words'),
-  nextStepDate: z.string({ required_error: 'When is the next step?' }).regex(DAY, 'When is the next step?'),
+  ...nextStepFields,
 });
 
 /** "Set last contact date": a calendar day, not in the future. */
@@ -96,11 +95,6 @@ export function mergeNextStep(
     sent.nextStepDate === undefined ? existing.date : sent.nextStepDate ? asStoredDay(sent.nextStepDate) : null;
   return { nextStep, date };
 }
-
-export const DEAL_NEXT_STEP_REQUIRED =
-  'Add the next step and its date. Every open deal needs one — winning or losing it does not.';
-export const LEAD_NEXT_STEP_REQUIRED =
-  'Add the next step and its date. Every lead in follow-up, meeting or interested needs one — marking it dead does not.';
 
 /** Whether a next step is complete: both the words and the date. */
 export const hasNextStep = (v: { nextStep: string | null | undefined; date: Date | null | undefined }) =>

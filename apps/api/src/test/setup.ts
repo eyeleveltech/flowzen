@@ -35,4 +35,10 @@ beforeEach(() => {
    * that touches those would otherwise fail on a table it is not about.
    */
   (prisma.department.findMany as any).mockResolvedValue([]);
+  /*
+   * No internal projects unless a test says so. The bell asks which ones a
+   * person owns (their past-target reminder) and the scanner looks for ones
+   * past their date — tables most bell and scanner tests are not about.
+   */
+  (prisma.internalProject.findMany as any).mockResolvedValue([]);
 });

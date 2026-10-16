@@ -64,18 +64,19 @@ const openDeal = (over: Record<string, unknown> = {}) => ({
 });
 
 // ── 1. A next step on every open deal ──
-describe('an open deal cannot change stage without a next step', () => {
+// Optional everywhere since 2026-10-16: nothing refuses a save without one,
+// a deal or lead without one shows "No next step", and a date can't be past.
+describe('the next step on a deal: optional, never in the past', () => {
   beforeEach(() => {
     p.proposal.findFirst.mockResolvedValue(openDeal());
     p.proposalVersion.create.mockResolvedValue({ id: 'v2', n: 2 });
     p.proposal.update.mockResolvedValue({});
   });
 
-  it('a new version on a deal with no next step is refused, and says why', async () => {
+  it('a new version on a deal with no next step still saves', async () => {
     const res = await request(app).post('/api/proposals/prop-1/versions').set('Authorization', auth).send({ value: 90000 });
-    expect(res.status).toBe(400);
-    expect(res.body.code).toBe('NEXT_STEP_REQUIRED');
-    expect(p.proposalVersion.create).not.toHaveBeenCalled();
+    expect(res.status).toBe(201);
+    expect(p.proposalVersion.create).toHaveBeenCalled();
   });
 
   it('with one, it saves the step and moves the last touch — a version sent is contact', async () => {
@@ -99,11 +100,12 @@ describe('an open deal cannot change stage without a next step', () => {
     expect(res.body.error).toMatch(/can't be in the past/);
   });
 
-  it('verbal yes needs one too', async () => {
+  it('verbal yes needs none either', async () => {
     p.proposal.findFirst.mockResolvedValue(openDeal({ stage: 'PROFORMA_ISSUED' }));
+    p.proposal.update.mockResolvedValue({ ...openDeal({ stage: 'VERBAL_YES' }) });
     const res = await request(app).patch('/api/proposals/prop-1/stage').set('Authorization', auth).send({ stage: 'VERBAL_YES' });
-    expect(res.status).toBe(400);
-    expect(res.body.code).toBe('NEXT_STEP_REQUIRED');
+    expect(res.status).toBe(200);
+    expect(p.proposal.update.mock.calls[0][0].data).toMatchObject({ stage: 'VERBAL_YES' });
   });
 
   it('losing it needs none', async () => {
@@ -118,19 +120,37 @@ describe('an open deal cannot change stage without a next step', () => {
     expect(p.proposal.update.mock.calls[0][0].data).toMatchObject({ stage: 'LOST', outcome: 'LOST' });
   });
 
-  it('an edit that leaves it open needs one; an owner change does not move the last touch', async () => {
-    p.proposal.findFirst.mockResolvedValue({ ...openDeal(), wonVersion: null });
-    const refused = await request(app).patch('/api/proposals/prop-1').set('Authorization', auth).send({ ownerId: 'usr-other' });
-    expect(refused.status).toBe(400);
+  it('the proposal form does not need one: creating or editing a deal saves without it', async () => {
+    // Optional on the proposal form since 2026-10-16 — a deal can be written
+    // down before anybody knows what happens next.
+    p.company.findFirst.mockResolvedValue({ id: 'co-1', organizationId: 'org-1', name: 'Carlton Hotels' });
+    p.proposal.create.mockResolvedValue({ id: 'prop-new' });
+    p.proposalVersion.create.mockResolvedValue({ id: 'v1', n: 1 });
+    p.proposal.findUnique.mockResolvedValue({ ...openDeal({ id: 'prop-new' }) });
+    const created = await request(app)
+      .post('/api/proposals')
+      .set('Authorization', auth)
+      .send({ companyId: 'co-1', kind: 'RETAINER', initialValue: 100000 });
+    expect(created.status).toBe(201);
+    expect(created.body.code).toBeUndefined();
 
+    p.proposal.findFirst.mockResolvedValue({ ...openDeal(), wonVersion: null });
     p.user.findFirst.mockResolvedValue({ id: 'usr-other' });
     p.proposal.update.mockResolvedValue({ ...openDeal(), ownerId: 'usr-other' });
-    const ok = await request(app)
-      .patch('/api/proposals/prop-1')
-      .set('Authorization', auth)
-      .send({ ownerId: 'usr-other', nextStep: 'Hand over to Tanuja', nextStepDate: '2026-10-15' });
-    expect(ok.status).toBe(200);
+    const edited = await request(app).patch('/api/proposals/prop-1').set('Authorization', auth).send({ ownerId: 'usr-other' });
+    expect(edited.status).toBe(200);
+    // An owner change is not contact.
     expect(p.proposal.update.mock.calls[0][0].data.lastTouchedAt).toBeUndefined();
+  });
+
+  it('a next step date given on the proposal form still cannot be in the past', async () => {
+    p.company.findFirst.mockResolvedValue({ id: 'co-1', organizationId: 'org-1', name: 'Carlton Hotels' });
+    const res = await request(app)
+      .post('/api/proposals')
+      .set('Authorization', auth)
+      .send({ companyId: 'co-1', kind: 'RETAINER', initialValue: 100000, nextStep: 'Call', nextStepDate: '2026-10-01' });
+    expect(res.status).toBe(400);
+    expect(p.proposal.create).not.toHaveBeenCalled();
   });
 });
 
@@ -153,11 +173,18 @@ describe('Log touch', () => {
     });
   });
 
-  it('needs a channel, a note and the next step', async () => {
-    p.proposal.findFirst.mockResolvedValue(openDeal());
-    const res = await request(app).post('/api/proposals/prop-1/touch').set('Authorization', auth).send({ channel: 'CALL', note: 'Spoke' });
-    expect(res.status).toBe(400);
-    expect(res.body.error).toBe('What happens next?');
+  it('needs a channel and a note; the next step is optional, and left out it stays as it was', async () => {
+    p.proposal.findFirst.mockResolvedValue(openDeal({ nextStep: 'Call Friday', nextStepDate: day('2026-10-16') }));
+    p.proposal.update.mockResolvedValue({});
+    const ok = await request(app).post('/api/proposals/prop-1/touch').set('Authorization', auth).send({ channel: 'CALL', note: 'Spoke' });
+    expect(ok.status).toBe(201);
+    const { data } = p.proposal.update.mock.calls[0][0];
+    expect(data.lastTouchedAt).toBeInstanceOf(Date);
+    expect('nextStep' in data || 'nextStepDate' in data).toBe(false);
+
+    const noNote = await request(app).post('/api/proposals/prop-1/touch').set('Authorization', auth).send({ channel: 'CALL' });
+    expect(noNote.status).toBe(400);
+    expect(noNote.body.error).toBe('Add a short note — what was said');
   });
 
   it('a lead touch does the same', async () => {
@@ -292,16 +319,24 @@ describe('Set last contact date', () => {
 });
 
 // ── 5. Outreach statuses ──
-describe('an active lead needs a next step; a dead one does not', () => {
+describe("a lead's next step is optional; Dead clears it", () => {
   beforeEach(() => {
     p.outreachEntry.findFirst.mockResolvedValue({ id: 'lead-1', name: 'Prestige', status: 'FOLLOW_UP', promotedCompanyId: null, nextStep: 'Call', nextActionDate: day('2026-10-20') });
     p.outreachEntry.update.mockImplementation(async ({ data }: any) => ({ id: 'lead-1', ...data }));
   });
 
-  it('Interested without a next step is refused', async () => {
-    const res = await request(app).patch('/api/outreach/lead-1/status').set('Authorization', auth).send({ status: 'INTERESTED', nextActionDate: '2026-10-20' });
-    expect(res.status).toBe(400);
-    expect(res.body.error).toBe('What happens next?');
+  it('Interested saves without a next step or a date; a callback still needs its date', async () => {
+    const res = await request(app).patch('/api/outreach/lead-1/status').set('Authorization', auth).send({ status: 'INTERESTED' });
+    expect(res.status).toBe(200);
+    expect(p.outreachEntry.update.mock.calls[0][0].data).toMatchObject({ status: 'INTERESTED', nextStep: null });
+
+    // Follow up was always its call-back date and the note — that has not changed.
+    const callback = await request(app)
+      .patch('/api/outreach/lead-1/status')
+      .set('Authorization', auth)
+      .send({ status: 'FOLLOW_UP', remarks: 'Call after Diwali' });
+    expect(callback.status).toBe(400);
+    expect(callback.body.error).toBe('When are you calling them back?');
   });
 
   it('Dead clears the next step, and the change is a touch', async () => {
