@@ -75,6 +75,8 @@ export const RULE_PERMISSION: Record<string, PermissionKey | readonly Permission
 
   // Selling.
   PROPOSAL_STALLED: 'pipeline.read',
+  // Prices are Management's, so a draft waiting to be priced is theirs to hear about.
+  PROPOSAL_REVIEW_REQUESTED: 'setup.admin',
   VERBAL_NO_ADVANCE: 'pipeline.read',
   // A proforma is a request for money: whoever sells it, and Accounts who
   // collect it (Money Plan 2, decision 12). Any one of these opens it.
@@ -345,6 +347,8 @@ const linkFor = (
 ): string | null => {
   // A stuck approval opens the task itself, where Approve is.
   if (rule && (CHASER_RULES as readonly string[]).includes(rule)) return taskLink(entityId);
+  // A proposal waiting for review opens on its own page, where Finalise is.
+  if (rule === 'PROPOSAL_REVIEW_REQUESTED') return `/quotations/${entityId}`;
   return linkForUser(entityType, entityId, user);
 };
 

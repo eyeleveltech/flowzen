@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { amountsInText, dealValueOf, floorFor, priceProposal, type ProposalLineInput } from './proposalPricing.js';
-import { unbackedAmounts, proseToHtml, defaultSections, readFloors } from './proposalDocument.js';
+import { unbackedAmounts, proseToHtml, proseParts, defaultSections, readFloors } from './proposalDocument.js';
 
 /**
  * The house rules a proposal's price is held to (AI Proposal Builder, phase 1):
@@ -110,6 +110,15 @@ describe('the document', () => {
 
   it('turns plain text into paragraphs and bullets, escaping everything', () => {
     expect(proseToHtml('One <b>line</b>\n\n- a\n- b')).toBe('<p>One &lt;b&gt;line&lt;/b&gt;</p><ul><li>a</li><li>b</li></ul>');
+  });
+
+  it('heads a list with the line above it', () => {
+    expect(proseParts('Social media\n- 12 posts\n- 8 reels\nReporting\n- Monthly')).toEqual([
+      { kind: 'lead', text: 'Social media' },
+      { kind: 'list', items: ['12 posts', '8 reels'] },
+      { kind: 'lead', text: 'Reporting' },
+      { kind: 'list', items: ['Monthly'] },
+    ]);
   });
 
   it('reads stored floors, ignoring anything that is not an amount', () => {

@@ -32,6 +32,7 @@ import {
   Package,
   IndianRupee,
   Hourglass,
+  FileSignature,
   Siren,
 } from 'lucide-react';
 import { Drawer } from '@/components/ui/drawer';
@@ -44,6 +45,7 @@ import { canSee } from '@/config/navigation';
 // default regardless of what it actually was.
 const notificationIcons: Record<string, typeof CheckSquare> = {
   PROPOSAL_STALLED: Clock,
+  PROPOSAL_REVIEW_REQUESTED: FileSignature,
   VERBAL_NO_ADVANCE: AlertCircle,
   PROFORMA_EXPIRED: AlertCircle,
   PROFORMA_UNPAID: Clock,

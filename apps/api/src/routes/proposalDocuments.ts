@@ -12,6 +12,9 @@
  *     Until a document is final, nobody else sees its figures.
  *   - A final document is the one the client gets, so anybody on the deal can
  *     open it and its PDF, and "Mark as sent" is the pipeline's to press.
+ *   - Phase 2: "Send for review" hands a draft to Management (it is then
+ *     theirs to edit, price, send back or finalise), the AI suggests text on
+ *     request, and every final also keeps a Word file.
  *
  * Drafts are not ProposalVersions. A version is a proposal that was SENT — the
  * pipeline value, the Monday brief, the stalled-deal alert and the forecast all
@@ -32,6 +35,7 @@ import {
   emptySections,
   linesForPricing,
   loadRenderableProposal,
+  needsInputIn,
   nextProposalRef,
   parseSections,
   pricingContextFor,
@@ -42,6 +46,10 @@ import {
   unbackedAmounts,
 } from '../services/proposalDocument.js';
 import { nextStepForSave } from './proposals.js';
+import { renderProposalDocx } from '../services/proposalDocx.js';
+import { applyChanges, askProposalAi, parseThread, type ThreadEntry } from '../services/proposalAi.js';
+import { AssistantFailed, AssistantNotConfigured } from '../services/moneyAssistant.js';
+import { REVIEW_RULE } from '../services/alertRules.js';
 
 export const proposalDocumentsRouter = Router();
 proposalDocumentsRouter.use(authenticate);
@@ -227,6 +235,7 @@ const documentInclude = {
   createdBy: { select: { name: true } },
   finalisedBy: { select: { name: true } },
   floorOverrideBy: { select: { name: true } },
+  reviewRequestedBy: { select: { name: true } },
   basedOn: { select: { n: true } },
   proposal: { include: { company: true } },
 } satisfies Prisma.ProposalDocumentInclude;
@@ -276,6 +285,7 @@ function finaliseProblems(doc: LoadedDocument, price: ProposalPrice): string[] {
     problems.push(`The text says ${amount}, which no line item backs. Put prices in the Pricing tab, not the text.`);
   }
   for (const title of emptySections(sections)) problems.push(`"${title}" is empty. Write it, or hide it.`);
+  for (const what of needsInputIn(doc.title, sections)) problems.push(`Still needs input: ${what}.`);
   return problems;
 }
 
@@ -302,6 +312,16 @@ function documentOut(doc: LoadedDocument, withPrices: boolean) {
     floorOverride: doc.floorOverrideAt
       ? { reason: doc.floorOverrideReason, by: doc.floorOverrideBy?.name ?? null, at: doc.floorOverrideAt }
       : null,
+    review: doc.reviewRequestedAt
+      ? { requestedAt: doc.reviewRequestedAt, by: doc.reviewRequestedBy?.name ?? null }
+      : null,
+    reviewNote: doc.reviewNote,
+    // The AI conversation. Staged rates are Management's, like every figure on a draft.
+    aiThread: parseThread(doc.aiThread).map((e) =>
+      e.from === 'ai' && e.lines && !showFigures
+        ? { ...e, lines: { ...e.lines, items: e.lines.items.map((l) => ({ ...l, unitRate: null })) } }
+        : e,
+    ),
     lineItems: doc.lineItems.map((l) => ({
       id: l.id,
       catalogItemId: l.catalogItemId,
@@ -333,7 +353,7 @@ async function respondWithDocument(req: AuthRequest, res: Response, doc: LoadedD
           pricing: { clientStateKnown: ctx.clientStateKnown, clientStateName: ctx.clientStateName },
         }
       : {}),
-    ...(mgmt && doc.status === 'DRAFT' ? { problems: finaliseProblems(doc, price) } : {}),
+    ...(mgmt && doc.status !== 'FINAL' ? { problems: finaliseProblems(doc, price) } : {}),
   });
 }
 
@@ -480,15 +500,28 @@ proposalDocumentsRouter.get('/documents/:docId', requirePermission('pipeline.rea
   }
 });
 
-const refuseUnlessDraft = (doc: LoadedDocument, res: Response): boolean => {
+/**
+ * A draft is anyone's on the deal to change; one in review is Management's;
+ * a final is nobody's. Answers the refusal, and says whether it did.
+ */
+const refuseUnlessEditable = (doc: LoadedDocument, req: AuthRequest, res: Response): boolean => {
   if (doc.status === 'DRAFT') return false;
+  if (doc.status === 'IN_REVIEW') {
+    if (isManagement(req)) return false;
+    res.status(409).json({ success: false, error: `v${doc.n} is with Management for review. Ask them to send it back to change it.` });
+    return true;
+  }
   res.status(409).json({ success: false, error: `v${doc.n} is final and locked. Start a new version to change it.` });
   return true;
 };
 
+/** The states this person may write to — the guard the writes themselves carry. */
+const editableStates = (req: AuthRequest): ('DRAFT' | 'IN_REVIEW')[] => (isManagement(req) ? ['DRAFT', 'IN_REVIEW'] : ['DRAFT']);
+
 const documentPatchSchema = z.object({
   title: z.string().trim().min(1, 'Give the proposal a title').max(160).optional(),
   sections: sectionsSchema.optional(),
+  layout: z.enum(['MINIMAL', 'PREMIUM', 'COMPACT']).optional(),
   revisionNote: z.string().trim().max(500).optional().nullable(),
 });
 
@@ -500,19 +533,20 @@ proposalDocumentsRouter.patch('/documents/:docId', requirePermission('pipeline.w
       return;
     }
     const doc = await loadDocument(req, res);
-    if (!doc || refuseUnlessDraft(doc, res)) return;
+    if (!doc || refuseUnlessEditable(doc, req, res)) return;
     const d = parsed.data;
-    // Guarded on DRAFT in the write itself, so a save racing Finalise loses.
+    // Guarded on the state in the write itself, so a save racing Finalise loses.
     const { count } = await prisma.proposalDocument.updateMany({
-      where: { id: doc.id, status: 'DRAFT' },
+      where: { id: doc.id, status: { in: editableStates(req) } },
       data: {
         ...(d.title !== undefined ? { title: d.title } : {}),
+        ...(d.layout !== undefined ? { layout: d.layout } : {}),
         ...(d.sections !== undefined ? { sections: d.sections as unknown as Prisma.InputJsonValue } : {}),
         ...(d.revisionNote !== undefined ? { revisionNote: d.revisionNote || null } : {}),
       },
     });
     if (!count) {
-      res.status(409).json({ success: false, error: `v${doc.n} was just finalised. Start a new version to change it.` });
+      res.status(409).json({ success: false, error: `v${doc.n} just changed hands (finalised or sent for review). Reload to see it.` });
       return;
     }
     const fresh = await prisma.proposalDocument.findUniqueOrThrow({ where: { id: doc.id }, include: documentInclude });
@@ -588,7 +622,7 @@ proposalDocumentsRouter.put('/documents/:docId/line-items', requireManagement, a
       return;
     }
     const doc = await loadDocument(req, res);
-    if (!doc || refuseUnlessDraft(doc, res)) return;
+    if (!doc || refuseUnlessEditable(doc, req, res)) return;
 
     const over = parsed.data.items.find((l) => (l.discountAmount ?? 0) > l.qty * l.unitRate);
     if (over) {
@@ -606,48 +640,56 @@ proposalDocumentsRouter.put('/documents/:docId/line-items', requireManagement, a
       }
     }
 
-    // An override was given for a figure. A different monthly fee needs its own.
-    const before = (await priceOf(doc)).price.monthly.subtotal;
-    const after = (await priceOf(doc, parsed.data.items)).price.monthly.subtotal;
-    const clearOverride = doc.floorOverrideAt && before !== after;
-
-    await prisma.$transaction(async (tx) => {
-      await tx.proposalLineItem.deleteMany({ where: { documentId: doc.id } });
-      if (parsed.data.items.length) {
-        await tx.proposalLineItem.createMany({
-          data: parsed.data.items.map((l, i) => ({
-            documentId: doc.id,
-            catalogItemId: l.catalogItemId || null,
-            name: l.name,
-            description: l.description || null,
-            billing: l.billing,
-            qty: l.qty,
-            unit: l.unit || null,
-            unitRate: l.unitRate,
-            discountAmount: l.discountAmount ?? 0,
-            discountTrade: l.discountTrade || null,
-            isPassthrough: l.isPassthrough ?? false,
-            priceSource: l.priceSource ?? (l.catalogItemId ? 'CATALOG' : 'USER'),
-            sortOrder: i,
-          })),
-        });
-      }
-      await tx.proposalDocument.update({
-        where: { id: doc.id },
-        data: {
-          // Touch the row, so "last edited" moves with a pricing change.
-          updatedAt: new Date(),
-          ...(clearOverride ? { floorOverrideReason: null, floorOverrideById: null, floorOverrideAt: null } : {}),
-        },
-      });
-    });
-
+    await saveLines(doc, parsed.data.items);
     const fresh = await prisma.proposalDocument.findUniqueOrThrow({ where: { id: doc.id }, include: documentInclude });
     await respondWithDocument(req, res, fresh);
   } catch (e) {
     next(e);
   }
 });
+
+type LineIn = z.infer<typeof lineSchema>;
+
+/**
+ * Replace a document's lines. An override was given for a figure, so a
+ * different monthly fee clears it: it needs its own reason.
+ */
+async function saveLines(doc: LoadedDocument, items: LineIn[], extra: Prisma.ProposalDocumentUncheckedUpdateInput = {}) {
+  const before = (await priceOf(doc)).price.monthly.subtotal;
+  const after = (await priceOf(doc, items)).price.monthly.subtotal;
+  const clearOverride = doc.floorOverrideAt && before !== after;
+  await prisma.$transaction(async (tx) => {
+    await tx.proposalLineItem.deleteMany({ where: { documentId: doc.id } });
+    if (items.length) {
+      await tx.proposalLineItem.createMany({
+        data: items.map((l, i) => ({
+          documentId: doc.id,
+          catalogItemId: l.catalogItemId || null,
+          name: l.name,
+          description: l.description || null,
+          billing: l.billing,
+          qty: l.qty,
+          unit: l.unit || null,
+          unitRate: l.unitRate,
+          discountAmount: l.discountAmount ?? 0,
+          discountTrade: l.discountTrade || null,
+          isPassthrough: l.isPassthrough ?? false,
+          priceSource: l.priceSource ?? (l.catalogItemId ? 'CATALOG' : 'USER'),
+          sortOrder: i,
+        })),
+      });
+    }
+    await tx.proposalDocument.update({
+      where: { id: doc.id },
+      data: {
+        // Touch the row, so "last edited" moves with a pricing change.
+        updatedAt: new Date(),
+        ...(clearOverride ? { floorOverrideReason: null, floorOverrideById: null, floorOverrideAt: null } : {}),
+        ...extra,
+      },
+    });
+  });
+}
 
 const overrideSchema = z.object({
   reason: z.string().trim().min(20, 'Say why in a sentence — at least 20 characters').max(500),
@@ -661,7 +703,7 @@ proposalDocumentsRouter.post('/documents/:docId/floor-override', requireManageme
       return;
     }
     const doc = await loadDocument(req, res);
-    if (!doc || refuseUnlessDraft(doc, res)) return;
+    if (!doc || refuseUnlessEditable(doc, req, res)) return;
     const { price } = await priceOf(doc);
     if (price.floor.passes) {
       res.status(400).json({ success: false, error: 'The monthly fee is at or above the floor. There is nothing to override.' });
@@ -691,7 +733,7 @@ proposalDocumentsRouter.post('/documents/:docId/floor-override', requireManageme
 proposalDocumentsRouter.post('/documents/:docId/finalise', requireManagement, async (req: AuthRequest, res: Response, next) => {
   try {
     const doc = await loadDocument(req, res);
-    if (!doc || refuseUnlessDraft(doc, res)) return;
+    if (!doc || refuseUnlessEditable(doc, req, res)) return;
     const orgId = req.user!.organizationId;
     const { price } = await priceOf(doc);
     const problems = finaliseProblems(doc, price);
@@ -708,31 +750,32 @@ proposalDocumentsRouter.post('/documents/:docId/finalise', requireManagement, as
     }
     const now = new Date();
     const org = await prisma.organization.findUniqueOrThrow({ where: { id: orgId }, select: { timezone: true } });
-    const pdf = await renderProposalPdf(
-      {
-        ...renderable,
-        status: 'FINAL',
-        price,
-        pricingNote: null,
-        dateLabel: new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'long', year: 'numeric', timeZone: org.timezone || 'Asia/Kolkata' }).format(now),
-      },
-      { watermark: false },
-    );
+    const final = {
+      ...renderable,
+      status: 'FINAL' as const,
+      price,
+      pricingNote: null,
+      dateLabel: new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'long', year: 'numeric', timeZone: org.timezone || 'Asia/Kolkata' }).format(now),
+    };
+    // Both files, made once, from the same frozen figures.
+    const [pdf, docx] = await Promise.all([renderProposalPdf(final, { watermark: false }), renderProposalDocx(final, { draft: false })]);
 
     const { count } = await prisma.proposalDocument.updateMany({
-      where: { id: doc.id, status: 'DRAFT' },
+      where: { id: doc.id, status: { in: ['DRAFT', 'IN_REVIEW'] } },
       data: {
         status: 'FINAL',
         finalisedAt: now,
         finalisedById: req.user!.userId,
         commercialSnapshot: price as unknown as Prisma.InputJsonValue,
         finalPdf: new Uint8Array(pdf),
+        finalDocx: new Uint8Array(docx),
       },
     });
     if (!count) {
       res.status(409).json({ success: false, error: `v${doc.n} was finalised a moment ago.` });
       return;
     }
+    await resolveReviewAlert(orgId, doc.proposalId);
     await prisma.activity.create({
       data: {
         organizationId: orgId,
@@ -778,9 +821,12 @@ proposalDocumentsRouter.post('/documents/:docId/versions', requirePermission('pi
       select: { n: true, status: true },
       orderBy: { n: 'desc' },
     });
-    const openDraft = siblings.find((s) => s.status === 'DRAFT');
+    const openDraft = siblings.find((s) => s.status === 'DRAFT' || s.status === 'IN_REVIEW');
     if (openDraft) {
-      res.status(409).json({ success: false, error: `v${openDraft.n} is still a draft. Finish or discard it first.` });
+      res.status(409).json({
+        success: false,
+        error: `v${openDraft.n} is still ${openDraft.status === 'DRAFT' ? 'a draft' : 'in review'}. Finish it first.`,
+      });
       return;
     }
     const n = (siblings[0]?.n ?? 0) + 1;
@@ -840,6 +886,239 @@ proposalDocumentsRouter.post('/documents/:docId/versions', requirePermission('pi
   }
 });
 
+// ── Review ──────────────────────────────────────────────────────────────────
+//
+// "Send for review": the writer is done with the words and hands the draft to
+// Management to price and finalise. It then reads as In review, the writer
+// can no longer change it, and Management sees it in the bell. Management
+// finalises it, or sends it back with a note.
+
+async function resolveReviewAlert(organizationId: string, proposalId: string) {
+  const now = new Date();
+  await prisma.alert.updateMany({
+    where: { organizationId, rule: REVIEW_RULE, entityType: 'Proposal', entityId: proposalId, resolvedAt: null },
+    data: { resolvedAt: now, updatedAt: now },
+  });
+}
+
+proposalDocumentsRouter.post('/documents/:docId/review', requirePermission('pipeline.write'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const doc = await loadDocument(req, res);
+    if (!doc) return;
+    if (doc.status !== 'DRAFT') {
+      res.status(409).json({ success: false, error: `v${doc.n} is ${doc.status === 'IN_REVIEW' ? 'already in review' : 'final'}.` });
+      return;
+    }
+    const orgId = req.user!.organizationId;
+    const now = new Date();
+    const { count } = await prisma.proposalDocument.updateMany({
+      where: { id: doc.id, status: 'DRAFT' },
+      data: { status: 'IN_REVIEW', reviewRequestedAt: now, reviewRequestedById: req.user!.userId, reviewNote: null },
+    });
+    if (!count) {
+      res.status(409).json({ success: false, error: `v${doc.n} just changed. Reload to see it.` });
+      return;
+    }
+    const asker = await prisma.user.findUnique({ where: { id: req.user!.userId }, select: { name: true } });
+    await resolveReviewAlert(orgId, doc.proposalId);
+    await prisma.alert.create({
+      data: {
+        organizationId: orgId,
+        rule: REVIEW_RULE,
+        severity: 'MED',
+        entityType: 'Proposal',
+        entityId: doc.proposalId,
+        message: `${doc.proposal.company.name}: proposal v${doc.n} is ready for pricing and review${asker?.name ? ` (${asker.name})` : ''}.`,
+      },
+    });
+    await prisma.activity.create({
+      data: {
+        organizationId: orgId,
+        entityType: 'Proposal',
+        entityId: doc.proposalId,
+        actorId: req.user!.userId,
+        verb: 'proposal_document_review_requested',
+        payload: { n: doc.n },
+      },
+    });
+    const fresh = await prisma.proposalDocument.findUniqueOrThrow({ where: { id: doc.id }, include: documentInclude });
+    await respondWithDocument(req, res, fresh);
+  } catch (e) {
+    next(e);
+  }
+});
+
+const sendBackSchema = z.object({ note: z.string().trim().min(3, 'Say what needs changing').max(500) });
+
+proposalDocumentsRouter.post('/documents/:docId/send-back', requireManagement, async (req: AuthRequest, res: Response, next) => {
+  try {
+    const parsed = sendBackSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.issues[0].message });
+      return;
+    }
+    const doc = await loadDocument(req, res);
+    if (!doc) return;
+    if (doc.status !== 'IN_REVIEW') {
+      res.status(409).json({ success: false, error: `v${doc.n} is not in review.` });
+      return;
+    }
+    const orgId = req.user!.organizationId;
+    await prisma.proposalDocument.updateMany({
+      where: { id: doc.id, status: 'IN_REVIEW' },
+      data: { status: 'DRAFT', reviewNote: parsed.data.note, reviewRequestedAt: null, reviewRequestedById: null },
+    });
+    await resolveReviewAlert(orgId, doc.proposalId);
+    await prisma.activity.create({
+      data: {
+        organizationId: orgId,
+        entityType: 'Proposal',
+        entityId: doc.proposalId,
+        actorId: req.user!.userId,
+        verb: 'proposal_document_sent_back',
+        payload: { n: doc.n, note: parsed.data.note },
+      },
+    });
+    const fresh = await prisma.proposalDocument.findUniqueOrThrow({ where: { id: doc.id }, include: documentInclude });
+    await respondWithDocument(req, res, fresh);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// ── Writing with the AI ─────────────────────────────────────────────────────
+
+const aiAskSchema = z.object({ message: z.string().trim().min(1, 'Say what you want written or changed').max(2000) });
+
+const aiErrorReply = (e: unknown, res: Response): boolean => {
+  if (e instanceof AssistantNotConfigured) {
+    res.status(409).json({ success: false, error: 'No AI key is set. Add one in Setup → Organisation, under Zen.', code: 'NO_KEY' });
+    return true;
+  }
+  if (e instanceof AssistantFailed) {
+    res.status(502).json({ success: false, error: e.message });
+    return true;
+  }
+  return false;
+};
+
+proposalDocumentsRouter.post('/documents/:docId/ai', requirePermission('pipeline.write'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const parsed = aiAskSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.issues[0].message });
+      return;
+    }
+    const doc = await loadDocument(req, res);
+    if (!doc || refuseUnlessEditable(doc, req, res)) return;
+    const me = await prisma.user.findUnique({ where: { id: req.user!.userId }, select: { name: true } });
+    await askProposalAi({
+      organizationId: req.user!.organizationId,
+      userId: req.user!.userId,
+      userName: me?.name ?? 'Somebody',
+      setsPrices: isManagement(req),
+      documentId: doc.id,
+      message: parsed.data.message,
+    });
+    const fresh = await prisma.proposalDocument.findUniqueOrThrow({ where: { id: doc.id }, include: documentInclude });
+    await respondWithDocument(req, res, fresh);
+  } catch (e) {
+    if (aiErrorReply(e, res)) return;
+    next(e);
+  }
+});
+
+const aiApplySchema = z.object({
+  action: z.enum(['accept', 'discard']),
+  /** The section changes to act on. Left out: all of this answer's pending ones. */
+  changeIds: z.array(z.string()).max(30).optional(),
+  /** Act on the staged Pricing lines too (Management). */
+  lines: z.boolean().optional(),
+});
+
+proposalDocumentsRouter.post('/documents/:docId/ai/:entryId', requirePermission('pipeline.write'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const parsed = aiApplySchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.issues[0].message });
+      return;
+    }
+    const doc = await loadDocument(req, res);
+    if (!doc || refuseUnlessEditable(doc, req, res)) return;
+    const thread = parseThread(doc.aiThread);
+    const at = thread.findIndex((e) => e.id === req.params.entryId && e.from === 'ai');
+    if (at < 0) {
+      res.status(404).json({ success: false, error: 'That suggestion is gone.' });
+      return;
+    }
+    const entry = thread[at] as Extract<ThreadEntry, { from: 'ai' }>;
+    const { action, changeIds, lines } = parsed.data;
+    if (lines && !isManagement(req)) {
+      res.status(403).json({ success: false, error: 'Only Management can set or approve prices.' });
+      return;
+    }
+    const picked = entry.changes.filter((c) => c.status === 'PENDING' && (!changeIds || changeIds.includes(c.id)));
+    const status = action === 'accept' ? ('ACCEPTED' as const) : ('DISCARDED' as const);
+    const nextEntry: ThreadEntry = {
+      ...entry,
+      changes: entry.changes.map((c) => (picked.some((x) => x.id === c.id) ? { ...c, status } : c)),
+      ...(entry.lines && lines && entry.lines.status === 'PENDING' ? { lines: { ...entry.lines, status } } : {}),
+    };
+    const nextThread = thread.map((e, i) => (i === at ? nextEntry : e));
+    const sections = action === 'accept' ? applyChanges(parseSections(doc.sections), picked) : parseSections(doc.sections);
+
+    if (lines && action === 'accept' && entry.lines?.status === 'PENDING') {
+      // The staged lines join the ones already priced, in the same save the Pricing tab uses.
+      const current: LineIn[] = doc.lineItems.map((l) => ({
+        catalogItemId: l.catalogItemId,
+        name: l.name,
+        description: l.description,
+        billing: l.billing,
+        qty: Number(l.qty),
+        unit: l.unit,
+        unitRate: Number(l.unitRate),
+        discountAmount: Number(l.discountAmount),
+        discountTrade: l.discountTrade,
+        isPassthrough: l.isPassthrough,
+        priceSource: l.priceSource,
+      }));
+      const added: LineIn[] = entry.lines.items.map((l) => ({
+        catalogItemId: l.catalogItemId,
+        name: l.name,
+        description: l.description,
+        billing: l.billing,
+        qty: l.qty,
+        unit: l.unit,
+        unitRate: l.unitRate,
+        discountAmount: 0,
+        discountTrade: null,
+        isPassthrough: false,
+        priceSource: l.rateFrom === 'SERVICE_LIST' ? 'CATALOG' : 'USER',
+      }));
+      await saveLines(doc, [...current, ...added], {
+        sections: sections as unknown as Prisma.InputJsonValue,
+        aiThread: nextThread as unknown as Prisma.InputJsonValue,
+      });
+    } else {
+      const { count } = await prisma.proposalDocument.updateMany({
+        where: { id: doc.id, status: { in: editableStates(req) } },
+        data: {
+          sections: sections as unknown as Prisma.InputJsonValue,
+          aiThread: nextThread as unknown as Prisma.InputJsonValue,
+        },
+      });
+      if (!count) {
+        res.status(409).json({ success: false, error: `v${doc.n} just changed hands. Reload to see it.` });
+        return;
+      }
+    }
+    const fresh = await prisma.proposalDocument.findUniqueOrThrow({ where: { id: doc.id }, include: documentInclude });
+    await respondWithDocument(req, res, fresh);
+  } catch (e) {
+    next(e);
+  }
+});
+
 // ── Preview and PDF ─────────────────────────────────────────────────────────
 
 /** Figures show to Management, and to everybody once the document is final. */
@@ -866,7 +1145,7 @@ proposalDocumentsRouter.get('/documents/:docId/preview', requirePermission('pipe
   }
 });
 
-const pdfName = (ref: string, draft: boolean) => `${ref.replace(/[^A-Za-z0-9-]+/g, '-')}${draft ? '-DRAFT' : ''}.pdf`;
+const pdfName = (ref: string, draft: boolean, ext = 'pdf') => `${ref.replace(/[^A-Za-z0-9-]+/g, '-')}${draft ? '-DRAFT' : ''}.${ext}`;
 
 proposalDocumentsRouter.get('/documents/:docId/pdf', requirePermission('pipeline.read'), async (req: AuthRequest, res: Response, next) => {
   try {
@@ -894,6 +1173,37 @@ proposalDocumentsRouter.get('/documents/:docId/pdf', requirePermission('pipeline
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${pdfName(ref, doc.status !== 'FINAL')}"`);
     res.send(pdf);
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** The same document as a Word file. A final returns the file made at Finalise. */
+proposalDocumentsRouter.get('/documents/:docId/docx', requirePermission('pipeline.read'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const doc = await prisma.proposalDocument.findFirst({
+      where: { id: String(req.params.docId), proposal: { organizationId: req.user!.organizationId, deletedAt: null } },
+      select: { id: true, n: true, status: true, finalDocx: true, proposal: { select: { refNo: true } } },
+    });
+    if (!doc) {
+      res.status(404).json({ success: false, error: 'Proposal document not found' });
+      return;
+    }
+    const ref = documentRef(doc.proposal.refNo, doc.n);
+    let file: Buffer;
+    if (doc.status === 'FINAL' && doc.finalDocx) {
+      file = Buffer.from(doc.finalDocx);
+    } else {
+      const p = await loadRenderableProposal(doc.id, req.user!.organizationId, showsFigures(req, doc.status));
+      if (!p) {
+        res.status(404).json({ success: false, error: 'Proposal document not found' });
+        return;
+      }
+      file = await renderProposalDocx(p, { draft: doc.status !== 'FINAL' });
+    }
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    res.setHeader('Content-Disposition', `attachment; filename="${pdfName(ref, doc.status !== 'FINAL', 'docx')}"`);
+    res.send(file);
   } catch (e) {
     next(e);
   }

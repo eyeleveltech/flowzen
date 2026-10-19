@@ -27,15 +27,21 @@ A person who types the address of a screen they cannot open is sent away from it
 
 ### Writing a proposal (/quotations/{id})
 
-The proposal itself, written in Flowzen. Written by hand for now; nothing is drafted by AI yet.
-- **Document tab:** the sections (cover line, about us, what we heard, scope, timeline, investment, terms, next steps). Hide a section with the eye, reorder with the arrows, add your own. It saves itself; the preview beside it follows. A line starting "- " is a bullet.
+The proposal itself, written in Flowzen, by hand or with the AI.
+- **Starting:** "Write with AI" or "Start blank". Both give the standard sections with the studio terms filled in.
+- **Document tab, Sections:** the sections (cover line, about us, what we heard, scope, timeline, investment, terms, next steps). Hide a section with the eye, reorder with the arrows, add your own. It saves itself; the preview beside it follows. A line starting "- " is a bullet; a single line right above bullets prints as their bold lead-in.
+- **Document tab, Write with AI:** ask in plain words ("write the first draft", "shorter intro", "more premium tone"). It knows the client record, the services on the Pricing tab and the studio terms, and suggests changes as cards to Accept or Discard; nothing changes until accepted. It never writes prices, uses Zen's AI setup (Setup → Organisation), and leaves what it does not know as a yellow "Needs input", which stops Finalise until filled. For Management it can also put a price you typed on the Pricing tab ("Add to Pricing").
+- **Layout:** Minimal (most proposals), Premium (larger deals: full green cover, numbered sections) or Compact (one page, no cover). Changing it never rewrites a word.
 - **Prices never go in the text.** The Investment section is drawn from the Pricing tab. A rupee amount typed into the text that no line backs stops Finalise.
 - **Pricing tab (Management only):** the services, each Monthly fee, One-time fee, or Paid by client directly (ad spend: shown apart, not in the fee, not taxed). Pick from the service list or type a line. Totals come with GST by the client's state. Monthly and one-time are never added together.
 - **Floor:** a monthly fee below the floor for the client's industry (Setup → Services & pricing) needs Management to record why (20 characters or more) before Finalise. One-time fees have no floor.
 - **Discounts** need what the client gives in return (a longer term, case-study rights).
-- **Finalise (Management):** checks all of the above and that no shown section is empty, then locks the version, freezes its prices and keeps its PDF exactly as it was.
+- **Investment box:** the fee before GST and "18% GST additional", never a GST-inclusive total (the Pricing tab still shows the GST working).
+- **Send for review:** the writer hands a draft to Management; it shows as In review, the writer can no longer change it, and Management gets a bell. Management prices it and finalises, or uses "Send back" with a note that shows at the top of the draft.
+- **Finalise (Management):** checks all of the above, that no shown section is empty and that nothing still needs input, then locks the version, freezes its prices and keeps its PDF and Word file exactly as they were.
+- **Downloads:** PDF and Word, for any version. A draft's carry a DRAFT mark.
 - **Who sees prices:** Management always. Anyone else sees a draft without its figures ("Pricing is added by Management"), and the final version in full, since it goes to the client.
-- **Versions:** "New version" copies the text and prices into a new draft (one draft at a time). The reference is EL/PR/<year>/<number>-v<n>, e.g. EL/PR/2026-27/014-v2.
+- **Versions:** "New version" copies the text and prices into a new draft (one open draft or review at a time). The reference is EL/PR/<year>/<number>-v<n>, e.g. EL/PR/2026-27/014-v2.
 - **Mark as sent:** a final version goes on the pipeline as a sent version, at its monthly fee for a retainer or its one-time fee for a project. First one moves the deal to Proposal sent, later ones to In negotiation. Next step optional.
 
 ## Links to records

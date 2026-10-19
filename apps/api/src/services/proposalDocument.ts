@@ -103,6 +103,54 @@ export function defaultSections(input: { orgName: string; terms: string[] }): Pr
   ];
 }
 
+/**
+ * "[[Needs input: the launch date]]" — a gap the writer (or the AI) left on
+ * purpose rather than inventing something. It prints as a yellow chip on a
+ * draft, and Finalise refuses while any remain in a shown section.
+ */
+export const NEEDS_INPUT = /\[\[\s*(?:needs input\s*:?\s*)?([^\]]+?)\s*\]\]/gi;
+
+/** What the shown sections and the title still need, in words. */
+export function needsInputIn(title: string | null, sections: ProposalSection[]): string[] {
+  const text = [title ?? '', ...sections.filter((s) => s.visible && s.type !== 'COMMERCIAL').map((s) => s.body)].join('\n');
+  return Array.from(new Set(Array.from(text.matchAll(NEEDS_INPUT), (m) => m[1].trim())));
+}
+
+export type ProsePart =
+  | { kind: 'para'; lines: string[] }
+  | { kind: 'list'; items: string[] }
+  /** One line straight above a list: "Social media management" over its bullets. */
+  | { kind: 'lead'; text: string };
+
+const BULLET = /^\s*[-•*]\s+/;
+
+/**
+ * Plain text, split the way both the PDF and the Word file print it: a blank
+ * line starts a block; inside a block, lines starting "- " are a list, and a
+ * single line right above a list is its lead-in. Nothing else is interpreted.
+ */
+export function proseParts(body: string): ProsePart[] {
+  const parts: ProsePart[] = [];
+  for (const block of body.replace(/\r\n/g, '\n').split(/\n\s*\n/)) {
+    const lines = block.split('\n').filter((l) => l.trim());
+    let i = 0;
+    while (i < lines.length) {
+      if (BULLET.test(lines[i])) {
+        const items: string[] = [];
+        while (i < lines.length && BULLET.test(lines[i])) items.push(lines[i++].replace(BULLET, ''));
+        parts.push({ kind: 'list', items });
+        continue;
+      }
+      const run: string[] = [];
+      while (i < lines.length && !BULLET.test(lines[i])) run.push(lines[i++]);
+      // A one-line run with a list right after it heads that list.
+      if (run.length === 1 && i < lines.length) parts.push({ kind: 'lead', text: run[0] });
+      else parts.push({ kind: 'para', lines: run });
+    }
+  }
+  return parts;
+}
+
 /** Visible sections that still have nothing written in them. */
 export function emptySections(sections: ProposalSection[]): string[] {
   return sections.filter((s) => s.visible && !DRAWN.includes(s.type) && !s.body.trim()).map((s) => s.title || 'Untitled section');
@@ -225,6 +273,7 @@ export interface RenderableProposal {
   seller: SellerSnapshot;
   org: { website: string | null; phone: string | null; contactEmail: string | null };
   kind: 'RETAINER' | 'PROJECT';
+  layout: 'MINIMAL' | 'PREMIUM' | 'COMPACT';
   /** Null when the figures are not shown: no line items yet, or a reader who may not see them. */
   price: ProposalPrice | null;
   pricingNote: string | null;
@@ -280,6 +329,7 @@ export async function loadRenderableProposal(
     seller: buildSellerSnapshot(org),
     org: { website: org.website ?? null, phone: org.phone ?? null, contactEmail: org.contactEmail ?? null },
     kind: doc.proposal.kind,
+    layout: doc.layout,
     price: showPricing ? price : null,
     pricingNote: !showPricing
       ? 'Pricing is added by Management.'
@@ -289,7 +339,16 @@ export async function loadRenderableProposal(
   };
 }
 
-// ── Rendering: the Minimal layout ───────────────────────────────────────────
+// ── Rendering: three layouts, one set of content ────────────────────────────
+//
+// Minimal (the default), Premium (larger deals: a full-bleed cover and numbered
+// sections) and Compact (one page, no cover: small one-time jobs). Switching
+// layout never rewrites a word; it is the same sections, the same priced
+// lines and the same footer, laid out three ways.
+//
+// The house rule for the Investment box (Founder, B3.6): print the fee before
+// GST and the line "18% GST additional". Never a GST-inclusive rupee figure.
+// The Pricing tab still shows the full GST working; the client's copy does not.
 
 const INK = '#163027';
 const LIME = '#e2fea5';
@@ -297,6 +356,8 @@ const BODY = '#364c45';
 const MUTED = '#6b7d76';
 const RULE = '#d8e0dc';
 const TINT = '#f3f6f4';
+const FLAG = '#fff4c2';
+const FLAG_INK = '#7a5b00';
 
 const escapeHtml = (s: string): string =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -305,19 +366,20 @@ const escapeHtml = (s: string): string =>
 export const rupees = (n: number): string =>
   '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 });
 
+/** A "[[Needs input: …]]" marker, as a yellow chip. The text is already escaped. */
+const flagChips = (escaped: string): string =>
+  escaped.replace(NEEDS_INPUT, (_m, what: string) => `<span class="needs">Needs input: ${what.trim()}</span>`);
+
 /** Plain text to paragraphs and bullet lists. Nothing else is interpreted. */
 export function proseToHtml(body: string): string {
-  const blocks = body.replace(/\r\n/g, '\n').split(/\n\s*\n/);
-  return blocks
-    .map((block) => {
-      const lines = block.split('\n').filter((l) => l.trim());
-      if (!lines.length) return '';
-      const bullets = lines.every((l) => /^\s*[-•*]\s+/.test(l));
-      if (bullets) {
-        return `<ul>${lines.map((l) => `<li>${escapeHtml(l.replace(/^\s*[-•*]\s+/, ''))}</li>`).join('')}</ul>`;
-      }
-      return `<p>${lines.map((l) => escapeHtml(l)).join('<br />')}</p>`;
-    })
+  return proseParts(body)
+    .map((part) =>
+      part.kind === 'list'
+        ? `<ul>${part.items.map((l) => `<li>${flagChips(escapeHtml(l))}</li>`).join('')}</ul>`
+        : part.kind === 'lead'
+          ? `<p class="lead"><strong>${flagChips(escapeHtml(part.text))}</strong></p>`
+          : `<p>${part.lines.map((l) => flagChips(escapeHtml(l))).join('<br />')}</p>`,
+    )
     .join('');
 }
 
@@ -345,9 +407,8 @@ function feeTable(group: FeeGroup, heading: string, per: string): string {
         <thead><tr><th>Service</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th></tr></thead>
         <tbody>${rows}</tbody>
         <tfoot>
-          <tr class="sub"><td colspan="3">${heading} fee</td><td class="num">${rupees(group.subtotal)}</td></tr>
-          <tr class="tax"><td colspan="3">GST @ ${group.gstRatePercent}%</td><td class="num">${rupees(group.totalTax)}</td></tr>
-          <tr class="total"><td colspan="3">Total${per}</td><td class="num">${rupees(group.total)}</td></tr>
+          <tr class="sub"><td colspan="3">${heading} fee${per}</td><td class="num">${rupees(group.subtotal)}</td></tr>
+          <tr class="tax"><td colspan="4">${group.gstRatePercent}% GST additional</td></tr>
         </tfoot>
       </table>
     </div>`;
@@ -369,46 +430,89 @@ function commercialHtml(p: RenderableProposal): string {
     : '';
   const both = monthly.lines.length && oneTime.lines.length;
   return `
-    ${feeTable(monthly, 'Monthly', ' per month')}
+    ${feeTable(monthly, 'Monthly', ' (per month)')}
     ${feeTable(oneTime, 'One-time', '')}
     ${pass}
     ${both ? '<p class="note">The monthly fee and the one-time fee are billed separately.</p>' : ''}`;
 }
 
-/**
- * The document as HTML, for the preview pane and for the PDF. One page per
- * cover, then the sections in order; hidden sections are left out.
- */
-export function renderProposalHtml(p: RenderableProposal, opts: { watermark: boolean }): string {
-  const logo = (() => {
-    try {
-      return getLogoDataUri();
-    } catch {
-      return null;
-    }
-  })();
-  const visible = p.sections.filter((s) => s.visible);
-  const cover = visible.find((s) => s.type === 'COVER');
-  const body = visible
-    .filter((s) => s.type !== 'COVER')
+const logoTag = (p: RenderableProposal): string => {
+  try {
+    return `<img src="${getLogoDataUri()}" alt="${escapeHtml(p.seller.tradingName)}" />`;
+  } catch {
+    return `<span class="name">${escapeHtml(p.seller.tradingName)}</span>`;
+  }
+};
+
+const forLine = (p: RenderableProposal) =>
+  escapeHtml(p.client.contactName ? `${p.client.contactName}, ${p.client.name}` : p.client.name);
+
+const kindLabel = (p: RenderableProposal) => (p.kind === 'RETAINER' ? 'Retainer proposal' : 'Project proposal');
+
+const metaList = (p: RenderableProposal) => `
+  <dl class="meta">
+    <div><dt>Reference</dt><dd>${escapeHtml(p.ref)}</dd></div>
+    <div><dt>Date</dt><dd>${escapeHtml(p.dateLabel)}</dd></div>
+    ${p.preparedBy ? `<div><dt>Prepared by</dt><dd>${escapeHtml(p.preparedBy)}</dd></div>` : ''}
+  </dl>`;
+
+/** The sections after the cover, numbered for Premium. Hidden ones are left out. */
+function bodySections(p: RenderableProposal, numbered: boolean): string {
+  let n = 0;
+  return p.sections
+    .filter((s) => s.visible && s.type !== 'COVER')
     .map((s) => {
       const content = s.type === 'COMMERCIAL' ? commercialHtml(p) : proseToHtml(s.body);
       if (s.type !== 'COMMERCIAL' && !content) return '';
-      return `<section><h2>${escapeHtml(s.title)}</h2>${content}</section>`;
+      n += 1;
+      const num = numbered ? `<span class="num-badge">${String(n).padStart(2, '0')}</span>` : '';
+      return `<section class="${s.type === 'COMMERCIAL' ? 'invest' : ''}"><h2>${num}${escapeHtml(s.title)}</h2>${content}</section>`;
     })
     .join('');
+}
 
-  const contactLine = [p.org.contactEmail, p.org.phone, p.org.website].filter(Boolean).map((v) => escapeHtml(String(v))).join(' &nbsp;·&nbsp; ');
-
-  return `<!doctype html>
-<html><head><meta charset="utf-8" /><title>${escapeHtml(p.ref)}</title>
-<style>
-  @page { size: A4; }
+const BASE_CSS = `
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
   body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: ${BODY}; font-size: 10.5pt; line-height: 1.55;
          -webkit-print-color-adjust: exact; print-color-adjust: exact; background: #fff; }
   .page { padding: 0 20mm; }
+  section { margin: 0 0 9mm; }
+  h2 { font-size: 15pt; color: ${INK}; margin: 0 0 8px; padding-bottom: 6px; border-bottom: 1px solid ${RULE}; break-after: avoid; page-break-after: avoid; }
+  h3 { font-size: 10pt; text-transform: uppercase; letter-spacing: 0.08em; color: ${INK}; margin: 14px 0 6px; }
+  p { margin: 0 0 8px; max-width: 165mm; }
+  p.lead { margin: 10px 0 4px; color: ${INK}; break-after: avoid; page-break-after: avoid; }
+  ul { margin: 0 0 8px; padding-left: 18px; }
+  li { margin: 0 0 3px; }
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; font-variant-numeric: tabular-nums; }
+  th { text-align: left; font-size: 7.5pt; letter-spacing: 0.08em; text-transform: uppercase; color: ${MUTED}; font-weight: 600; padding: 6px 8px; border-bottom: 1.5px solid ${INK}; }
+  td { padding: 7px 8px; border-bottom: 1px solid ${RULE}; vertical-align: top; }
+  tr { break-inside: avoid; page-break-inside: avoid; }
+  .num { text-align: right; white-space: nowrap; }
+  .svc { color: ${INK}; font-weight: 600; }
+  .desc { color: ${MUTED}; font-size: 8.5pt; margin-top: 2px; }
+  tr.disc td { color: ${MUTED}; font-size: 8.5pt; padding-top: 2px; }
+  tfoot td { border-bottom: none; }
+  tr.sub td { background: ${INK}; color: ${LIME}; font-weight: 700; padding-top: 9px; padding-bottom: 9px; }
+  tr.tax td { color: ${MUTED}; font-size: 8.5pt; padding-top: 5px; }
+  .fee { break-inside: avoid; page-break-inside: avoid; margin-bottom: 6mm; }
+  .note { font-size: 8.5pt; color: ${MUTED}; margin-top: 6px; }
+  .pending { background: ${TINT}; border: 1px dashed ${RULE}; padding: 14px; color: ${MUTED}; }
+  .needs { background: ${FLAG}; color: ${FLAG_INK}; border-radius: 4px; padding: 1px 6px; font-size: 0.9em; font-weight: 600; }
+  .sign { margin-top: 12mm; font-size: 9pt; color: ${MUTED}; }
+  .watermark { position: fixed; top: 42%; left: 0; right: 0; text-align: center; transform: rotate(-30deg);
+               font-size: 110pt; font-weight: 800; letter-spacing: 0.1em; color: rgba(22, 48, 39, 0.06); z-index: 0; pointer-events: none; }
+  dl.meta { display: grid; grid-template-columns: repeat(3, auto); justify-content: start; gap: 6px 28px; font-size: 9pt; margin: 0; }
+  dl.meta dt { text-transform: uppercase; letter-spacing: 0.08em; font-size: 7.5pt; }
+  dl.meta dd { margin: 0; font-weight: 600; }
+  @media screen {
+    body { background: #e7ebe9; padding: 16px 0; }
+    .sheet { width: 210mm; max-width: 100%; margin: 0 auto; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.12); padding: 16mm 0 14mm; }
+  }
+`;
+
+const MINIMAL_CSS = `
+  @page { size: A4; margin: 16mm 0; }
   .cover { min-height: 262mm; display: flex; flex-direction: column; padding: 4mm 20mm 0; page-break-after: always; break-after: page; }
   .cover .logo img { height: 34px; }
   .cover .logo .name { font-weight: 700; color: ${INK}; font-size: 14pt; }
@@ -417,61 +521,123 @@ export function renderProposalHtml(p: RenderableProposal, opts: { watermark: boo
   .cover h1 { font-size: 30pt; line-height: 1.12; color: ${INK}; margin: 8px 0 14px; font-weight: 700; letter-spacing: -0.01em; }
   .cover .bar { width: 64px; height: 6px; background: ${LIME}; margin-bottom: 18px; }
   .cover .for { font-size: 12pt; color: ${INK}; }
-  .cover .tagline { margin-top: 10px; max-width: 120mm; color: ${BODY}; }
-  .cover .meta { margin-top: auto; margin-bottom: 4mm; display: grid; grid-template-columns: repeat(3, auto); justify-content: start; gap: 6px 28px; font-size: 9pt; }
-  .cover .meta dt { color: ${MUTED}; text-transform: uppercase; letter-spacing: 0.08em; font-size: 7.5pt; }
-  .cover .meta dd { margin: 0; color: ${INK}; font-weight: 600; }
-  section { margin: 0 0 9mm; break-inside: auto; }
-  h2 { font-size: 15pt; color: ${INK}; margin: 0 0 8px; padding-bottom: 6px; border-bottom: 1px solid ${RULE}; break-after: avoid; page-break-after: avoid; }
-  h3 { font-size: 10pt; text-transform: uppercase; letter-spacing: 0.08em; color: ${INK}; margin: 14px 0 6px; }
-  p { margin: 0 0 8px; max-width: 165mm; }
-  ul { margin: 0 0 8px; padding-left: 18px; }
-  li { margin: 0 0 3px; }
-  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; font-variant-numeric: tabular-nums; }
-  th { text-align: left; font-size: 7.5pt; letter-spacing: 0.08em; text-transform: uppercase; color: ${MUTED}; font-weight: 600; padding: 6px 8px; border-bottom: 1.5px solid ${INK}; }
-  td { padding: 7px 8px; border-bottom: 1px solid ${RULE}; vertical-align: top; }
-  .num { text-align: right; white-space: nowrap; }
-  .svc { color: ${INK}; font-weight: 600; }
-  .desc { color: ${MUTED}; font-size: 8.5pt; margin-top: 2px; }
-  tr.disc td { color: ${MUTED}; font-size: 8.5pt; padding-top: 2px; }
-  tfoot td { border-bottom: none; }
-  tr.sub td { padding-top: 10px; font-weight: 600; color: ${INK}; }
-  tr.tax td { color: ${MUTED}; padding-top: 0; }
-  tr.total td { background: ${INK}; color: ${LIME}; font-weight: 700; }
-  .fee { break-inside: avoid; page-break-inside: avoid; margin-bottom: 6mm; }
-  .note { font-size: 8.5pt; color: ${MUTED}; margin-top: 6px; }
-  .pending { background: ${TINT}; border: 1px dashed ${RULE}; padding: 14px; color: ${MUTED}; }
-  .sign { margin-top: 12mm; font-size: 9pt; color: ${MUTED}; }
-  .watermark { position: fixed; top: 42%; left: 0; right: 0; text-align: center; transform: rotate(-30deg);
-               font-size: 110pt; font-weight: 800; letter-spacing: 0.1em; color: rgba(22, 48, 39, 0.06); z-index: 0; pointer-events: none; }
+  .cover .tagline { margin-top: 10px; max-width: 120mm; }
+  .cover dl.meta { margin-top: auto; margin-bottom: 4mm; }
+  .cover dl.meta dt { color: ${MUTED}; }
+  .cover dl.meta dd { color: ${INK}; }
   @media screen {
-    body { background: #e7ebe9; padding: 16px 0; }
-    .sheet { width: 210mm; max-width: 100%; margin: 0 auto; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.12); padding: 16mm 0 14mm; }
     .cover { min-height: 0; padding-bottom: 14mm; border-bottom: 1px dashed ${RULE}; margin-bottom: 14mm; }
     .cover .middle { margin-top: 36mm; }
-    .cover .meta { margin-top: 36mm; margin-bottom: 0; }
+    .cover dl.meta { margin-top: 36mm; margin-bottom: 0; }
   }
-</style></head>
+`;
+
+/*
+ * Premium: the cover bleeds to the paper's edge in the studio green, and every
+ * section carries its number. The first page has no margin (so no footer);
+ * the rest keep the Minimal margins.
+ */
+const PREMIUM_CSS = `
+  @page { size: A4; margin: 16mm 0; }
+  @page :first { margin: 0; }
+  .cover { height: 297mm; background: ${INK}; color: #dfe8e3; display: flex; flex-direction: column; padding: 22mm 22mm 20mm;
+           page-break-after: always; break-after: page; position: relative; overflow: hidden; }
+  .cover::after { content: ''; position: absolute; right: -40mm; top: -40mm; width: 140mm; height: 140mm; border-radius: 50%;
+                  border: 18mm solid rgba(226, 254, 165, 0.08); }
+  .cover .logo img { height: 40px; }
+  .cover .logo .name { font-weight: 700; color: ${LIME}; font-size: 15pt; }
+  .cover .middle { margin-top: auto; }
+  .cover .eyebrow { font-size: 9pt; letter-spacing: 0.18em; text-transform: uppercase; color: ${LIME}; }
+  .cover h1 { font-size: 38pt; line-height: 1.06; color: #fff; margin: 10px 0 18px; font-weight: 800; letter-spacing: -0.02em; max-width: 160mm; }
+  .cover .for { font-size: 13pt; color: #fff; }
+  .cover .tagline { margin-top: 10px; max-width: 130mm; color: #c9d6cf; }
+  .cover .tagline p { max-width: none; }
+  .cover dl.meta { margin-top: 26mm; padding-top: 6mm; border-top: 1px solid rgba(226, 254, 165, 0.3); }
+  .cover dl.meta dt { color: ${LIME}; opacity: 0.8; }
+  .cover dl.meta dd { color: #fff; }
+  section { margin-bottom: 11mm; }
+  h2 { font-size: 18pt; border-bottom: none; display: flex; align-items: baseline; gap: 10px; padding-bottom: 0; margin-bottom: 10px; }
+  h2::after { content: ''; flex: 1; height: 2px; background: ${LIME}; margin-left: 8px; transform: translateY(-5px); }
+  .num-badge { font-size: 10pt; font-weight: 800; color: ${INK}; background: ${LIME}; border-radius: 4px; padding: 2px 7px; letter-spacing: 0.04em; }
+  section.invest { background: ${TINT}; margin-left: -8mm; margin-right: -8mm; padding: 6mm 8mm 2mm; border-radius: 6px; }
+  @media screen {
+    .sheet { padding-top: 0; }
+    .cover { height: auto; min-height: 220mm; margin-bottom: 14mm; }
+  }
+`;
+
+/*
+ * Compact: one page where it can be. No cover page; a header strip carries the
+ * reference and the date, and the type steps down a size.
+ */
+const COMPACT_CSS = `
+  @page { size: A4; margin: 12mm 0 16mm; }
+  body { font-size: 9.5pt; line-height: 1.45; }
+  .head { display: flex; justify-content: space-between; align-items: flex-start; padding: 0 16mm 5mm; border-bottom: 3px solid ${INK}; margin-bottom: 6mm; }
+  .head .logo img { height: 28px; }
+  .head .logo .name { font-weight: 700; color: ${INK}; }
+  .head .right { text-align: right; font-size: 8pt; color: ${MUTED}; }
+  .head .right b { display: block; font-size: 9pt; letter-spacing: 0.14em; text-transform: uppercase; color: ${INK}; }
+  .page { padding: 0 16mm; }
+  .intro { margin-bottom: 6mm; }
+  .intro h1 { font-size: 18pt; line-height: 1.15; color: ${INK}; margin: 0 0 4px; }
+  .intro .for { color: ${BODY}; }
+  .intro .tagline p { margin: 4px 0 0; }
+  section { margin-bottom: 5mm; }
+  h2 { font-size: 9pt; text-transform: uppercase; letter-spacing: 0.1em; border-bottom: 1px solid ${RULE}; padding-bottom: 3px; margin-bottom: 5px; }
+  h3 { font-size: 8pt; margin: 8px 0 4px; }
+  td { padding: 5px 7px; }
+  th { padding: 4px 7px; }
+  .fee { margin-bottom: 4mm; }
+  .sign { margin-top: 6mm; }
+  @media screen {
+    .sheet { padding-top: 10mm; }
+  }
+`;
+
+const LAYOUT_CSS = { MINIMAL: MINIMAL_CSS, PREMIUM: PREMIUM_CSS, COMPACT: COMPACT_CSS } as const;
+
+/**
+ * The document as HTML, for the preview pane and for the PDF.
+ */
+export function renderProposalHtml(p: RenderableProposal, opts: { watermark: boolean }): string {
+  const layout = p.layout ?? 'MINIMAL';
+  const cover = p.sections.find((s) => s.visible && s.type === 'COVER');
+  const tagline = cover?.body.trim() ? `<div class="tagline">${proseToHtml(cover.body)}</div>` : '';
+  const contactLine = [p.org.contactEmail, p.org.phone, p.org.website].filter(Boolean).map((v) => escapeHtml(String(v))).join(' &nbsp;·&nbsp; ');
+
+  const top =
+    layout === 'COMPACT'
+      ? `<div class="head">
+          <div class="logo">${logoTag(p)}</div>
+          <div class="right"><b>${kindLabel(p)}</b>${escapeHtml(p.ref)}<br />${escapeHtml(p.dateLabel)}</div>
+        </div>
+        <div class="page intro">
+          <h1>${escapeHtml(p.title)}</h1>
+          <div class="for">For ${forLine(p)}${p.preparedBy ? ` &nbsp;·&nbsp; Prepared by ${escapeHtml(p.preparedBy)}` : ''}</div>
+          ${tagline}
+        </div>`
+      : `<div class="cover">
+          <div class="logo">${logoTag(p)}</div>
+          <div class="middle">
+            <div class="eyebrow">${kindLabel(p)}</div>
+            <h1>${escapeHtml(p.title)}</h1>
+            ${layout === 'MINIMAL' ? '<div class="bar"></div>' : ''}
+            <div class="for">Prepared for ${forLine(p)}</div>
+            ${tagline}
+          </div>
+          ${metaList(p)}
+        </div>`;
+
+  return `<!doctype html>
+<html><head><meta charset="utf-8" /><title>${escapeHtml(p.ref)}</title>
+<style>${BASE_CSS}${LAYOUT_CSS[layout]}</style></head>
 <body>
 ${opts.watermark ? '<div class="watermark">DRAFT</div>' : ''}
-<div class="sheet">
-  <div class="cover">
-    <div class="logo">${logo ? `<img src="${logo}" alt="${escapeHtml(p.seller.tradingName)}" />` : `<span class="name">${escapeHtml(p.seller.tradingName)}</span>`}</div>
-    <div class="middle">
-      <div class="eyebrow">${p.kind === 'RETAINER' ? 'Retainer proposal' : 'Project proposal'}</div>
-      <h1>${escapeHtml(p.title)}</h1>
-      <div class="bar"></div>
-      <div class="for">Prepared for ${escapeHtml(p.client.contactName ? `${p.client.contactName}, ${p.client.name}` : p.client.name)}</div>
-      ${cover?.body.trim() ? `<div class="tagline">${proseToHtml(cover.body)}</div>` : ''}
-    </div>
-    <dl class="meta">
-      <div><dt>Reference</dt><dd>${escapeHtml(p.ref)}</dd></div>
-      <div><dt>Date</dt><dd>${escapeHtml(p.dateLabel)}</dd></div>
-      ${p.preparedBy ? `<div><dt>Prepared by</dt><dd>${escapeHtml(p.preparedBy)}</dd></div>` : ''}
-    </dl>
-  </div>
+<div class="sheet layout-${layout.toLowerCase()}">
+  ${top}
   <div class="page">
-    ${body}
+    ${bodySections(p, layout === 'PREMIUM')}
     <div class="sign">${escapeHtml(p.seller.legalName)}${contactLine ? ` &nbsp;·&nbsp; ${contactLine}` : ''}</div>
   </div>
 </div>
@@ -479,10 +645,11 @@ ${opts.watermark ? '<div class="watermark">DRAFT</div>' : ''}
 }
 
 function footerTemplate(p: RenderableProposal): string {
+  const site = p.org.website ? ` &nbsp;·&nbsp; ${escapeHtml(p.org.website.replace(/^https?:\/\//, ''))}` : '';
   return `
     <div style="width: 100%; margin: 0; padding: 0 20mm 6mm; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
                 font-size: 7.5px; color: ${MUTED}; display: flex; justify-content: space-between;">
-      <span>${escapeHtml(p.seller.tradingName)} &nbsp;·&nbsp; ${escapeHtml(p.ref)}</span>
+      <span>${escapeHtml(p.seller.tradingName)} &nbsp;·&nbsp; ${escapeHtml(p.ref)}${site}</span>
       <span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
     </div>`;
 }
@@ -491,7 +658,9 @@ export async function renderProposalPdf(p: RenderableProposal, opts: { watermark
   return htmlToPdf(renderProposalHtml(p, opts), {
     headerTemplate: '<span></span>',
     footerTemplate: footerTemplate(p),
-    // Top and bottom on every page; the sides are the content's own padding.
+    // The page margins live in each layout's own @page rules — Premium's
+    // cover has none, so it can bleed to the edge.
+    preferCSSPageSize: true,
     margin: { top: '16mm', right: '0', bottom: '16mm', left: '0' },
   });
 }

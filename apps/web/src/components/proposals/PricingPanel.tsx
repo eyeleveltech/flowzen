@@ -101,7 +101,8 @@ export function PricingPanel({
   pricing?: { clientStateKnown: boolean; clientStateName: string | null };
   onChanged: (res: ProposalDocResponse) => void;
 }) {
-  const editable = doc.status === 'DRAFT';
+  // Management prices a draft, or one sent to them for review.
+  const editable = doc.status !== 'FINAL';
   const [lines, setLines] = useState<Line[]>(() => fromDoc(doc));
   const [dirty, setDirty] = useState(false);
   const [live, setLive] = useState<ProposalPrice | null>(null);

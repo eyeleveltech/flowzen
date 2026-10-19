@@ -2,19 +2,21 @@
 
 /**
  * One deal's proposal: the document, its price, its versions.
- * (AI Proposal Builder, phase 1 — written by hand.)
+ * (AI Proposal Builder, phases 1 and 2.)
  *
- * The text is anyone's on the deal to write. The price is Management's: the
- * Pricing tab, the floor override and Finalise. A final version is locked and
- * its PDF kept exactly; a change is a new version. "Mark as sent" records the
- * version on the pipeline, as adding one by hand always has.
+ * The text is anyone's on the deal to write, by hand or with the AI. The price
+ * is Management's: the Pricing tab, the floor override and Finalise. "Send for
+ * review" hands a draft to Management; they finalise it or send it back. A
+ * final version is locked and its PDF and Word file kept exactly; a change is
+ * a new version. "Mark as sent" records the version on the pipeline, as adding
+ * one by hand always has.
  */
 
 import { use, useCallback, useState } from 'react';
 import Link from 'next/link';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Copy, Download, FileText, Send, Trash2 } from 'lucide-react';
+import { ArrowLeft, Copy, CornerUpLeft, Download, FileText, ListOrdered, Send, Sparkles, Trash2, UserCheck } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { STAGE_LABEL } from '@flowzen/shared';
 import {
@@ -25,6 +27,7 @@ import {
   type ProposalDealDocs,
   type ProposalDocResponse,
   type ProposalDocSummary,
+  type ProposalLayout,
 } from '@/lib/api-v2';
 import { Button, buttonClass } from '@/components/ui/button';
 import { Badge, type Tone } from '@/components/ui/badge';
@@ -37,13 +40,26 @@ import { PageSkeleton } from '@/components/ui/skeleton-loaders';
 import { NextStepFields, nextStepBody, nextStepDraft, nextStepOk, useStudioToday } from '@/components/sales/NextStep';
 import { SectionEditor } from '@/components/proposals/SectionEditor';
 import { PricingPanel } from '@/components/proposals/PricingPanel';
+import { AiPanel } from '@/components/proposals/AiPanel';
 import { useConfirmStore } from '@/stores/confirm';
 import { usePageHeader } from '@/hooks/usePageHeader';
 
 type TabKey = 'DOCUMENT' | 'PRICING' | 'VERSIONS';
 
 const statusOf = (d: { status: string; sentAt: string | null }): { label: string; tone: Tone } =>
-  d.sentAt ? { label: 'Sent', tone: 'info' } : d.status === 'FINAL' ? { label: 'Final', tone: 'good' } : { label: 'Draft', tone: 'warn' };
+  d.sentAt
+    ? { label: 'Sent', tone: 'info' }
+    : d.status === 'FINAL'
+      ? { label: 'Final', tone: 'good' }
+      : d.status === 'IN_REVIEW'
+        ? { label: 'In review', tone: 'review' }
+        : { label: 'Draft', tone: 'warn' };
+
+const LAYOUTS: { key: ProposalLayout; label: string; hint: string }[] = [
+  { key: 'MINIMAL', label: 'Minimal', hint: 'Most proposals' },
+  { key: 'PREMIUM', label: 'Premium', hint: 'Larger deals' },
+  { key: 'COMPACT', label: 'Compact', hint: 'One page, small jobs' },
+];
 
 export default function ProposalPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -56,6 +72,10 @@ export default function ProposalPage({ params }: { params: Promise<{ id: string 
   const [starting, setStarting] = useState(false);
   const [versioning, setVersioning] = useState(false);
   const [sending, setSending] = useState(false);
+  const [sendingBack, setSendingBack] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
+  // The Document tab's left side: the sections by hand, or the AI.
+  const [mode, setMode] = useState<'SECTIONS' | 'AI'>('SECTIONS');
 
   const dealQuery = useQuery({ queryKey: ['proposal-docs', id], queryFn: () => api.proposalDocs.forDeal(id) });
   const deal: ProposalDealDocs | null = dealQuery.data ?? null;
@@ -105,11 +125,12 @@ export default function ProposalPage({ params }: { params: Promise<{ id: string 
     [qc, id],
   );
 
-  const start = async () => {
+  const start = async (withAi = false) => {
     setStarting(true);
     try {
       const res = await api.proposalDocs.start(id);
       await loadDeal();
+      setMode(withAi ? 'AI' : 'SECTIONS');
       openDoc(res.document.id);
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Could not start the proposal.');
@@ -138,6 +159,26 @@ export default function ProposalPage({ params }: { params: Promise<{ id: string 
     }
   };
 
+  const sendForReview = async (docIdToSend: string) => {
+    setReviewing(true);
+    try {
+      changed(await api.proposalDocs.sendForReview(docIdToSend));
+      toast.success('Sent to Management for review');
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Could not send it for review.');
+    } finally {
+      setReviewing(false);
+    }
+  };
+
+  const setLayout = async (docIdToSet: string, layout: ProposalLayout) => {
+    try {
+      changed(await api.proposalDocs.save(docIdToSet, { layout }));
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Could not change the layout.');
+    }
+  };
+
   if (dealQuery.error) {
     return (
       <NotFoundPanel thing="proposal" error={dealQuery.error} back={{ href: '/quotations', label: 'Back to Proposals' }} onRetry={() => void loadDeal()} />
@@ -147,9 +188,11 @@ export default function ProposalPage({ params }: { params: Promise<{ id: string 
 
   const { proposal, documents } = deal;
   const doc = current?.document.id === docId ? current.document : null;
-  const openDraft = documents.find((d) => d.status === 'DRAFT');
+  const openDraft = documents.find((d) => d.status === 'DRAFT' || d.status === 'IN_REVIEW');
   const closed = Boolean(proposal.outcome);
   const status = doc ? statusOf(doc) : null;
+  // A draft is anyone's to change; one in review is Management's; a final is nobody's.
+  const editable = Boolean(doc) && (doc!.status === 'DRAFT' || (doc!.status === 'IN_REVIEW' && deal.canPrice));
 
   return (
     <>
@@ -179,6 +222,19 @@ export default function ProposalPage({ params }: { params: Promise<{ id: string 
             <a href={api.proposalDocs.pdfUrl(doc.id)} className={buttonClass('ghost')}>
               <Download className="h-4 w-4" /> {doc.status === 'FINAL' ? 'PDF' : 'Draft PDF'}
             </a>
+            <a href={api.proposalDocs.docxUrl(doc.id)} className={buttonClass('ghost')}>
+              <FileText className="h-4 w-4" /> Word
+            </a>
+            {doc.status === 'DRAFT' && !closed && (
+              <Button icon={UserCheck} onClick={() => void sendForReview(doc.id)} loading={reviewing}>
+                Send for review
+              </Button>
+            )}
+            {doc.status === 'IN_REVIEW' && deal.canPrice && (
+              <Button icon={CornerUpLeft} onClick={() => setSendingBack(true)}>
+                Send back
+              </Button>
+            )}
             {doc.status === 'FINAL' && !doc.sentAt && !closed && (
               <Button variant="primary" icon={Send} onClick={() => setSending(true)}>
                 Mark as sent
@@ -200,13 +256,18 @@ export default function ProposalPage({ params }: { params: Promise<{ id: string 
           hint={
             closed
               ? 'This deal is closed.'
-              : 'Start one: the sections are laid out with the studio terms filled in. Management adds the prices.'
+              : 'Write it with the AI, or start from the standard sections with the studio terms filled in. Management adds the prices.'
           }
           action={
             !closed && (
-              <Button variant="primary" onClick={() => void start()} loading={starting}>
-                Start the proposal
-              </Button>
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button variant="primary" icon={Sparkles} onClick={() => void start(true)} loading={starting}>
+                  Write with AI
+                </Button>
+                <Button onClick={() => void start(false)} disabled={starting}>
+                  Start blank
+                </Button>
+              </div>
             )
           }
         />
@@ -220,6 +281,17 @@ export default function ProposalPage({ params }: { params: Promise<{ id: string 
           ) : tab === 'DOCUMENT' ? (
             <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
               <div>
+                {doc.status === 'IN_REVIEW' && (
+                  <p className="mb-4 rounded-xl border border-info/30 bg-info-tint px-3 py-2.5 text-xs text-body">
+                    With Management for review{doc.review?.by ? `, sent by ${doc.review.by}` : ''}.{' '}
+                    {deal.canPrice ? 'Price it, then finalise or send it back.' : 'They price it and finalise it, or send it back to you.'}
+                  </p>
+                )}
+                {doc.status === 'DRAFT' && doc.reviewNote && (
+                  <p className="mb-4 rounded-xl border border-warning/40 bg-warning-tint px-3 py-2.5 text-xs text-body">
+                    <span className="font-semibold">Sent back by Management:</span> {doc.reviewNote}
+                  </p>
+                )}
                 {doc.status === 'FINAL' && (
                   <p className="mb-4 rounded-xl bg-subtle px-3 py-2.5 text-xs text-secondary">
                     v{doc.n} is final{doc.finalisedBy ? `, by ${doc.finalisedBy}` : ''}
@@ -231,7 +303,49 @@ export default function ProposalPage({ params }: { params: Promise<{ id: string 
                     <span className="font-semibold text-body">Why this version:</span> {doc.revisionNote}
                   </p>
                 )}
-                <SectionEditor key={doc.id} doc={doc} editable={doc.status === 'DRAFT'} onSaved={changed} />
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                  <div className="inline-flex rounded-xl bg-subtle p-1" role="tablist" aria-label="How to write">
+                    {(
+                      [
+                        ['SECTIONS', 'Sections', ListOrdered],
+                        ['AI', 'Write with AI', Sparkles],
+                      ] as const
+                    ).map(([key, label, Icon]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        role="tab"
+                        aria-selected={mode === key}
+                        onClick={() => setMode(key)}
+                        className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors ${
+                          mode === key ? 'bg-white font-semibold text-primary shadow-sm' : 'text-secondary hover:text-primary'
+                        }`}
+                      >
+                        <Icon className="h-4 w-4" /> {label}
+                      </button>
+                    ))}
+                  </div>
+                  <label className="flex items-center gap-2 text-xs text-secondary">
+                    Layout
+                    <select
+                      value={doc.layout}
+                      onChange={(e) => void setLayout(doc.id, e.target.value as ProposalLayout)}
+                      disabled={!editable}
+                      className="rounded-lg border border-border bg-white px-2.5 py-1.5 text-sm text-body outline-none focus-visible:ring-2 focus-visible:ring-primary/25 disabled:bg-subtle"
+                    >
+                      {LAYOUTS.map((l) => (
+                        <option key={l.key} value={l.key}>
+                          {l.label} · {l.hint}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                {mode === 'AI' ? (
+                  <AiPanel doc={doc} editable={editable} canPrice={deal.canPrice} onChanged={changed} />
+                ) : (
+                  <SectionEditor key={doc.id} doc={doc} editable={editable} onSaved={changed} />
+                )}
               </div>
               <div className="xl:sticky xl:top-4 xl:self-start">
                 <div className="mb-2 flex items-center justify-between">
@@ -256,7 +370,7 @@ export default function ProposalPage({ params }: { params: Promise<{ id: string 
             </div>
           ) : tab === 'PRICING' && deal.canPrice ? (
             <PricingPanel
-              key={`${doc.id}:${doc.status}`}
+              key={`${doc.id}:${doc.status}:${doc.updatedAt}`}
               doc={doc}
               price={current?.price}
               problems={current?.problems ?? []}
@@ -278,6 +392,18 @@ export default function ProposalPage({ params }: { params: Promise<{ id: string 
             setVersioning(false);
             await loadDeal();
             openDoc(res.document.id);
+          }}
+        />
+      )}
+      {sendingBack && doc && (
+        <SendBackModal
+          docId={doc.id}
+          n={doc.n}
+          onClose={() => setSendingBack(false)}
+          onDone={(res) => {
+            setSendingBack(false);
+            changed(res);
+            toast.success('Sent back to the writer');
           }}
         />
       )}
@@ -482,6 +608,43 @@ function MarkSentModal({
         <Button variant="ghost" onClick={onClose}>Cancel</Button>
         <Button variant="primary" icon={Send} onClick={() => void submit()} loading={saving} disabled={!nextStepOk(step, today)}>
           Mark as sent
+        </Button>
+      </ModalFooter>
+    </Modal>
+  );
+}
+
+function SendBackModal({
+  docId,
+  n,
+  onClose,
+  onDone,
+}: {
+  docId: string;
+  n: number;
+  onClose: () => void;
+  onDone: (res: ProposalDocResponse) => void;
+}) {
+  const [note, setNote] = useState('');
+  const [saving, setSaving] = useState(false);
+  const submit = async () => {
+    setSaving(true);
+    try {
+      onDone(await api.proposalDocs.sendBack(docId, note.trim()));
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Could not send it back.');
+      setSaving(false);
+    }
+  };
+  return (
+    <Modal open onClose={onClose} title={`Send v${n} back`} description="It goes back to a draft the writer can change. Your note is shown at the top of it.">
+      <ModalBody>
+        <Field label="What needs changing" textarea rows={3} value={note} onChange={setNote} placeholder="e.g. Tighten the scope to two services and add the shoot days" required />
+      </ModalBody>
+      <ModalFooter>
+        <Button variant="ghost" onClick={onClose}>Cancel</Button>
+        <Button variant="primary" icon={CornerUpLeft} onClick={() => void submit()} loading={saving} disabled={note.trim().length < 3}>
+          Send back
         </Button>
       </ModalFooter>
     </Modal>

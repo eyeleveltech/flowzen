@@ -314,6 +314,7 @@ model User {
   proposalDocumentsCreated   ProposalDocument[]   @relation("ProposalDocumentCreatedBy")
   proposalDocumentsFinalised ProposalDocument[]   @relation("ProposalDocumentFinalisedBy")
   proposalFloorOverrides     ProposalDocument[]   @relation("ProposalDocumentFloorOverrideBy")
+  proposalReviewsRequested   ProposalDocument[]   @relation("ProposalDocumentReviewRequestedBy")
   serviceCatalogEdits        ServiceCatalogItem[] @relation("ServiceCatalogUpdatedBy")
 
   @@index([organizationId, active])
@@ -649,6 +650,18 @@ model ProposalDocument {
   floorOverrideAt     DateTime?
   /// The final PDF, made once at Finalise, so what was sent can be reproduced.
   finalPdf            Bytes?
+  /// The same document in Word, made at the same moment (phase 2).
+  finalDocx           Bytes?
+  /// The conversation with the AI about this version (phase 2): what was
+  /// asked, what it answered, and each change it suggested with whether it
+  /// was accepted. A suggestion is never applied until somebody accepts it.
+  aiThread            Json              @default("[]")
+  /// "Send for review" (phase 2): the writer hands the draft to Management to
+  /// price and finalise. Cleared when it is sent back.
+  reviewRequestedAt   DateTime?
+  reviewRequestedById String?
+  /// Why Management sent it back to the writer, when they did.
+  reviewNote          String?
   /// The ProposalVersion "Mark as sent" recorded from this document.
   sentVersionId       String?           @unique
   sentAt              DateTime?
@@ -661,6 +674,7 @@ model ProposalDocument {
   createdBy       User?              @relation("ProposalDocumentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   finalisedBy     User?              @relation("ProposalDocumentFinalisedBy", fields: [finalisedById], references: [id], onDelete: SetNull)
   floorOverrideBy User?              @relation("ProposalDocumentFloorOverrideBy", fields: [floorOverrideById], references: [id], onDelete: SetNull)
+  reviewRequestedBy User?            @relation("ProposalDocumentReviewRequestedBy", fields: [reviewRequestedById], references: [id], onDelete: SetNull)
   sentVersion     ProposalVersion?   @relation("DocumentSentAs", fields: [sentVersionId], references: [id], onDelete: SetNull)
   lineItems       ProposalLineItem[]
 

@@ -537,7 +537,7 @@ export default function ProposalsPage() {
                         className="block text-micro font-medium text-info hover:underline"
                       >
                         {p.documents?.[0]
-                          ? `Proposal v${p.documents[0].n} · ${p.documents[0].status === 'FINAL' ? 'final' : 'draft'}`
+                          ? `Proposal v${p.documents[0].n} · ${p.documents[0].status === 'FINAL' ? 'final' : p.documents[0].status === 'IN_REVIEW' ? 'in review' : 'draft'}`
                           : p.outcome
                             ? 'Proposal'
                             : 'Write the proposal'}

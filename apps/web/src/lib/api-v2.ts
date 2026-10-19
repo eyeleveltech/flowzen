@@ -1943,8 +1943,21 @@ export const api = {
     forDeal: (proposalId: string) => get<ProposalDealDocs>(`/proposals/${proposalId}/documents`),
     start: (proposalId: string) => post<ProposalDocResponse>(`/proposals/${proposalId}/documents`),
     get: (docId: string) => get<ProposalDocResponse>(`/proposals/documents/${docId}`),
-    save: (docId: string, body: { title?: string; sections?: ProposalSection[]; revisionNote?: string | null }) =>
-      patch<ProposalDocResponse>(`/proposals/documents/${docId}`, body),
+    save: (
+      docId: string,
+      body: { title?: string; sections?: ProposalSection[]; revisionNote?: string | null; layout?: ProposalLayout },
+    ) => patch<ProposalDocResponse>(`/proposals/documents/${docId}`, body),
+    /** Hand the draft to Management to price and finalise. */
+    sendForReview: (docId: string) => post<ProposalDocResponse>(`/proposals/documents/${docId}/review`),
+    /** Management: back to the writer, with what needs changing. */
+    sendBack: (docId: string, note: string) => post<ProposalDocResponse>(`/proposals/documents/${docId}/send-back`, { note }),
+    /** Ask the AI to write or change something. It answers with suggestions; nothing changes until accepted. */
+    askAi: (docId: string, message: string) => post<ProposalDocResponse>(`/proposals/documents/${docId}/ai`, { message }),
+    /** Accept or discard an AI answer's suggestions: all of them, some, and (Management) its staged prices. */
+    applyAi: (docId: string, entryId: string, body: { action: 'accept' | 'discard'; changeIds?: string[]; lines?: boolean }) =>
+      post<ProposalDocResponse>(`/proposals/documents/${docId}/ai/${entryId}`, body),
+    /** The same document as a Word file. */
+    docxUrl: (docId: string) => fileUrl(`/proposals/documents/${docId}/docx`),
     discard: (docId: string) => del<{ success: boolean }>(`/proposals/documents/${docId}`),
     setLines: (docId: string, items: ProposalLineDraft[]) =>
       put<ProposalDocResponse>(`/proposals/documents/${docId}/line-items`, { items }),
@@ -3274,13 +3287,50 @@ export interface ProposalPrice {
 
 export type ProposalDocStatus = 'DRAFT' | 'IN_REVIEW' | 'FINAL';
 
+export type ProposalLayout = 'MINIMAL' | 'PREMIUM' | 'COMPACT';
+
+export type AiChangeStatus = 'PENDING' | 'ACCEPTED' | 'DISCARDED';
+
+export interface ProposalAiChange {
+  id: string;
+  sectionId: string | null;
+  type: ProposalSectionType;
+  title: string;
+  before: string | null;
+  after: string;
+  status: AiChangeStatus;
+}
+
+export interface ProposalAiStagedLine {
+  catalogItemId: string | null;
+  name: string;
+  description: string | null;
+  billing: ProposalBilling;
+  qty: number;
+  unit: string | null;
+  /** Null for anybody outside Management. */
+  unitRate: number | null;
+  rateFrom: 'YOU' | 'SERVICE_LIST' | null;
+}
+
+export type ProposalAiEntry =
+  | { id: string; from: 'you'; text: string; at: string; by: string }
+  | {
+      id: string;
+      from: 'ai';
+      text: string;
+      at: string;
+      changes: ProposalAiChange[];
+      lines?: { items: ProposalAiStagedLine[]; status: AiChangeStatus };
+    };
+
 export interface ProposalDoc {
   id: string;
   proposalId: string;
   n: number;
   ref: string;
   status: ProposalDocStatus;
-  layout: 'MINIMAL' | 'PREMIUM' | 'COMPACT';
+  layout: ProposalLayout;
   title: string | null;
   sections: ProposalSection[];
   revisionNote: string | null;
@@ -3293,6 +3343,11 @@ export interface ProposalDoc {
   sentAt: string | null;
   sentVersionId: string | null;
   floorOverride: { reason: string | null; by: string | null; at: string } | null;
+  /** Set while it is with Management for review. */
+  review: { requestedAt: string; by: string | null } | null;
+  /** Why Management sent it back, when they did. */
+  reviewNote: string | null;
+  aiThread: ProposalAiEntry[];
   /** Rates and discounts only for Management, or once the document is final. */
   lineItems: (Omit<ProposalLineDraft, 'unitRate'> & { id: string; unitRate?: number })[];
 }

@@ -228,10 +228,20 @@ describe('Finalise', () => {
     const res = await request(app).post('/api/proposals/documents/doc-1/finalise').set(...as('mgmt'));
     expect(res.status).toBe(200);
     const call = (prisma.proposalDocument.updateMany as any).mock.calls[0][0];
-    expect(call.where).toEqual({ id: 'doc-1', status: 'DRAFT' });
+    expect(call.where).toEqual({ id: 'doc-1', status: { in: ['DRAFT', 'IN_REVIEW'] } });
     expect(call.data.status).toBe('FINAL');
     expect(call.data.commercialSnapshot.monthly.subtotal).toBe(130000);
     expect(Buffer.from(call.data.finalPdf).toString()).toContain('%PDF');
+    // The Word file is made in the same moment: a .docx is a zip, "PK".
+    expect(Buffer.from(call.data.finalDocx).subarray(0, 2).toString()).toBe('PK');
+  });
+
+  it('refuses a gap left for somebody to fill', async () => {
+    doc.floorOverrideAt = new Date();
+    doc.sections = SECTIONS.map((s) => (s.id === 'scope' ? { ...s, body: 'Launch on [[Needs input: launch date]].' } : s));
+    const res = await request(app).post('/api/proposals/documents/doc-1/finalise').set(...as('mgmt'));
+    expect(res.status).toBe(422);
+    expect(res.body.problems.join(' ')).toMatch(/Still needs input: launch date/);
   });
 
   it('is Management’s alone', async () => {
@@ -289,5 +299,72 @@ describe('the reference', () => {
   it('counts on within the financial year: EL/PR/2026-27/015 after 014', async () => {
     (prisma.proposal.findMany as any).mockResolvedValue([{ refNo: 'EL/PR/2026-27/014' }, { refNo: 'EL/PR/2026-27/009' }]);
     expect(await nextProposalRef('org-1', new Date('2026-10-19T06:00:00Z'))).toBe('EL/PR/2026-27/015');
+  });
+});
+
+describe('review', () => {
+  beforeEach(() => {
+    (prisma.alert.create as any).mockResolvedValue({});
+    (prisma.alert.updateMany as any).mockResolvedValue({ count: 0 });
+    (prisma.user.findUnique as any).mockResolvedValue(null);
+  });
+
+  it('hands a draft to Management and rings their bell', async () => {
+    const res = await request(app).post('/api/proposals/documents/doc-1/review').set(...as('bd'));
+    expect(res.status).toBe(200);
+    const write = (prisma.proposalDocument.updateMany as any).mock.calls[0][0];
+    expect(write).toMatchObject({ where: { id: 'doc-1', status: 'DRAFT' }, data: { status: 'IN_REVIEW' } });
+    expect((prisma.alert.create as any).mock.calls[0][0].data).toMatchObject({
+      rule: 'PROPOSAL_REVIEW_REQUESTED',
+      entityType: 'Proposal',
+      entityId: 'prop-1',
+    });
+  });
+
+  it('is Management’s to change while it is in review', async () => {
+    doc.status = 'IN_REVIEW';
+    const bd = await request(app).patch('/api/proposals/documents/doc-1').set(...as('bd')).send({ title: 'Mine now' });
+    expect(bd.status).toBe(409);
+    expect(bd.body.error).toMatch(/with Management for review/);
+    const mgmt = await request(app).patch('/api/proposals/documents/doc-1').set(...as('mgmt')).send({ layout: 'PREMIUM' });
+    expect(mgmt.status).toBe(200);
+    expect((prisma.proposalDocument.updateMany as any).mock.calls[0][0]).toMatchObject({
+      where: { status: { in: ['DRAFT', 'IN_REVIEW'] } },
+      data: { layout: 'PREMIUM' },
+    });
+  });
+
+  it('goes back to the writer with a note', async () => {
+    doc.status = 'IN_REVIEW';
+    const res = await request(app).post('/api/proposals/documents/doc-1/send-back').set(...as('mgmt')).send({ note: 'Tighten the scope' });
+    expect(res.status).toBe(200);
+    expect((prisma.proposalDocument.updateMany as any).mock.calls[0][0].data).toMatchObject({ status: 'DRAFT', reviewNote: 'Tighten the scope' });
+    expect((prisma.alert.updateMany as any).mock.calls[0][0].where).toMatchObject({ rule: 'PROPOSAL_REVIEW_REQUESTED', entityId: 'prop-1' });
+  });
+});
+
+describe('an AI suggestion', () => {
+  it('reaches the document only when accepted', async () => {
+    doc.aiThread = [
+      { id: 'q1', from: 'you', text: 'Shorter scope', at: '2026-10-19T06:00:00Z', by: 'bd' },
+      {
+        id: 'a1',
+        from: 'ai',
+        text: 'Here is a shorter scope.',
+        at: '2026-10-19T06:00:05Z',
+        changes: [{ id: 'c1', sectionId: 'scope', type: 'SCOPE', title: 'Scope of work', before: 'old', after: '- Social\n- Ads', status: 'PENDING' }],
+      },
+    ];
+    const res = await request(app).post('/api/proposals/documents/doc-1/ai/a1').set(...as('bd')).send({ action: 'accept' });
+    expect(res.status).toBe(200);
+    const data = (prisma.proposalDocument.updateMany as any).mock.calls[0][0].data;
+    expect(data.sections.find((s: any) => s.id === 'scope').body).toBe('- Social\n- Ads');
+    expect(data.aiThread[1].changes[0].status).toBe('ACCEPTED');
+  });
+
+  it('keeps staged prices to Management', async () => {
+    doc.aiThread = [{ id: 'a1', from: 'ai', text: 'Staged.', at: '2026-10-19T06:00:05Z', changes: [], lines: { items: [], status: 'PENDING' } }];
+    const res = await request(app).post('/api/proposals/documents/doc-1/ai/a1').set(...as('bd')).send({ action: 'accept', lines: true });
+    expect(res.status).toBe(403);
   });
 });

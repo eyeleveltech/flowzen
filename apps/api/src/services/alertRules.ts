@@ -13,4 +13,10 @@ export const CHASER_RULES = ['APPROVAL_REMINDER', 'APPROVAL_ESCALATED'];
 /** Calendar events: the morning-of reminder, and "you were booked / it moved". */
 export const EVENT_RULES = ['EVENT_TODAY', 'EVENT_UPDATE'];
 
-export const EXTERNAL_RULES = [...CHASER_RULES, ...EVENT_RULES];
+/**
+ * A proposal handed to Management to price and finalise (AI Proposal Builder,
+ * phase 2). Raised by "Send for review", resolved by Finalise or "Send back".
+ */
+export const REVIEW_RULE = 'PROPOSAL_REVIEW_REQUESTED';
+
+export const EXTERNAL_RULES = [...CHASER_RULES, ...EVENT_RULES, REVIEW_RULE];

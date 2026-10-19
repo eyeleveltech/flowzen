@@ -463,7 +463,13 @@ export async function generateDocumentPdf(
  */
 export async function htmlToPdf(
   html: string,
-  options: { headerTemplate?: string; footerTemplate?: string; margin: { top: string; right: string; bottom: string; left: string } },
+  options: {
+    headerTemplate?: string;
+    footerTemplate?: string;
+    margin: { top: string; right: string; bottom: string; left: string };
+    /** Let the document's own @page rules set the size and margins (a proposal's layouts do). */
+    preferCSSPageSize?: boolean;
+  },
 ): Promise<Buffer> {
   /*
    * `--disable-dev-shm-usage`, or this works on a laptop and fails on the server.
@@ -514,6 +520,7 @@ export async function htmlToPdf(
       displayHeaderFooter: Boolean(options.footerTemplate),
       ...(options.footerTemplate ? { headerTemplate: options.headerTemplate ?? '<span></span>', footerTemplate: options.footerTemplate } : {}),
       margin: options.margin,
+      ...(options.preferCSSPageSize ? { preferCSSPageSize: true } : {}),
     });
     return Buffer.from(pdfBuffer);
   } finally {
