@@ -25,10 +25,24 @@ A person who types the address of a screen they cannot open is sent away from it
 
 **Salaries** (a person's monthly cost) are visible only to Setup access. An admin sets it on Team → the person's menu → Edit → "Monthly cost to the company". Heads and Accounts see time-split percentages; Accounts also see combined "People cost" figures on Money.
 
+### Writing a proposal (/quotations/{id})
+
+The proposal itself, written in Flowzen. Written by hand for now; nothing is drafted by AI yet.
+- **Document tab:** the sections (cover line, about us, what we heard, scope, timeline, investment, terms, next steps). Hide a section with the eye, reorder with the arrows, add your own. It saves itself; the preview beside it follows. A line starting "- " is a bullet.
+- **Prices never go in the text.** The Investment section is drawn from the Pricing tab. A rupee amount typed into the text that no line backs stops Finalise.
+- **Pricing tab (Management only):** the services, each Monthly fee, One-time fee, or Paid by client directly (ad spend: shown apart, not in the fee, not taxed). Pick from the service list or type a line. Totals come with GST by the client's state. Monthly and one-time are never added together.
+- **Floor:** a monthly fee below the floor for the client's industry (Setup → Services & pricing) needs Management to record why (20 characters or more) before Finalise. One-time fees have no floor.
+- **Discounts** need what the client gives in return (a longer term, case-study rights).
+- **Finalise (Management):** checks all of the above and that no shown section is empty, then locks the version, freezes its prices and keeps its PDF exactly as it was.
+- **Who sees prices:** Management always. Anyone else sees a draft without its figures ("Pricing is added by Management"), and the final version in full, since it goes to the client.
+- **Versions:** "New version" copies the text and prices into a new draft (one draft at a time). The reference is EL/PR/<year>/<number>-v<n>, e.g. EL/PR/2026-27/014-v2.
+- **Mark as sent:** a final version goes on the pipeline as a sent version, at its monthly fee for a retainer or its one-time fee for a project. First one moves the deal to Proposal sent, later ones to In negotiation. Next step optional.
+
 ## Links to records
 
 Every row a lookup returns carries a `link` (and some a `clientLink`): use it exactly as given. These are the same addresses, for an id you already have — from the page they are on, say:
 - client: /companies/{id} (add ?tab=PROPOSALS, WORK, MONEY or AUDIT for a tab)
+- proposal document: /quotations/{proposalId} (add ?doc={documentId} for one version)
 - one-time project: /projects/{id} (?tab=milestones, tasks, costs, people or activity)
 - retainer: /retainers/{id}?month=YYYY-MM (&tab=projects, costs, allocations, invoice or billing)
 - retainer project: /retainers/{retainerId}/projects/{projectId}
@@ -191,6 +205,7 @@ Pipeline access (BD, Management). The "Sales pipeline" board.
 ## Proposals (/quotations)
 
 Pipeline access. Every proposal and proforma.
+- **Deal values are Management's** (anyone with the money figures permission). BD see every deal on the Pipeline, here and on the client's Proposals tab without its value: no Full pipeline or Weighted tiles, no value column, no figure on the card. They cannot change a value either. Proforma amounts are unchanged.
 
 - **Tabs:** Live, Closed, Proformas, and Deleted (with Restore).
 - **Tiles:**
@@ -200,6 +215,7 @@ Pipeline access. Every proposal and proforma.
   - Proformas Unpaid.
 - **"+ New":** starts a proposal.
 - **Day-to-day work:** versions, proformas, winning and losing happen on the company's Proposals tab or the Pipeline.
+- **The proposal document:** under each client's name, "Write the proposal" (or "Proposal v2 · draft") opens /quotations/{id}. See "Writing a proposal" below.
 - **Proformas:**
   - Statuses: Unpaid, Paid, Cancelled.
   - A proforma becomes Paid by itself when the tax invoice raised from it is fully paid.
@@ -361,6 +377,12 @@ Setup access (Management). The sidebar calls it Setup; the page is Settings. The
 - **Terms & conditions.**
 - **HSN / SAC codes.**
 - **Bank details.**
+
+### Settings → Services & pricing
+
+Management only.
+- **Pricing floors:** the lowest monthly fee a proposal may quote: one for any client (₹75,000), and higher ones for chosen industries (Real Estate & Infrastructure ₹2,00,000, Healthcare & Wellness ₹1,50,000 to begin with).
+- **Services:** what the studio sells, billed monthly or one-time, with a standard rate. The Pricing tab picks from this list. Retire one with the toggle; it stays on old proposals.
 
 ### Settings → Email
 

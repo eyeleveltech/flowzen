@@ -17,6 +17,7 @@ import { toCsv } from '../utils/csv.js';
 import { sendCsv } from '../utils/csvResponse.js';
 import { proposalProbability, STAGE_PROBABILITY_SELECT } from '../utils/stageProbability.js';
 import { asStoredDay, dayKey } from '../utils/moneyDates.js';
+import { canSeeDealValues, maskDealValues } from '../utils/dealValues.js';
 import {
   CHANNEL_LABEL,
   bulkLastContactSchema,
@@ -227,6 +228,9 @@ proposalsRouter.get('/pipeline', requirePermission('pipeline.read'), async (req:
       }
     }
 
+    // A deal's value is Management's (utils/dealValues.ts): null for anybody else.
+    const showValues = canSeeDealValues(req.user!);
+
     for (const p of proposals) {
       const currentVersion = p.versions[0] || null;
       const daysInStage = Math.max(
@@ -249,7 +253,7 @@ proposalsRouter.get('/pipeline', requirePermission('pipeline.read'), async (req:
         // this endpoint's whole purpose is feeding the board's own sums
         // (total/weighted per column, full pipeline), and summing a Decimal's
         // string serialization with `+` concatenates instead of adding.
-        quotedValue: currentVersion ? Number(currentVersion.value) : 0,
+        quotedValue: !showValues ? null : currentVersion ? Number(currentVersion.value) : 0,
         scopeSummary: currentVersion?.scopeSummary || '',
         probability: proposalProbability(p, org),
         daysInStage,
@@ -279,7 +283,7 @@ proposalsRouter.get('/pipeline', requirePermission('pipeline.read'), async (req:
       .flat()
       .filter((c) => c.stale).length;
 
-    res.json({ success: true, stages: PIPELINE_STAGES, columns, staleDays, staleCount });
+    res.json({ success: true, stages: PIPELINE_STAGES, columns, staleDays, staleCount, canSeeValues: showValues });
   } catch (error) {
     next(error);
   }
@@ -316,7 +320,7 @@ function followUpFields(
  * — a deal without one shows "No next step", nothing refuses it — but a date
  * given must not be past. Returns the refusal, or the columns to write.
  */
-async function nextStepForSave(
+export async function nextStepForSave(
   orgId: string,
   existing: { nextStep: string | null; nextStepDate: Date | null },
   sent: { nextStep?: string | null; nextStepDate?: string | null },
@@ -419,6 +423,8 @@ proposalsRouter.get('/', requirePermission('pipeline.read'), async (req: AuthReq
           owner: { select: { id: true, name: true } },
           wonVersion: true,
           versions: { orderBy: { n: 'desc' } },
+          // The latest proposal document, for the list's "Document" link.
+          documents: { select: { id: true, n: true, status: true }, orderBy: { n: 'desc' }, take: 1 },
         },
       }),
       prisma.proposal.count({ where }),
@@ -437,7 +443,8 @@ proposalsRouter.get('/', requirePermission('pipeline.read'), async (req: AuthReq
         proformasByProposal.set(pf.sourceId, list);
       }
     }
-    const proposals = proposalRows.map((p) => ({ ...p, proformas: proformasByProposal.get(p.id) ?? [] }));
+    const showValues = canSeeDealValues(req.user!);
+    const proposals = proposalRows.map((p) => maskDealValues({ ...p, proformas: proformasByProposal.get(p.id) ?? [] }, showValues));
 
     if (wantsCsv) {
       const csv = toCsv(proposals, [
@@ -446,7 +453,7 @@ proposalsRouter.get('/', requirePermission('pipeline.read'), async (req: AuthReq
         { label: 'Owner', value: (p) => p.owner.name },
         { label: 'Stage', value: (p) => p.stage },
         { label: 'Outcome', value: (p) => p.outcome ?? '' },
-        { label: 'Latest version value', value: (p) => (p.versions[0] ? Number(p.versions[0].value) : '') },
+        { label: 'Latest version value', value: (p) => (showValues && p.versions[0] ? Number(p.versions[0].value) : '') },
         { label: 'Lost reason', value: (p) => p.lostReason ?? '' },
         { label: 'Created', value: (p) => p.createdAt.toISOString().slice(0, 10) },
       ]);
@@ -457,6 +464,7 @@ proposalsRouter.get('/', requirePermission('pipeline.read'), async (req: AuthReq
     res.json({
       success: true,
       proposals,
+      canSeeValues: showValues,
       meta: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
     });
   } catch (error) {
@@ -1157,6 +1165,12 @@ proposalsRouter.patch('/:id', requirePermission('pipeline.write'), async (req: A
     const id = String(req.params.id);
     const { ownerId, kind, companyId, value, scopeSummary, fileUrl, sentAt, nextStep, nextStepDate } = parsed.data;
 
+    // Changing a figure means seeing it first.
+    if (value !== undefined && !canSeeDealValues(req.user!)) {
+      res.status(403).json({ success: false, error: 'Only Management can change what a deal is worth.' });
+      return;
+    }
+
     const existing = await prisma.proposal.findFirst({
       where: { id, organizationId: orgId, deletedAt: null },
       include: {
@@ -1500,7 +1514,8 @@ proposalsRouter.get('/trash', requirePermission('pipeline.write'), async (req: A
         versions: { orderBy: { n: 'desc' }, take: 1 },
       },
     });
-    res.json({ success: true, proposals });
+    const showValues = canSeeDealValues(req.user!);
+    res.json({ success: true, proposals: proposals.map((p) => maskDealValues(p, showValues)) });
   } catch (error) {
     next(error);
   }

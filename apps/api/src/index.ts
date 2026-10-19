@@ -14,6 +14,7 @@ import { authRouter } from './routes/auth.js';
 import { companiesRouter } from './routes/companies.js';
 import { outreachRouter } from './routes/outreach.js';
 import { proposalsRouter } from './routes/proposals.js';
+import { proposalDocumentsRouter } from './routes/proposalDocuments.js';
 import { proformasRouter } from './routes/proformas.js';
 import { tasksRouter } from './routes/tasks.js';
 import { retainersRouter } from './routes/retainers.js';
@@ -112,6 +113,9 @@ app.use('/api/outreach', outreachRouter);
 // One base path per router. `/api/pipeline` used to mount this same router a
 // second time, publishing all 11 proposal routes on a second address that no
 // client ever called — twice the surface for none of the use.
+// Proposal documents first: its paths (/catalog, /pricing-setup, /:id/documents,
+// /documents/…) are ones the pipeline router does not answer.
+app.use('/api/proposals', proposalDocumentsRouter);
 app.use('/api/proposals', proposalsRouter);
 app.use('/api/proformas', proformasRouter);
 app.use('/api/tasks', tasksRouter);

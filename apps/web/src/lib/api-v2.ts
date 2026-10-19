@@ -1868,6 +1868,8 @@ export const api = {
         /** Open deals whose last touch is more than `staleDays` ago. */
         staleCount?: number;
         staleDays?: number;
+        /** False without money.figures: every quotedValue is null. */
+        canSeeValues?: boolean;
       }>('/proposals/pipeline'),
     funnel: () =>
       get<{
@@ -1879,7 +1881,8 @@ export const api = {
 
   proposals: {
     list: (params: Record<string, string> = {}) =>
-      get<{ success: boolean; proposals: any[] }>(`/proposals?${new URLSearchParams(params)}`),
+      // canSeeValues is false without money.figures: every version's value is null.
+      get<{ success: boolean; proposals: any[]; canSeeValues?: boolean }>(`/proposals?${new URLSearchParams(params)}`),
     create: (body: Record<string, unknown>) =>
       post<{ success: boolean; proposal: any; version: any }>('/proposals', body),
     addVersion: (id: string, body: Record<string, unknown>) =>
@@ -1929,6 +1932,42 @@ export const api = {
     remove: (id: string) => del<{ success: boolean }>(`/proposals/${id}`),
     restore: (id: string) => post<{ success: boolean }>(`/proposals/${id}/restore`),
     trash: () => get<{ success: boolean; proposals: any[] }>('/proposals/trash'),
+  },
+
+  /**
+   * Proposal documents (AI Proposal Builder, phase 1): the text in sections,
+   * the price in line items, Finalise and the PDF. Prices are Management's —
+   * for anybody else a draft comes back without its figures.
+   */
+  proposalDocs: {
+    forDeal: (proposalId: string) => get<ProposalDealDocs>(`/proposals/${proposalId}/documents`),
+    start: (proposalId: string) => post<ProposalDocResponse>(`/proposals/${proposalId}/documents`),
+    get: (docId: string) => get<ProposalDocResponse>(`/proposals/documents/${docId}`),
+    save: (docId: string, body: { title?: string; sections?: ProposalSection[]; revisionNote?: string | null }) =>
+      patch<ProposalDocResponse>(`/proposals/documents/${docId}`, body),
+    discard: (docId: string) => del<{ success: boolean }>(`/proposals/documents/${docId}`),
+    setLines: (docId: string, items: ProposalLineDraft[]) =>
+      put<ProposalDocResponse>(`/proposals/documents/${docId}/line-items`, { items }),
+    /** What the lines would come to, without saving them: the Pricing tab's live totals. */
+    price: (docId: string, items: ProposalLineDraft[]) =>
+      post<{ success: boolean; price: ProposalPrice }>(`/proposals/documents/${docId}/price`, { items }),
+    overrideFloor: (docId: string, reason: string) =>
+      post<ProposalDocResponse>(`/proposals/documents/${docId}/floor-override`, { reason }),
+    finalise: (docId: string) => post<ProposalDocResponse>(`/proposals/documents/${docId}/finalise`),
+    newVersion: (docId: string, revisionNote?: string) =>
+      post<ProposalDocResponse>(`/proposals/documents/${docId}/versions`, { revisionNote: revisionNote || null }),
+    preview: (docId: string) => get<{ success: boolean; html: string }>(`/proposals/documents/${docId}/preview`),
+    /** A link, not a fetch: the browser downloads it with the session cookie. */
+    pdfUrl: (docId: string) => fileUrl(`/proposals/documents/${docId}/pdf`),
+    markSent: (docId: string, step: NextStepBody = {}) =>
+      post<{ success: boolean; version: { id: string; n: number }; stage: string }>(`/proposals/documents/${docId}/mark-sent`, step),
+    catalog: (all = false) => get<{ success: boolean; items: ServiceCatalogItem[] }>(`/proposals/catalog${all ? '?all=1' : ''}`),
+    addService: (body: ServiceCatalogInput) => post<{ success: boolean; item: ServiceCatalogItem }>('/proposals/catalog', body),
+    updateService: (id: string, body: Partial<ServiceCatalogInput>) =>
+      patch<{ success: boolean; item: ServiceCatalogItem }>(`/proposals/catalog/${id}`, body),
+    floors: () => get<{ success: boolean; floorBase: number; floors: Record<string, number> }>('/proposals/pricing-setup'),
+    saveFloors: (floorBase: number, floors: Record<string, number>) =>
+      patch<{ success: boolean; floorBase: number; floors: Record<string, number> }>('/proposals/pricing-setup', { floorBase, floors }),
   },
 
   /** My Work's Follow-ups: my deals and leads with a next step due today, overdue, or tomorrow. */
@@ -3156,4 +3195,168 @@ export interface PushPreferences {
   pushCalendar: boolean;
   pushTasks: boolean;
   pushBell: boolean;
+}
+
+// ── Proposal documents (AI Proposal Builder, phase 1) ───────────────────────
+
+export type ProposalSectionType =
+  | 'COVER'
+  | 'INTRO'
+  | 'UNDERSTANDING'
+  | 'SCOPE'
+  | 'TIMELINE'
+  | 'COMMERCIAL'
+  | 'TERMS'
+  | 'NEXT_STEPS'
+  | 'CUSTOM';
+
+export interface ProposalSection {
+  id: string;
+  type: ProposalSectionType;
+  title: string;
+  body: string;
+  visible: boolean;
+}
+
+export type ProposalBilling = 'ONE_TIME' | 'MONTHLY';
+
+/** A line as the Pricing tab edits it. */
+export interface ProposalLineDraft {
+  catalogItemId?: string | null;
+  name: string;
+  description?: string | null;
+  billing: ProposalBilling;
+  qty: number;
+  unit?: string | null;
+  unitRate: number;
+  discountAmount?: number;
+  discountTrade?: string | null;
+  isPassthrough?: boolean;
+  priceSource?: 'USER' | 'VERSION' | 'CATALOG';
+}
+
+export interface ProposalPricedLine {
+  name: string;
+  description: string | null;
+  billing: ProposalBilling;
+  qty: number;
+  unit: string | null;
+  unitRate: number;
+  gross: number;
+  discountAmount: number;
+  discountTrade: string | null;
+  amount: number;
+  isPassthrough: boolean;
+}
+
+export interface ProposalFeeGroup {
+  lines: ProposalPricedLine[];
+  gross: number;
+  discount: number;
+  subtotal: number;
+  gstRatePercent: number;
+  cgst: number;
+  sgst: number;
+  igst: number;
+  totalTax: number;
+  roundOff: number;
+  total: number;
+}
+
+export interface ProposalPrice {
+  monthly: ProposalFeeGroup;
+  oneTime: ProposalFeeGroup;
+  passthrough: { lines: ProposalPricedLine[]; total: number };
+  supplyType: 'INTRA' | 'INTER';
+  floor: { applies: boolean; vertical: string | null; floor: number; monthlyFee: number; passes: boolean };
+  discountsWithoutTrade: string[];
+}
+
+export type ProposalDocStatus = 'DRAFT' | 'IN_REVIEW' | 'FINAL';
+
+export interface ProposalDoc {
+  id: string;
+  proposalId: string;
+  n: number;
+  ref: string;
+  status: ProposalDocStatus;
+  layout: 'MINIMAL' | 'PREMIUM' | 'COMPACT';
+  title: string | null;
+  sections: ProposalSection[];
+  revisionNote: string | null;
+  basedOnN: number | null;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+  finalisedAt: string | null;
+  finalisedBy: string | null;
+  sentAt: string | null;
+  sentVersionId: string | null;
+  floorOverride: { reason: string | null; by: string | null; at: string } | null;
+  /** Rates and discounts only for Management, or once the document is final. */
+  lineItems: (Omit<ProposalLineDraft, 'unitRate'> & { id: string; unitRate?: number })[];
+}
+
+export interface ProposalDocResponse {
+  success: boolean;
+  document: ProposalDoc;
+  canPrice: boolean;
+  price?: ProposalPrice;
+  pricing?: { clientStateKnown: boolean; clientStateName: string | null };
+  /** What stands between this draft and Finalise. Management only. */
+  problems?: string[];
+}
+
+export interface ProposalDocSummary {
+  id: string;
+  n: number;
+  ref: string;
+  status: ProposalDocStatus;
+  title: string | null;
+  revisionNote: string | null;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+  finalisedAt: string | null;
+  sentAt: string | null;
+}
+
+export interface ProposalDealDocs {
+  success: boolean;
+  canPrice: boolean;
+  proposal: {
+    id: string;
+    kind: 'RETAINER' | 'PROJECT';
+    stage: string;
+    outcome: 'WON' | 'LOST' | null;
+    refNo: string | null;
+    company: { id: string; name: string; vertical: string; city: string };
+    owner: { id: string; name: string };
+  };
+  documents: ProposalDocSummary[];
+  versions: { id: string; n: number; sentAt: string; scopeSummary: string; fromDocument: { id: string; n: number } | null; value?: number }[];
+}
+
+export interface ServiceCatalogItem {
+  id: string;
+  name: string;
+  category: string | null;
+  description: string | null;
+  unit: string;
+  billing: ProposalBilling;
+  active: boolean;
+  sortOrder: number;
+  /** Management only. */
+  standardRate?: number | null;
+}
+
+export interface ServiceCatalogInput {
+  name: string;
+  category?: string | null;
+  description?: string | null;
+  unit?: string;
+  billing?: ProposalBilling;
+  standardRate?: number | null;
+  active?: boolean;
+  sortOrder?: number;
 }

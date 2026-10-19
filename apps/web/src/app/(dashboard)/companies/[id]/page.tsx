@@ -199,6 +199,8 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
    * server enforces it; this only decides whether to offer it.
    */
   const canDeletePermanently = pageConfig?.me.permissions?.includes('setup.admin') ?? false;
+  // What a deal is worth is Management's: the server sends null without it.
+  const canSeeDealValues = pageConfig?.me.permissions?.includes('money.figures') ?? false;
   const [removing, setRemoving] = useState(false);
   /*
    * Paid work needs a client. The server says so — a retainer or a project for
@@ -279,7 +281,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
   const handleMarkWon = async (proposalId: string, versionId: string, versionN: number, value: number) => {
     const ok = await confirm({
       title: 'Mark this proposal won?',
-      message: `Won on v${versionN} (${formatMoney(value)}). ${company.name} moves to Client and this proposal locks — no more versions.`,
+      message: `Won on v${versionN}${canSeeDealValues ? ` (${formatMoney(value)})` : ''}. ${company.name} moves to Client and this proposal locks — no more versions.`,
       confirmText: 'Mark won',
       variant: 'info',
     });
@@ -423,7 +425,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
       )
       .map((p) => ({
         id: p.id,
-        label: `v${p.wonVersion?.n ?? 1} · ${formatMoney(Number(p.wonVersion?.value ?? 0))}${
+        label: `v${p.wonVersion?.n ?? 1}${canSeeDealValues ? ` · ${formatMoney(Number(p.wonVersion?.value ?? 0))}` : ''}${
           p.wonVersion?.scopeSummary ? ` · ${String(p.wonVersion.scopeSummary).slice(0, 40)}` : ''
         }`,
         value: Number(p.wonVersion?.value ?? 0),
@@ -1040,7 +1042,8 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                     <div className="flex items-center gap-2">
                       {prop.wonVersion && (
                         <span className="text-xs font-semibold text-success bg-success-tint border border-success/30 px-2.5 py-1 rounded-lg">
-                          Won on v{prop.wonVersion.n} ({formatMoney(prop.wonVersion.value)})
+                          Won on v{prop.wonVersion.n}
+                          {canSeeDealValues && ` (${formatMoney(prop.wonVersion.value)})`}
                         </span>
                       )}
                       <RowMenu
@@ -1082,9 +1085,11 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-bold text-primary">v{v.n}</span>
-                            <span className="text-xs font-mono font-semibold tabular-nums text-primary">
-                              {formatMoney(v.value)}
-                            </span>
+                            {canSeeDealValues && (
+                              <span className="text-xs font-mono font-semibold tabular-nums text-primary">
+                                {formatMoney(v.value)}
+                              </span>
+                            )}
                             <span className="text-xs text-muted">· {formatDate(v.sentAt)}</span>
                           </div>
                           <p className="text-xs text-body mt-1">{v.scopeSummary}</p>

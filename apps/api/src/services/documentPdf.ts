@@ -37,7 +37,8 @@ const BRAND_META_BG = '#f3f6f4';
 const BRAND_RULE = '#d8e0dc';
 
 let cachedLogoDataUri: string | null = null;
-function getLogoDataUri(): string {
+/** The brand mark as a data URI. Also the letterhead of a proposal (proposalDocument.ts). */
+export function getLogoDataUri(): string {
   if (cachedLogoDataUri) return cachedLogoDataUri;
   const logoPath = path.join(__dirname, '../../assets/brand/eyelevel-logo-color-new.png');
   /*
@@ -441,8 +442,29 @@ export async function generateDocumentPdf(
   organizationId: string,
 ): Promise<Buffer> {
   const doc = await loadRenderableDocument(kind, id, organizationId);
-  const html = renderDocumentHtml(doc);
+  return htmlToPdf(renderDocumentHtml(doc), {
+    // Chrome insists on a header template when a footer one is given; an
+    // empty span is how you say "no running header". The brand band at the
+    // top is part of the document itself, so it prints on page one only,
+    // which is what a letterhead does.
+    headerTemplate: '<span></span>',
+    footerTemplate: renderFooterTemplate(doc),
+    // Zero at the top and sides so the brand band still bleeds to the edge.
+    // The bottom margin is the strip the footer band is drawn into: too
+    // small and Chrome clips it, too large and every page carries a gutter.
+    margin: { top: '0', right: '0', bottom: '16mm', left: '0' },
+  });
+}
 
+/**
+ * HTML in, A4 PDF out. Every PDF Flowzen makes goes through here — proformas,
+ * invoices and proposals — so Chromium is started one way, with the flags the
+ * server needs, and fails with the same plain message.
+ */
+export async function htmlToPdf(
+  html: string,
+  options: { headerTemplate?: string; footerTemplate?: string; margin: { top: string; right: string; bottom: string; left: string } },
+): Promise<Buffer> {
   /*
    * `--disable-dev-shm-usage`, or this works on a laptop and fails on the server.
    *
@@ -489,17 +511,9 @@ export async function generateDocumentPdf(
     const pdfBuffer = await page.pdf({
       format: 'A4',
       printBackground: true,
-      displayHeaderFooter: true,
-      // Chrome insists on a header template when a footer one is given; an
-      // empty span is how you say "no running header". The brand band at the
-      // top is part of the document itself, so it prints on page one only,
-      // which is what a letterhead does.
-      headerTemplate: '<span></span>',
-      footerTemplate: renderFooterTemplate(doc),
-      // Zero at the top and sides so the brand band still bleeds to the edge.
-      // The bottom margin is the strip the footer band is drawn into: too
-      // small and Chrome clips it, too large and every page carries a gutter.
-      margin: { top: '0', right: '0', bottom: '16mm', left: '0' },
+      displayHeaderFooter: Boolean(options.footerTemplate),
+      ...(options.footerTemplate ? { headerTemplate: options.headerTemplate ?? '<span></span>', footerTemplate: options.footerTemplate } : {}),
+      margin: options.margin,
     });
     return Buffer.from(pdfBuffer);
   } finally {

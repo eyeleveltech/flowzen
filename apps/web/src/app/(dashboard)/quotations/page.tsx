@@ -84,6 +84,8 @@ interface ProposalItem {
   /** The last real contact — a touch, a version, a stage change — or a date set by hand. */
   lastTouchedAt?: string | null;
   proformas: { id: string; number: string; status: string; amount: number }[];
+  /** The latest proposal document written for it, if any. */
+  documents?: { id: string; n: number; status: 'DRAFT' | 'IN_REVIEW' | 'FINAL' }[];
   createdAt: string;
   updatedAt: string;
 }
@@ -122,6 +124,9 @@ export default function ProposalsPage() {
     queryKey: ['proposals'],
     queryFn: () => api.proposals.list(),
   });
+  // What a deal is worth is Management's: without money.figures the server
+  // sends every value as null, and the list leaves the figures out entirely.
+  const showValues = data ? data.canSeeValues !== false : false;
 
   const { data: trashData } = useQuery({
     queryKey: ['proposals', 'trash'],
@@ -284,13 +289,15 @@ export default function ProposalsPage() {
           value={live.length}
           note={`${revised.length} ${revised.length === 1 ? 'has' : 'have'} been revised`}
         />
-        <StatTile label="Value Out There" value={formatMoney(liveValue)} note="at current versions" />
-        <StatTile
-          label="Given Away This Year"
-          value={formatMoney(givenAwayValue)}
-          note="first ask against what it closed at, this financial year"
-          tone="warning"
-        />
+        {showValues && <StatTile label="Value Out There" value={formatMoney(liveValue)} note="at current versions" />}
+        {showValues && (
+          <StatTile
+            label="Given Away This Year"
+            value={formatMoney(givenAwayValue)}
+            note="first ask against what it closed at, this financial year"
+            tone="warning"
+          />
+        )}
         <StatTile
           label="Proformas Unpaid"
           value={proformasUnpaid.length}
@@ -319,7 +326,7 @@ export default function ProposalsPage() {
               <tr className="border-b border-border">
                 <th className="eyebrow text-left">Company</th>
                 <th className="eyebrow text-left">Kind</th>
-                <th className="eyebrow text-right">Last version</th>
+                {showValues && <th className="eyebrow text-right">Last version</th>}
                 <th className="eyebrow text-left">Owner</th>
                 <th className="eyebrow text-left">Deleted</th>
                 <th className="eyebrow text-right">Put back</th>
@@ -328,7 +335,7 @@ export default function ProposalsPage() {
             <tbody className="divide-y divide-border">
               {deleted.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-5 py-12 text-center text-sm text-secondary">
+                  <td colSpan={showValues ? 6 : 5} className="px-5 py-12 text-center text-sm text-secondary">
                     Nothing deleted. A proposal that has been won or lost cannot be deleted at all — only one nothing
                     has happened to yet.
                   </td>
@@ -338,9 +345,11 @@ export default function ProposalsPage() {
                   <tr key={p.id} className="hover:bg-subtle transition-colors">
                     <td className="font-semibold text-primary">{p.company?.name ?? 'No company'}</td>
                     <td className="text-secondary">{p.kind === 'RETAINER' ? 'Retainer' : 'One time'}</td>
-                    <td className="font-semibold text-primary text-right">
-                      {p.versions[0] ? formatMoney(p.versions[0].value) : '—'}
-                    </td>
+                    {showValues && (
+                      <td className="font-semibold text-primary text-right">
+                        {p.versions[0] ? formatMoney(p.versions[0].value) : '—'}
+                      </td>
+                    )}
                     <td className="text-secondary">{p.owner?.name ?? '—'}</td>
                     <td className="text-secondary">{formatDate(p.deletedAt)}</td>
                     <td className="text-right">
@@ -478,7 +487,7 @@ export default function ProposalsPage() {
                 )}
                 <th className="eyebrow text-left">Company</th>
                 <th className="eyebrow text-left">Kind</th>
-                <th className="eyebrow text-right">Current Value</th>
+                {showValues && <th className="eyebrow text-right">Current Value</th>}
                 <th className="eyebrow text-left">Stage</th>
                 {tab === 'LIVE' && <th className="eyebrow text-left">Next step</th>}
                 {tab === 'LIVE' && <th className="eyebrow text-left">Last contact</th>}
@@ -492,15 +501,14 @@ export default function ProposalsPage() {
               {loading ? (
                 <TableRowsSkeleton cols={canRestore ? 8 : 7} />
               ) : shown.length === 0 ? (
-                <tr><td colSpan={canRestore ? 11 : 9} className="px-5 py-16 text-center text-sm text-secondary">No proposals found.</td></tr>
+                <tr><td colSpan={(canRestore ? 11 : 9) - (showValues ? 0 : 1)} className="px-5 py-16 text-center text-sm text-secondary">No proposals found.</td></tr>
               ) : shown.map(p => {
                 const latestVersion = p.versions[0];
                 const v1 = p.versions[p.versions.length - 1];
                 const revised = p.versions.length > 1;
                 const daysSent = daysSince(p.createdAt);
-                // Same false affordance as the invoice table: pointer cursor,
-                // no handler. Proposals have no page of their own, so the
-                // client is the link.
+                // The client is the main link; the proposal document has its
+                // own page, linked underneath.
                 const stepDay = p.nextStepDate ? p.nextStepDate.slice(0, 10) : null;
                 return (
                   <tr key={p.id} className="hover:bg-subtle transition-colors">
@@ -523,9 +531,22 @@ export default function ProposalsPage() {
                       >
                         {p.company.name}
                       </Link>
+                      {/* The proposal document, written in Flowzen (AI Proposal Builder). */}
+                      <Link
+                        href={`/quotations/${p.id}${p.documents?.[0] ? `?doc=${p.documents[0].id}` : ''}`}
+                        className="block text-micro font-medium text-info hover:underline"
+                      >
+                        {p.documents?.[0]
+                          ? `Proposal v${p.documents[0].n} · ${p.documents[0].status === 'FINAL' ? 'final' : 'draft'}`
+                          : p.outcome
+                            ? 'Proposal'
+                            : 'Write the proposal'}
+                      </Link>
                       {revised && (
                         <p className="text-micro text-secondary">
-                          +{p.versions.length - 1} · first asked {formatMoney(v1?.value ?? 0)}, now {formatMoney(latestVersion?.value ?? 0)}
+                          {showValues
+                            ? `+${p.versions.length - 1} · first asked ${formatMoney(v1?.value ?? 0)}, now ${formatMoney(latestVersion?.value ?? 0)}`
+                            : `+${p.versions.length - 1} revised`}
                         </p>
                       )}
                     </td>
@@ -536,9 +557,11 @@ export default function ProposalsPage() {
                           : 'border-info/30 text-info bg-info-tint'
                       }`}>{p.kind === 'RETAINER' ? 'Retainer' : 'One time'}</span>
                     </td>
-                    <td className="font-semibold text-primary text-right">
-                      {formatMoney(latestVersion?.value ?? 0)}
-                    </td>
+                    {showValues && (
+                      <td className="font-semibold text-primary text-right">
+                        {formatMoney(latestVersion?.value ?? 0)}
+                      </td>
+                    )}
                     <td className={`${STAGE_COLOR[p.stage] ?? 'text-body'}`}>
                       {STAGE_LABEL[p.stage] ?? p.stage}
                     </td>

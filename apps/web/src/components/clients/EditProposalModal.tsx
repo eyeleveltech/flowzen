@@ -23,7 +23,7 @@
 import toast from 'react-hot-toast';
 import { useEffect, useMemo, useState } from 'react';
 import { api, ApiError } from '@/lib/api-v2';
-import { useTeamMembers } from '@/hooks/queries';
+import { useConfig, useTeamMembers } from '@/hooks/queries';
 import { Modal, ScrollingModalBody, ModalFooter } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Field, FieldSelect } from '@/components/ui/field';
@@ -62,6 +62,10 @@ const dayOf = (iso: string | null | undefined) => (iso ? String(iso).slice(0, 10
 
 export function EditProposalModal({ proposal, companyName, onSaved, onClose }: Props) {
   const team = useTeamMembers();
+  // What a deal is worth is Management's: without money.figures the value is
+  // neither shown nor editable here (the server refuses it too).
+  const { data: config } = useConfig();
+  const canSeeValue = config?.me.permissions?.includes('money.figures') ?? false;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -101,14 +105,14 @@ export function EditProposalModal({ proposal, companyName, onSaved, onClose }: P
   }, [closed]);
 
   const parsedValue = Number(value);
-  const valueOk = !version || (value.trim() !== '' && Number.isFinite(parsedValue) && parsedValue >= 0);
+  const valueOk = !version || !canSeeValue || (value.trim() !== '' && Number.isFinite(parsedValue) && parsedValue >= 0);
 
   // Only what actually changed is sent — an untouched field is not an edit.
   const body: Record<string, unknown> = {
     ...(ownerId && ownerId !== original.ownerId ? { ownerId } : {}),
     ...(kind !== original.kind ? { kind } : {}),
     ...(companyId && companyId !== original.companyId ? { companyId } : {}),
-    ...(version && valueOk && parsedValue !== Number(original.value) ? { value: parsedValue } : {}),
+    ...(version && canSeeValue && valueOk && parsedValue !== Number(original.value) ? { value: parsedValue } : {}),
     ...(version && scopeSummary.trim() !== original.scopeSummary ? { scopeSummary: scopeSummary.trim() } : {}),
     ...(version && fileUrl.trim() !== original.fileUrl ? { fileUrl: fileUrl.trim() || null } : {}),
     ...(version && sentAt && sentAt !== original.sentAt ? { sentAt } : {}),
@@ -216,15 +220,17 @@ export function EditProposalModal({ proposal, companyName, onSaved, onClose }: P
               </div>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <Field
-                  label={`${money} (₹)`}
-                  type="number"
-                  value={value}
-                  onChange={setValue}
-                  disabled={busy}
-                  required
-                  error={!valueOk ? 'Enter a value of 0 or more' : undefined}
-                />
+                {canSeeValue && (
+                  <Field
+                    label={`${money} (₹)`}
+                    type="number"
+                    value={value}
+                    onChange={setValue}
+                    disabled={busy}
+                    required
+                    error={!valueOk ? 'Enter a value of 0 or more' : undefined}
+                  />
+                )}
                 <Field label="Sent on" type="date" value={sentAt} onChange={setSentAt} disabled={busy} />
               </div>
 

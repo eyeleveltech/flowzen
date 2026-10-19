@@ -265,6 +265,9 @@ export default function PipelinePage() {
   });
 
   const loading = isPending;
+  // What a deal is worth is Management's: without money.figures the server
+  // sends no values, and the board shows none rather than ₹0 everywhere.
+  const showValues = board?.success ? board.canSeeValues !== false : false;
   const funnel: FunnelStep[] = funnelData?.success ? funnelData.steps : [];
   const funnelMonths = funnelData?.success ? funnelData.months : 6;
 
@@ -340,7 +343,7 @@ export default function PipelinePage() {
     }
     const ok = await confirm({
       title: "Mark this proposal won?",
-      message: `Won on v${card.currentVersionNumber} (${formatMoney(card.quotedValue)}). ${card.companyName} moves to Client and this proposal locks — no more versions.`,
+      message: `Won on v${card.currentVersionNumber}${showValues ? ` (${formatMoney(card.quotedValue)})` : ""}. ${card.companyName} moves to Client and this proposal locks — no more versions.`,
       confirmText: "Mark won",
       variant: "info",
     });
@@ -464,17 +467,21 @@ export default function PipelinePage() {
           value={stats.liveDeals}
           note="each one a real quote"
         />
-        <StatTile
-          label="Full Pipeline"
-          value={formatMoney(stats.fullPipeline)}
-          note="if every one lands"
-        />
-        <StatTile
-          label="Weighted"
-          value={formatMoney(stats.weighted)}
-          note="by stage likelihood"
-          tone="warning"
-        />
+        {showValues && (
+          <StatTile
+            label="Full Pipeline"
+            value={formatMoney(stats.fullPipeline)}
+            note="if every one lands"
+          />
+        )}
+        {showValues && (
+          <StatTile
+            label="Weighted"
+            value={formatMoney(stats.weighted)}
+            note="by stage likelihood"
+            tone="warning"
+          />
+        )}
         <StatTile
           label="Going Stale"
           value={stats.goingStale}
@@ -550,7 +557,7 @@ export default function PipelinePage() {
                   ) : (
                     <>
                       <p className="text-xs font-semibold text-primary">
-                        {formatMoney(col.totalValue)}
+                        {showValues ? formatMoney(col.totalValue) : plural(col.cards.length, "deal")}
                       </p>
                       <p className="text-micro text-secondary">
                         {stageProbability[col.stage]}% likely ·{" "}
@@ -699,11 +706,11 @@ export default function PipelinePage() {
                                 <p className="text-sm text-secondary mb-2">
                                   Not quoted yet
                                 </p>
-                              ) : (
+                              ) : showValues ? (
                                 <p className="text-sm font-bold text-primary mb-2">
                                   {formatMoney(card.quotedValue)}
                                 </p>
-                              )}
+                              ) : null}
                               <div className="flex items-center justify-between mb-1.5">
                                 <div className="flex items-center gap-1">
                                   {card.stage === "PROSPECT" ? (
@@ -818,7 +825,7 @@ export default function PipelinePage() {
                 </Droppable>
 
                 {/* Column footer */}
-                {col.stage !== "WON" && col.totalValue > 0 && (
+                {showValues && col.stage !== "WON" && col.totalValue > 0 && (
                   <p className="text-micro text-secondary px-3 py-2 border-t border-border">
                     Weighted {formatMoney(col.weightedValue)}
                   </p>
@@ -950,7 +957,7 @@ export default function PipelinePage() {
             ? {
                 companyId: settingUpWork.companyId,
                 companyName: settingUpWork.companyName,
-                monthlyValue: settingUpWork.quotedValue,
+                monthlyValue: showValues ? settingUpWork.quotedValue : undefined,
                 sourceProposalId: settingUpWork.id,
               }
             : undefined
@@ -970,7 +977,7 @@ export default function PipelinePage() {
             ? {
                 companyId: settingUpWork.companyId,
                 companyName: settingUpWork.companyName,
-                quotedValue: settingUpWork.quotedValue,
+                quotedValue: showValues ? settingUpWork.quotedValue : undefined,
                 sourceProposalId: settingUpWork.id,
               }
             : undefined

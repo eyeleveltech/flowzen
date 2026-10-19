@@ -40,6 +40,7 @@ import { PageSkeleton } from '@/components/ui/skeleton-loaders';
 import { MailTab } from './components/MailTab';
 import { ZenMemorySection } from './components/ZenMemorySection';
 import { DocumentSettingsTab } from './components/DocumentSettingsTab';
+import { PricingSetupTab } from './components/PricingSetupTab';
 import { OnboardingTab } from './components/OnboardingTab';
 import { TrashTab } from './components/TrashTab';
 import { ActivityTab } from './components/ActivityTab';
@@ -370,6 +371,8 @@ export default function SettingsPage() {
                   )
                   // Who is using Flowzen is for management only — the server refuses everybody else too.
                   .filter((t) => t.key !== 'usage' || config?.me.preset === 'MANAGEMENT')
+                  // Proposal prices are Management's (AI Proposal Builder).
+                  .filter((t) => t.key !== 'pricing' || config?.me.preset === 'MANAGEMENT')
                   .map((t) => {
                   const on = tab === t.key;
                   return (
@@ -808,6 +811,8 @@ export default function SettingsPage() {
         )}
 
         {tab === 'proforma' && <DocumentSettingsTab canEdit={canEdit} />}
+
+        {tab === 'pricing' && config.me.preset === 'MANAGEMENT' && <PricingSetupTab />}
 
         {tab === 'email' && (
           <MailTab

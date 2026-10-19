@@ -6,6 +6,7 @@ import { moneyClock, orgToday } from '../utils/moneyDates.js';
 import { invoiceState } from '../utils/invoiceState.js';
 import { changesBetween } from '../utils/activityDiff.js';
 import { canReadActivityType, stripMoney } from '../utils/activityAccess.js';
+import { canSeeDealValues, maskDealValues } from '../utils/dealValues.js';
 import { emitToOrganization } from '../sse.js';
 import { authenticate, requirePermission, type AuthRequest, hasPermission } from '../middleware/auth.js';
 import { CompanyStatus, PersonRole, Prisma, TaskWorkType, TaskStatus } from '@prisma/client';
@@ -490,6 +491,8 @@ companiesRouter.get('/:id', requirePermission('company.read'), async (req: AuthR
         retainers: sanitizedRetainers,
         projects: sanitizedProjects,
         proformas: sanitizedProformas,
+        // What each deal is worth: Management's (utils/dealValues.ts).
+        proposals: company.proposals.map((p) => maskDealValues(p, canSeeDealValues(req.user!))),
         activities,
       },
     });

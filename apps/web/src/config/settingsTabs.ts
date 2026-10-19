@@ -17,6 +17,7 @@ export const SETTINGS_GROUPS = [
       { key: 'organisation', label: 'Organisation', caption: 'Identity, calendar, assistant' },
       { key: 'documents', label: 'Tax & numbering', caption: 'GST, prefixes, currency' },
       { key: 'proforma', label: 'Documents & billing', caption: 'What a document says' },
+      { key: 'pricing', label: 'Services & pricing', caption: 'What you sell, the floors' },
       { key: 'email', label: 'Email', caption: 'How it is sent' },
       { key: 'integrations', label: 'Integrations', caption: 'Google Calendar' },
     ],

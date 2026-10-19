@@ -137,6 +137,12 @@ model Organization {
   dealStaleDays             Int      @default(25)
   outreachStaleDays         Int      @default(10)
   defaultTermsAndConditions String[] @default(["Monthly retainer fee applicable", "Ad spend to be borne separately by the client", "Work execution begins upon confirmation and payment"])
+  /// The lowest monthly fee a proposal may quote (AI Proposal Builder): the
+  /// base, and per-industry floors above it, keyed by the industry's name.
+  /// One-time project fees are exempt. Below the floor needs a Management
+  /// override with a written reason. Edited in Setup → Services & pricing.
+  proposalFloorBase         Decimal  @default(75000) @db.Decimal(12, 2)
+  proposalFloors            Json     @default("{\"Real Estate & Infrastructure\": 200000, \"Healthcare & Wellness\": 150000}")
 
   /// CR-02 §2 — the seller block. Entered once here, printed on every proforma
   /// and invoice, and snapshotted onto each document as it is raised so that
@@ -178,6 +184,7 @@ model Organization {
   projects                   Project[]
   tasks                      Task[]
   internalProjects           InternalProject[]
+  serviceCatalogItems        ServiceCatalogItem[]
   zenConversations           ZenConversation[]
   zenMemories                ZenMemory[]
   costs                      Cost[]
@@ -304,6 +311,10 @@ model User {
   pushSubscriptions        PushSubscription[]
   notificationPreference   NotificationPreference?
   pushOutbox               PushOutbox[]
+  proposalDocumentsCreated   ProposalDocument[]   @relation("ProposalDocumentCreatedBy")
+  proposalDocumentsFinalised ProposalDocument[]   @relation("ProposalDocumentFinalisedBy")
+  proposalFloorOverrides     ProposalDocument[]   @relation("ProposalDocumentFloorOverrideBy")
+  serviceCatalogEdits        ServiceCatalogItem[] @relation("ServiceCatalogUpdatedBy")
 
   @@index([organizationId, active])
   @@index([focusTaskId])
@@ -545,7 +556,15 @@ model Proposal {
   owner        User              @relation("ProposalOwner", fields: [ownerId], references: [id])
   wonVersion   ProposalVersion?  @relation("WonVersion", fields: [wonVersionId], references: [id])
   versions     ProposalVersion[] @relation("ProposalVersions")
+  /// The proposal documents written for this deal (AI Proposal Builder,
+  /// phase 1) — drafts and finals, v1, v2… What was actually SENT is still a
+  /// ProposalVersion: "Mark as sent" records one from a final document.
+  documents    ProposalDocument[]
+  /// "EL/PR/2026-27/014" — given when the first document is started. A
+  /// document's reference adds its version: "EL/PR/2026-27/014-v2".
+  refNo        String?
 
+  @@unique([organizationId, refNo])
   @@index([organizationId, stage])
   @@index([companyId])
   @@index([ownerId])
@@ -564,9 +583,141 @@ model ProposalVersion {
 
   proposal   Proposal  @relation("ProposalVersions", fields: [proposalId], references: [id], onDelete: Cascade)
   winningFor Proposal? @relation("WonVersion")
+  /// The proposal document this version was sent from, when it was.
+  sentFrom   ProposalDocument? @relation("DocumentSentAs")
 
   @@unique([proposalId, n])
   @@map("proposal_versions")
+}
+
+// ── Proposal documents (AI Proposal Builder, phase 1) ───────────────────────
+//
+// A proposal written in Flowzen: its text, in sections, and its price, in
+// line items run through the one calculator. Drafts change; a final is locked
+// with its numbers frozen and its PDF kept. Kept apart from ProposalVersion on
+// purpose: a version is a proposal that was SENT, and the pipeline, the
+// Monday brief, the stalled-deal alert and the forecast all read it that way.
+// "Mark as sent" turns a final document into one.
+
+enum ProposalDocStatus {
+  DRAFT
+  IN_REVIEW
+  FINAL
+}
+
+enum ProposalLayout {
+  MINIMAL
+  PREMIUM
+  COMPACT
+}
+
+/// Monthly and one-time are never added together, anywhere.
+enum ProposalBilling {
+  ONE_TIME
+  MONTHLY
+}
+
+/// Where a line's rate came from — shown beside it.
+enum ProposalPriceSource {
+  USER
+  VERSION
+  CATALOG
+}
+
+model ProposalDocument {
+  id                  String            @id @default(cuid())
+  proposalId          String
+  /// v1, v2… within the proposal.
+  n                   Int
+  status              ProposalDocStatus @default(DRAFT)
+  layout              ProposalLayout    @default(MINIMAL)
+  title               String?
+  /// [{ id, type, title, body, visible }] in order. The COMMERCIAL section has
+  /// no body: it is always drawn from the line items.
+  sections            Json              @default("[]")
+  /// Why this version exists — "client asked for a 3-month option".
+  revisionNote        String?
+  basedOnId           String?
+  createdById         String?
+  finalisedById       String?
+  finalisedAt         DateTime?
+  /// The priced lines and totals, frozen at Finalise.
+  commercialSnapshot  Json?
+  /// Below the floor: allowed only with a Management override and a reason.
+  floorOverrideReason String?
+  floorOverrideById   String?
+  floorOverrideAt     DateTime?
+  /// The final PDF, made once at Finalise, so what was sent can be reproduced.
+  finalPdf            Bytes?
+  /// The ProposalVersion "Mark as sent" recorded from this document.
+  sentVersionId       String?           @unique
+  sentAt              DateTime?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  proposal        Proposal           @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  basedOn         ProposalDocument?  @relation("ProposalDocumentCopies", fields: [basedOnId], references: [id], onDelete: SetNull)
+  copies          ProposalDocument[] @relation("ProposalDocumentCopies")
+  createdBy       User?              @relation("ProposalDocumentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  finalisedBy     User?              @relation("ProposalDocumentFinalisedBy", fields: [finalisedById], references: [id], onDelete: SetNull)
+  floorOverrideBy User?              @relation("ProposalDocumentFloorOverrideBy", fields: [floorOverrideById], references: [id], onDelete: SetNull)
+  sentVersion     ProposalVersion?   @relation("DocumentSentAs", fields: [sentVersionId], references: [id], onDelete: SetNull)
+  lineItems       ProposalLineItem[]
+
+  @@unique([proposalId, n])
+  @@map("proposal_documents")
+}
+
+model ProposalLineItem {
+  id             String              @id @default(cuid())
+  documentId     String
+  catalogItemId  String?
+  name           String
+  description    String?             @db.Text
+  billing        ProposalBilling
+  qty            Decimal             @default(1) @db.Decimal(12, 2)
+  /// "month", "video", "sq ft"… as it prints.
+  unit           String?
+  unitRate       Decimal             @db.Decimal(12, 2)
+  /// A discount needs a trade — a longer term, more work, case-study rights.
+  discountAmount Decimal             @default(0) @db.Decimal(12, 2)
+  discountTrade  String?
+  /// Paid by the client directly (ad spend): shown apart, never in the fee.
+  isPassthrough  Boolean             @default(false)
+  priceSource    ProposalPriceSource @default(USER)
+  sortOrder      Int                 @default(0)
+
+  document    ProposalDocument    @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  catalogItem ServiceCatalogItem? @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
+
+  @@index([documentId])
+  @@map("proposal_line_items")
+}
+
+/// What the studio sells, and at what standard rate. Names are seen by anyone
+/// writing a proposal; rates only by Management (Setup → Services & pricing).
+model ServiceCatalogItem {
+  id             String          @id @default(cuid())
+  organizationId String
+  name           String
+  category       String?
+  description    String?         @db.Text
+  unit           String          @default("month")
+  billing        ProposalBilling @default(MONTHLY)
+  standardRate   Decimal?        @db.Decimal(12, 2)
+  active         Boolean         @default(true)
+  sortOrder      Int             @default(0)
+  updatedById    String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  updatedBy    User?              @relation("ServiceCatalogUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  lineItems    ProposalLineItem[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, active])
+  @@map("service_catalog_items")
 }
 
 enum ProformaStatus {
