@@ -24,7 +24,7 @@ const BD = {
   sessionsValidFrom: null,
 };
 const MGMT = { ...BD, id: 'usr-akmal', name: 'Akmal', preset: RolePreset.MANAGEMENT, permissions: [] as string[] };
-const tokenFor = (u: typeof BD) =>
+const tokenFor = (u: { id: string; email: string; preset: RolePreset; permissions: string[] }) =>
   `Bearer ${signJwt({ userId: u.id, organizationId: 'org-1', email: u.email, preset: u.preset, permissions: u.permissions } as never)}`;
 const p = prisma as any;
 
