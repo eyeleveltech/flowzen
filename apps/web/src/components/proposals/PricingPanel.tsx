@@ -6,15 +6,23 @@
  * Every figure on it comes from the server's calculator (proposalPricing.ts on
  * the API), asked again a moment after each change, so the totals here are the
  * totals the PDF will print. Nothing on this screen adds rupees up itself.
+ *
+ * Phase 3: a rate can come from the rate agreed with this client, and what
+ * earlier proposals charged for the same service sits under each line as a
+ * suggestion, used only on a click. A one-time fee can carry its payment
+ * split, which becomes the project's milestones when the deal is won.
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Lock, Plus, Trash2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, History, Lock, Plus, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   api,
   ApiError,
+  formatDate,
   formatMoney,
+  type MilestoneShare,
+  type PriceSuggestion,
   type ProposalDoc,
   type ProposalDocResponse,
   type ProposalFeeGroup,
@@ -77,6 +85,40 @@ const toBody = (lines: Line[]): ProposalLineDraft[] =>
       priceSource: l.priceSource,
     }));
 
+type SplitRow = { key: string; label: string; percent: string };
+const splitFrom = (doc: ProposalDoc): SplitRow[] =>
+  (doc.milestoneSplit ?? []).map((m) => ({ key: Math.random().toString(36).slice(2), label: m.label, percent: String(m.percent) }));
+
+/** Common ways a one-time fee is paid, to start from. */
+const SPLIT_PRESETS: { label: string; parts: MilestoneShare[] }[] = [
+  { label: '50 / 50', parts: [{ label: 'Advance', percent: 50 }, { label: 'On delivery', percent: 50 }] },
+  {
+    label: '40 / 30 / 30',
+    parts: [
+      { label: 'Advance', percent: 40 },
+      { label: 'At design sign-off', percent: 30 },
+      { label: 'At launch', percent: 30 },
+    ],
+  },
+  { label: 'All on delivery', parts: [{ label: 'On delivery', percent: 100 }] },
+];
+
+/** Where a line's rate came from, in words. */
+function sourceNote(source: ProposalLineDraft['priceSource'], companyName: string): string | null {
+  switch (source) {
+    case 'CATALOG':
+      return 'Rate from the service list.';
+    case 'CLIENT_RATE':
+      return `The rate agreed with ${companyName}.`;
+    case 'HISTORY':
+      return 'Rate taken from a past proposal.';
+    case 'VERSION':
+      return 'Rate carried over from an earlier price for this deal.';
+    default:
+      return null;
+  }
+}
+
 /** The priced line for each edited line, in the order they were sent. */
 function pricedByIndex(lines: ProposalLineDraft[], price: ProposalPrice | null): (ProposalPricedLine | undefined)[] {
   if (!price) return [];
@@ -90,12 +132,16 @@ function pricedByIndex(lines: ProposalLineDraft[], price: ProposalPrice | null):
 
 export function PricingPanel({
   doc,
+  companyId,
+  companyName,
   price: savedPrice,
   problems,
   pricing,
   onChanged,
 }: {
   doc: ProposalDoc;
+  companyId: string;
+  companyName: string;
   price?: ProposalPrice;
   problems: string[];
   pricing?: { clientStateKnown: boolean; clientStateName: string | null };
@@ -112,14 +158,34 @@ export function PricingPanel({
   const [reason, setReason] = useState('');
   const [overriding, setOverriding] = useState(false);
   const [finalising, setFinalising] = useState(false);
+  const [split, setSplit] = useState<SplitRow[]>(() => splitFrom(doc));
+  const [history, setHistory] = useState<Record<string, PriceSuggestion[]>>({});
+  const [agreeing, setAgreeing] = useState<string | null>(null);
   const body = useMemo(() => toBody(lines), [lines]);
 
-  useEffect(() => {
+  // The service list, with this client's agreed rates beside the standard ones.
+  const loadCatalog = () =>
     api.proposalDocs
-      .catalog()
+      .catalog(false, companyId)
       .then((r) => setCatalog(r.items))
       .catch(() => setCatalog([]));
-  }, []);
+  useEffect(() => {
+    void loadCatalog();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyId]);
+
+  // What earlier finals charged for these services, a moment after the names settle.
+  const names = useMemo(() => Array.from(new Set(body.map((l) => l.name.toLowerCase()))).sort().join('|'), [body]);
+  useEffect(() => {
+    if (!names) return;
+    const t = setTimeout(() => {
+      api.proposalDocs
+        .priceHistory(doc.id, names.split('|'))
+        .then((r) => setHistory(r.history))
+        .catch(() => undefined);
+    }, 500);
+    return () => clearTimeout(t);
+  }, [names, doc.id]);
 
   // The totals, from the server, a moment after each change.
   useEffect(() => {
@@ -161,6 +227,8 @@ export function PricingPanel({
   const addFromCatalog = (id: string) => {
     const item = catalog.find((c) => c.id === id);
     if (!item) return;
+    // The rate agreed with this client comes before the standard one.
+    const agreed = item.clientRate?.rate;
     setLines((list) => [
       ...list,
       {
@@ -169,19 +237,48 @@ export function PricingPanel({
         name: item.name,
         description: item.description,
         unit: item.unit,
-        unitRate: Number(item.standardRate ?? 0),
-        priceSource: 'CATALOG',
+        unitRate: Number(agreed ?? item.standardRate ?? 0),
+        priceSource: agreed != null ? 'CLIENT_RATE' : 'CATALOG',
       },
     ]);
     setDirty(true);
   };
 
+  /** Keep this line's rate as the one agreed with this client for that service. */
+  const agreeRate = async (l: Line) => {
+    if (!l.catalogItemId || !(Number(l.unitRate) > 0)) return;
+    setAgreeing(l.key);
+    try {
+      await api.proposalDocs.addClientRate({ companyId, catalogItemId: l.catalogItemId, agreedRate: Number(l.unitRate) });
+      toast.success(`Saved as ${companyName}'s agreed rate for ${l.name}`);
+      edit(l.key, { priceSource: 'CLIENT_RATE' });
+      void loadCatalog();
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Could not save the agreed rate.');
+    } finally {
+      setAgreeing(null);
+    }
+  };
+
+  const editSplit = (rows: SplitRow[]) => {
+    setSplit(rows);
+    setDirty(true);
+  };
+  const splitTotal = split.reduce((sum, r) => sum + (Number(r.percent) || 0), 0);
+  const splitOk = split.length === 0 || (splitTotal === 100 && split.every((r) => r.label.trim() && Number.isInteger(Number(r.percent)) && Number(r.percent) > 0));
+  const hasOneTime = lines.some((l) => !l.isPassthrough && l.billing === 'ONE_TIME' && l.name.trim());
+
   const save = async () => {
     setSaving(true);
     try {
-      const res = await api.proposalDocs.setLines(doc.id, body);
+      const res = await api.proposalDocs.setLines(
+        doc.id,
+        body,
+        split.length ? split.map((r) => ({ label: r.label.trim(), percent: Number(r.percent) })) : null,
+      );
       setDirty(false);
       setLines(fromDoc(res.document));
+      setSplit(splitFrom(res.document));
       onChanged(res);
       toast.success('Pricing saved');
     } catch (e) {
@@ -326,10 +423,130 @@ export function PricingPanel({
                 <span className="text-micro text-secondary">Description (prints under the service)</span>
                 <input className={INPUT} value={l.description ?? ''} onChange={(e) => edit(l.key, { description: e.target.value || null })} disabled={!editable} maxLength={2000} />
               </label>
-              {l.priceSource === 'CATALOG' && <p className="mt-1.5 text-micro text-secondary">Rate from the service list.</p>}
+              {(() => {
+                const note = sourceNote(l.priceSource, companyName);
+                const past = (history[l.name.trim().toLowerCase()] ?? []).filter((h) => h.rate !== Number(l.unitRate)).slice(0, 2);
+                const canAgree = editable && Boolean(l.catalogItemId) && Number(l.unitRate) > 0 && l.priceSource !== 'CLIENT_RATE';
+                if (!note && !past.length && !canAgree) return null;
+                return (
+                  <div className="mt-2 space-y-1">
+                    {(note || canAgree) && (
+                      <p className="flex flex-wrap items-center gap-x-2 text-micro text-secondary">
+                        {note}
+                        {canAgree && (
+                          <button
+                            type="button"
+                            onClick={() => void agreeRate(l)}
+                            disabled={agreeing === l.key}
+                            className="font-medium text-info hover:underline disabled:opacity-50"
+                          >
+                            Keep {formatMoney(l.unitRate)} as {companyName}&apos;s agreed rate
+                          </button>
+                        )}
+                      </p>
+                    )}
+                    {past.map((h) => (
+                      <p key={`${h.ref}:${h.rate}`} className="flex flex-wrap items-center gap-x-2 text-micro text-secondary">
+                        <History className="h-3 w-3" />
+                        <span>
+                          Charged before: <span className="font-semibold tabular-nums text-body">{formatMoney(h.rate)}</span>
+                          {h.unit ? ` per ${h.unit}` : ''} · {h.client} · {h.ref}
+                          {h.on ? ` · ${formatDate(h.on, undefined, undefined, true)}` : ''}
+                        </span>
+                        {editable && (
+                          <button type="button" onClick={() => edit(l.key, { unitRate: h.rate, priceSource: 'HISTORY' })} className="font-medium text-info hover:underline">
+                            Use this rate
+                          </button>
+                        )}
+                      </p>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
           );
         })}
+
+        {(hasOneTime || split.length > 0) && (
+          <div className="rounded-2xl border border-border bg-white p-4">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h3 className="text-sm font-semibold text-primary">How the one-time fee is paid</h3>
+              {split.length > 0 && (
+                <span className={`text-micro tabular-nums ${splitTotal === 100 ? 'text-secondary' : 'font-semibold text-danger'}`}>
+                  {splitTotal}% of 100%
+                </span>
+              )}
+            </div>
+            <p className="mt-0.5 text-micro text-secondary">
+              Printed under the one-time fee, and the milestones the project starts with when the deal is won. Leave it empty to decide then.
+            </p>
+            {split.length === 0 && editable && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {SPLIT_PRESETS.map((preset) => (
+                  <button
+                    key={preset.label}
+                    type="button"
+                    onClick={() => editSplit(preset.parts.map((x) => ({ key: Math.random().toString(36).slice(2), label: x.label, percent: String(x.percent) })))}
+                    className="rounded-full border border-border px-3 py-1 text-xs text-body transition-colors hover:border-primary/40 hover:text-primary"
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            )}
+            {split.length > 0 && (
+              <div className="mt-3 space-y-2">
+                {split.map((r) => (
+                  <div key={r.key} className="grid grid-cols-[minmax(0,1fr)_5.5rem_auto] items-center gap-2">
+                    <input
+                      aria-label="When it is paid"
+                      className={INPUT}
+                      value={r.label}
+                      onChange={(e) => editSplit(split.map((x) => (x.key === r.key ? { ...x, label: e.target.value } : x)))}
+                      disabled={!editable}
+                      maxLength={60}
+                      placeholder="e.g. Advance"
+                    />
+                    <div className="relative">
+                      <input
+                        aria-label="Share of the fee"
+                        type="number"
+                        min={1}
+                        max={100}
+                        step={1}
+                        className={`${INPUT} pr-6`}
+                        value={r.percent}
+                        onChange={(e) => editSplit(split.map((x) => (x.key === r.key ? { ...x, percent: e.target.value } : x)))}
+                        disabled={!editable}
+                      />
+                      <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-secondary">%</span>
+                    </div>
+                    {editable && (
+                      <button
+                        type="button"
+                        aria-label={`Remove ${r.label || 'this part'}`}
+                        onClick={() => editSplit(split.filter((x) => x.key !== r.key))}
+                        className="rounded-lg p-1.5 text-secondary transition-colors hover:bg-danger-tint hover:text-danger"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {editable && split.length < 6 && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    icon={Plus}
+                    onClick={() => editSplit([...split, { key: Math.random().toString(36).slice(2), label: '', percent: String(Math.max(0, 100 - splitTotal)) }])}
+                  >
+                    Add a part
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {editable && (
           <div className="flex flex-wrap items-center gap-2">
@@ -346,7 +563,11 @@ export function PricingPanel({
                 {services.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
-                    {c.standardRate ? ` · ${formatMoney(c.standardRate)}` : ''}
+                    {c.clientRate
+                      ? ` · ${formatMoney(c.clientRate.rate)} agreed`
+                      : c.standardRate
+                        ? ` · ${formatMoney(c.standardRate)}`
+                        : ''}
                   </option>
                 ))}
               </select>
@@ -379,9 +600,12 @@ export function PricingPanel({
             </p>
           )}
           {editable && (
-            <Button variant="primary" fullWidth className="mt-4" onClick={() => void save()} loading={saving} disabled={!dirty}>
-              Save pricing
-            </Button>
+            <>
+              <Button variant="primary" fullWidth className="mt-4" onClick={() => void save()} loading={saving} disabled={!dirty || !splitOk}>
+                Save pricing
+              </Button>
+              {!splitOk && <p className="mt-2 text-micro text-danger">The payment parts need names and must add up to 100%.</p>}
+            </>
           )}
         </div>
 

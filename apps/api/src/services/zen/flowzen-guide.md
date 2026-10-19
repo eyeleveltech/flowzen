@@ -28,7 +28,7 @@ A person who types the address of a screen they cannot open is sent away from it
 ### Writing a proposal (/quotations/{id})
 
 The proposal itself, written in Flowzen, by hand or with the AI.
-- **Starting:** "Write with AI" or "Start blank". Both give the standard sections with the studio terms filled in.
+- **Starting:** "Write with AI", "Start blank" or "Start from a proforma". All give the standard sections with the studio terms filled in. From a proforma, its lines go on the Pricing tab and its terms into Terms (the proforma is not changed). A price already logged by hand on the deal comes across as one line marked "price from v1".
 - **Document tab, Sections:** the sections (cover line, about us, what we heard, scope, timeline, investment, terms, next steps). Hide a section with the eye, reorder with the arrows, add your own. It saves itself; the preview beside it follows. A line starting "- " is a bullet; a single line right above bullets prints as their bold lead-in.
 - **Document tab, Write with AI:** ask in plain words ("write the first draft", "shorter intro", "more premium tone"). It knows the client record, the services on the Pricing tab and the studio terms, and suggests changes as cards to Accept or Discard; nothing changes until accepted. It never writes prices, uses Zen's AI setup (Setup → Organisation), and leaves what it does not know as a yellow "Needs input", which stops Finalise until filled. For Management it can also put a price you typed on the Pricing tab ("Add to Pricing").
 - **Layout:** Minimal (most proposals), Premium (larger deals: full green cover, numbered sections) or Compact (one page, no cover). Changing it never rewrites a word.
@@ -37,11 +37,15 @@ The proposal itself, written in Flowzen, by hand or with the AI.
 - **Floor:** a monthly fee below the floor for the client's industry (Setup → Services & pricing) needs Management to record why (20 characters or more) before Finalise. One-time fees have no floor.
 - **Discounts** need what the client gives in return (a longer term, case-study rights).
 - **Investment box:** the fee before GST and "18% GST additional", never a GST-inclusive total (the Pricing tab still shows the GST working).
+- **Where a rate comes from** (shown under each line): typed, the service list, the rate agreed with this client, a past proposal, or carried over from an earlier price. Under each line, Management also sees what earlier final proposals charged for the same service ("Charged before"), used only with "Use this rate". "Keep … as <client>'s agreed rate" saves a line's rate as that client's agreed rate.
+- **How the one-time fee is paid:** on the Pricing tab, a split such as 50/50 or 40/30/30 (whole percentages adding to 100). It prints under the one-time fee and becomes the project's milestones when the deal is won.
 - **Send for review:** the writer hands a draft to Management; it shows as In review, the writer can no longer change it, and Management gets a bell. Management prices it and finalises, or uses "Send back" with a note that shows at the top of the draft.
 - **Finalise (Management):** checks all of the above, that no shown section is empty and that nothing still needs input, then locks the version, freezes its prices and keeps its PDF and Word file exactly as they were.
 - **Downloads:** PDF and Word, for any version. A draft's carry a DRAFT mark.
 - **Who sees prices:** Management always. Anyone else sees a draft without its figures ("Pricing is added by Management"), and the final version in full, since it goes to the client.
-- **Versions:** "New version" copies the text and prices into a new draft (one open draft or review at a time). The reference is EL/PR/<year>/<number>-v<n>, e.g. EL/PR/2026-27/014-v2.
+- **Versions:** "New version" copies the text and prices into a new draft (one open draft or review at a time). Open an older version and press New version to bring it back.
+- **Compare versions** (Versions tab): any two versions side by side. The price changes at the top (Management, or between two finals), then each section with removed words struck out and added words highlighted; a rewritten section shows old above new.
+- **When the deal is won:** "Set up work" opens the retainer or project form already filled in from the won proposal: for a retainer, the monthly fee, GST and each monthly service as a project on the retainer (untick any); for a project, the one-time fee, GST, the proposal's title and its payment split as the milestones. Nothing is created until someone presses Create. The reference is EL/PR/<year>/<number>-v<n>, e.g. EL/PR/2026-27/014-v2.
 - **Mark as sent:** a final version goes on the pipeline as a sent version, at its monthly fee for a retainer or its one-time fee for a project. First one moves the deal to Proposal sent, later ones to In negotiation. Next step optional.
 
 ## Links to records
@@ -389,6 +393,7 @@ Setup access (Management). The sidebar calls it Setup; the page is Settings. The
 Management only.
 - **Pricing floors:** the lowest monthly fee a proposal may quote: one for any client (₹75,000), and higher ones for chosen industries (Real Estate & Infrastructure ₹2,00,000, Healthcare & Wellness ₹1,50,000 to begin with).
 - **Services:** what the studio sells, billed monthly or one-time, with a standard rate. The Pricing tab picks from this list. Retire one with the toggle; it stays on old proposals.
+- **Agreed client rates:** a rate agreed with one client for one service (a partner rate, a renewal price), from a date and optionally until one. A proposal for that client uses it before the standard rate while it holds. "End it" stops it today.
 
 ### Settings → Email
 

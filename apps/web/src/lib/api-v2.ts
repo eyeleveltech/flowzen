@@ -1941,7 +1941,26 @@ export const api = {
    */
   proposalDocs: {
     forDeal: (proposalId: string) => get<ProposalDealDocs>(`/proposals/${proposalId}/documents`),
-    start: (proposalId: string) => post<ProposalDocResponse>(`/proposals/${proposalId}/documents`),
+    /** Start v1: blank (a price logged by hand comes across as one line), or from one of the client's proformas. */
+    start: (proposalId: string, body: { proformaId?: string } = {}) =>
+      post<ProposalDocResponse>(`/proposals/${proposalId}/documents`, body),
+    /** Two versions side by side. Figures only where both may be seen. */
+    compare: (proposalId: string, a: string, b: string) =>
+      get<ProposalCompare>(`/proposals/${proposalId}/compare?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`),
+    /** What a won proposal says its retainer or project should be — for the set-up forms. */
+    handoff: (proposalId: string) => get<ProposalHandoff>(`/proposals/${proposalId}/handoff`),
+    /** Management: what earlier final proposals charged for these services. */
+    priceHistory: (docId: string, names: string[]) =>
+      get<{ success: boolean; history: Record<string, PriceSuggestion[]> }>(
+        `/proposals/documents/${docId}/price-history?names=${encodeURIComponent(names.join('|'))}`,
+      ),
+    /** Management: rates agreed with a client, one service at a time. */
+    clientRates: (companyId?: string) =>
+      get<{ success: boolean; rates: ClientRateRow[] }>(`/proposals/client-rates${companyId ? `?companyId=${encodeURIComponent(companyId)}` : ''}`),
+    addClientRate: (body: { companyId: string; catalogItemId: string; agreedRate: number; validFrom?: string; validTo?: string | null; note?: string | null }) =>
+      post<{ success: boolean; id: string }>('/proposals/client-rates', body),
+    updateClientRate: (id: string, body: { agreedRate?: number; validTo?: string | null; note?: string | null }) =>
+      patch<{ success: boolean }>(`/proposals/client-rates/${id}`, body),
     get: (docId: string) => get<ProposalDocResponse>(`/proposals/documents/${docId}`),
     save: (
       docId: string,
@@ -1959,8 +1978,12 @@ export const api = {
     /** The same document as a Word file. */
     docxUrl: (docId: string) => fileUrl(`/proposals/documents/${docId}/docx`),
     discard: (docId: string) => del<{ success: boolean }>(`/proposals/documents/${docId}`),
-    setLines: (docId: string, items: ProposalLineDraft[]) =>
-      put<ProposalDocResponse>(`/proposals/documents/${docId}/line-items`, { items }),
+    /** The lines, and (when given) how the one-time fee is paid; null clears the split. */
+    setLines: (docId: string, items: ProposalLineDraft[], milestoneSplit?: MilestoneShare[] | null) =>
+      put<ProposalDocResponse>(
+        `/proposals/documents/${docId}/line-items`,
+        milestoneSplit === undefined ? { items } : { items, milestoneSplit },
+      ),
     /** What the lines would come to, without saving them: the Pricing tab's live totals. */
     price: (docId: string, items: ProposalLineDraft[]) =>
       post<{ success: boolean; price: ProposalPrice }>(`/proposals/documents/${docId}/price`, { items }),
@@ -1974,7 +1997,14 @@ export const api = {
     pdfUrl: (docId: string) => fileUrl(`/proposals/documents/${docId}/pdf`),
     markSent: (docId: string, step: NextStepBody = {}) =>
       post<{ success: boolean; version: { id: string; n: number }; stage: string }>(`/proposals/documents/${docId}/mark-sent`, step),
-    catalog: (all = false) => get<{ success: boolean; items: ServiceCatalogItem[] }>(`/proposals/catalog${all ? '?all=1' : ''}`),
+    /** With a client, Management also gets the rate agreed with them per service. */
+    catalog: (all = false, companyId?: string) => {
+      const q = new URLSearchParams();
+      if (all) q.set('all', '1');
+      if (companyId) q.set('companyId', companyId);
+      const qs = q.toString();
+      return get<{ success: boolean; items: ServiceCatalogItem[] }>(`/proposals/catalog${qs ? `?${qs}` : ''}`);
+    },
     addService: (body: ServiceCatalogInput) => post<{ success: boolean; item: ServiceCatalogItem }>('/proposals/catalog', body),
     updateService: (id: string, body: Partial<ServiceCatalogInput>) =>
       patch<{ success: boolean; item: ServiceCatalogItem }>(`/proposals/catalog/${id}`, body),
@@ -3245,7 +3275,84 @@ export interface ProposalLineDraft {
   discountAmount?: number;
   discountTrade?: string | null;
   isPassthrough?: boolean;
-  priceSource?: 'USER' | 'VERSION' | 'CATALOG';
+  priceSource?: ProposalPriceSource;
+}
+
+/** Where a line's rate came from. */
+export type ProposalPriceSource = 'USER' | 'VERSION' | 'CATALOG' | 'CLIENT_RATE' | 'HISTORY';
+
+/** One part of how a one-time fee is paid. */
+export interface MilestoneShare {
+  label: string;
+  percent: number;
+}
+
+/** An earlier final proposal's rate for the same service. */
+export interface PriceSuggestion {
+  rate: number;
+  qty: number;
+  unit: string | null;
+  discount: number;
+  client: string;
+  ref: string;
+  on: string | null;
+}
+
+export interface ClientRateRow {
+  id: string;
+  company: { id: string; name: string };
+  service: { id: string; name: string; unit: string; billing: ProposalBilling };
+  agreedRate: number;
+  validFrom: string;
+  validTo: string | null;
+  note: string | null;
+  approvedBy: string | null;
+  active: boolean;
+}
+
+export interface ProposalCompareSide {
+  id: string;
+  n: number;
+  ref: string;
+  status: ProposalDocStatus;
+  title: string | null;
+  layout: ProposalLayout;
+  sections: ProposalSection[];
+}
+
+export interface ProposalCompareLine {
+  billing: ProposalBilling | 'PASSTHROUGH';
+  qty: number;
+  unit: string | null;
+  unitRate: number;
+  discountAmount: number;
+  amount: number;
+}
+
+export interface ProposalCompare {
+  success: boolean;
+  a: ProposalCompareSide;
+  b: ProposalCompareSide;
+  price: {
+    a: { monthly: number; oneTime: number; passthrough: number; discount: number };
+    b: { monthly: number; oneTime: number; passthrough: number; discount: number };
+    lines: { name: string; a: ProposalCompareLine | null; b: ProposalCompareLine | null }[];
+  } | null;
+}
+
+export interface ProposalHandoff {
+  success: boolean;
+  kind: 'RETAINER' | 'PROJECT';
+  company: { id: string; name: string };
+  fromDocument: { id: string; ref: string } | null;
+  /** Figures are null for anybody who cannot see deal values. */
+  retainer: { monthlyValue: number | null; gstPercent: number; projects: string[] } | null;
+  project: {
+    name: string | null;
+    quotedValue: number | null;
+    gstPercent: number;
+    milestones: { label: string; percent: number; amount: number | null }[] | null;
+  } | null;
 }
 
 export interface ProposalPricedLine {
@@ -3345,6 +3452,8 @@ export interface ProposalDoc {
   floorOverride: { reason: string | null; by: string | null; at: string } | null;
   /** Set while it is with Management for review. */
   review: { requestedAt: string; by: string | null } | null;
+  /** How the one-time fee is paid, when set. */
+  milestoneSplit: MilestoneShare[] | null;
   /** Why Management sent it back, when they did. */
   reviewNote: string | null;
   aiThread: ProposalAiEntry[];
@@ -3403,6 +3512,8 @@ export interface ServiceCatalogItem {
   sortOrder: number;
   /** Management only. */
   standardRate?: number | null;
+  /** Management, asked for one client: the rate agreed with them, while it holds. */
+  clientRate?: { id: string; rate: number; validTo: string | null } | null;
 }
 
 export interface ServiceCatalogInput {

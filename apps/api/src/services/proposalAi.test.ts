@@ -66,6 +66,7 @@ beforeEach(() => {
     { id: 'cat-seo', name: 'SEO', billing: 'MONTHLY', unit: 'month', description: null, standardRate: null },
   ]);
   p.proposalDocument.update.mockResolvedValue({});
+  p.clientRate.findMany.mockResolvedValue([]);
 });
 
 const ask = (message: string, setsPrices = false) =>
@@ -138,6 +139,17 @@ describe('a suggestion', () => {
       // ₹40,000 was never typed and SEO has no standard rate: no rate at all.
       expect.objectContaining({ catalogItemId: 'cat-seo', unitRate: 0, rateFrom: null }),
     ]);
+  });
+
+  it('prefers the rate agreed with this client to the service list’s', async () => {
+    p.clientRate.findMany.mockResolvedValue([{ catalogItemId: 'cat-smm', agreedRate: 80000 }]);
+    replies.push(
+      { text: '', calls: [{ id: 't1', name: 'stage_line_items', args: { items: [{ service: 'Social media management' }] } }] },
+      { text: 'Staged.', calls: [] },
+    );
+    const { entry } = await ask('Add social media management', true);
+    if (entry.from !== 'ai') throw new Error('expected an answer');
+    expect(entry.lines?.items[0]).toMatchObject({ unitRate: 80000, rateFrom: 'CLIENT_RATE' });
   });
 
   it('is told what the client record already says, so it need not ask', async () => {

@@ -31,7 +31,7 @@ import {
   type ParagraphChild,
 } from 'docx';
 import { getLogoDataUri } from './documentPdf.js';
-import { NEEDS_INPUT, proseParts, rupees, type RenderableProposal } from './proposalDocument.js';
+import { NEEDS_INPUT, describeSplit, proseParts, rupees, type RenderableProposal } from './proposalDocument.js';
 import type { FeeGroup } from './proposalPricing.js';
 
 const INK = '163027';
@@ -165,6 +165,14 @@ function investment(p: RenderableProposal): (Paragraph | Table)[] {
   }
   const { monthly, oneTime, passthrough } = p.price;
   const out: (Paragraph | Table)[] = [...feeTable(monthly, 'Monthly', ' (per month)'), ...feeTable(oneTime, 'One-time', '')];
+  if (oneTime.lines.length && p.milestoneSplit) {
+    out.push(
+      new Paragraph({
+        spacing: { after: 200 },
+        children: [new TextRun({ text: `The one-time fee is paid ${describeSplit(p.milestoneSplit)}`, font: FONT, color: BODY, size: 18 })],
+      }),
+    );
+  }
   if (passthrough.lines.length) {
     out.push(
       eyebrow('Paid by you directly'),

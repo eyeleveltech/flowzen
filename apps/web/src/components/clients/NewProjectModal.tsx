@@ -140,6 +140,8 @@ export function NewProjectModal({ open, onClose, onCreated, prefill, initial, de
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sourceProposalId, setSourceProposalId] = useState('');
+  /** The proposal these figures came from, when it was written in Flowzen. */
+  const [handedFrom, setHandedFrom] = useState<string | null>(null);
 
   /* Only where there is a won deal with no project built from it yet. */
   const asksWhichDeal = !prefill?.sourceProposalId && deals.length > 0;
@@ -158,6 +160,7 @@ export function NewProjectModal({ open, onClose, onCreated, prefill, initial, de
     setDescription('');
     setBilling('STANDARD');
     setCustomRows([blankRow(), blankRow()]);
+    setHandedFrom(null);
     // What Zen filled in, over the defaults.
     if (initial?.name) setName(initial.name);
     if (initial?.gstPercent != null) setGstPercent(String(initial.gstPercent));
@@ -171,6 +174,38 @@ export function NewProjectModal({ open, onClose, onCreated, prefill, initial, de
       void api.companies.list().then((res) => setCompanies(res.companies)).catch(() => {});
     }
   }, [open, prefill, initial]);
+
+  /*
+   * A won deal's own proposal, when it was written in Flowzen (AI Proposal
+   * Builder, phase 3): its one-time fee, GST and title, and its payment split
+   * as the milestones. Filled in, never saved — the person reads the form and
+   * presses Create.
+   */
+  const dealId = prefill?.sourceProposalId || sourceProposalId;
+  useEffect(() => {
+    if (!open || !dealId) return;
+    let live = true;
+    api.proposalDocs
+      .handoff(dealId)
+      .then((h) => {
+        if (!live || !h.project) return;
+        const p = h.project;
+        if (p.name) setName((current) => current || p.name!);
+        if (p.quotedValue != null) setQuotedValue(String(p.quotedValue));
+        setGstPercent(String(p.gstPercent));
+        if (p.milestones?.length) {
+          setBilling('CUSTOM');
+          setCustomRows(
+            p.milestones.map((m) => ({ label: m.label, percent: String(m.percent), amount: m.amount != null ? String(m.amount) : '' })),
+          );
+        }
+        setHandedFrom(h.fromDocument?.ref ?? null);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [open, dealId]);
 
   const quoted = Number(quotedValue) || 0;
   const customPercentTotal = customRows.reduce((s, r) => s + (Number(r.percent) || 0), 0);
@@ -330,6 +365,11 @@ export function NewProjectModal({ open, onClose, onCreated, prefill, initial, de
     >
       <form onSubmit={submit}>
         <ModalBody className="space-y-4">
+          {handedFrom && (
+            <p className="rounded-xl bg-subtle px-3 py-2 text-xs text-secondary">
+              Filled in from proposal {handedFrom}, its payment split as the milestones. Change anything before you create it.
+            </p>
+          )}
           {prefill ? (
             <div>
               <span className="block text-sm font-medium text-body mb-1.5">Company</span>

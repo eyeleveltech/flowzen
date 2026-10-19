@@ -13,6 +13,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import toast from 'react-hot-toast';
 import { api, ApiError, type Company } from '@/lib/api-v2';
 import { useTeamMembers } from '@/hooks/queries';
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
@@ -86,6 +87,10 @@ export function NewRetainerModal({ open, onClose, onCreated, prefill, initial, d
   const [sourceProposalId, setSourceProposalId] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** The won proposal's other monthly services, offered as more projects on the retainer. */
+  const [extras, setExtras] = useState<{ name: string; on: boolean }[]>([]);
+  /** The proposal these figures came from, when it was written in Flowzen. */
+  const [handedFrom, setHandedFrom] = useState<string | null>(null);
 
   /*
    * Only asked when there is something to ask about: a deal was won for this
@@ -105,6 +110,8 @@ export function NewRetainerModal({ open, onClose, onCreated, prefill, initial, d
     setFirstProjectName('');
     setOwnerId('');
     setSourceProposalId(prefill?.sourceProposalId ?? '');
+    setExtras([]);
+    setHandedFrom(null);
     // What Zen filled in, over the defaults.
     if (initial?.gstPercent != null) setGstPercent(String(initial.gstPercent));
     if (initial?.billing) setBilling(initial.billing);
@@ -117,6 +124,33 @@ export function NewRetainerModal({ open, onClose, onCreated, prefill, initial, d
       void api.companies.list().then((res) => setCompanies(res.companies)).catch(() => {});
     }
   }, [open, prefill, initial]);
+
+  /*
+   * A won deal's own proposal, when it was written in Flowzen (AI Proposal
+   * Builder, phase 3): its monthly fee and GST, and each monthly service as a
+   * project on the retainer. Filled in, never saved — the person reads it and
+   * presses Create, and can change or untick anything first.
+   */
+  const dealId = prefill?.sourceProposalId || sourceProposalId;
+  useEffect(() => {
+    if (!open || !dealId) return;
+    let live = true;
+    api.proposalDocs
+      .handoff(dealId)
+      .then((h) => {
+        if (!live || !h.retainer) return;
+        if (h.retainer.monthlyValue != null) setMonthlyValue(String(h.retainer.monthlyValue));
+        setGstPercent(String(h.retainer.gstPercent));
+        const [first, ...rest] = h.retainer.projects;
+        if (first) setFirstProjectName((current) => current || first);
+        setExtras(rest.map((name) => ({ name, on: true })));
+        setHandedFrom(h.fromDocument?.ref ?? null);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [open, dealId]);
 
   const canSave = Boolean(companyId) && Number(monthlyValue) > 0 && Boolean(startDate);
 
@@ -138,7 +172,19 @@ export function NewRetainerModal({ open, onClose, onCreated, prefill, initial, d
         sourceProposalId: prefill?.sourceProposalId ?? sourceProposalId ?? undefined,
       });
       const created = (res as { retainer?: { id: string } }).retainer;
-      if (created?.id) onCreated(created.id);
+      if (created?.id) {
+        // The won proposal's other services, as projects on the new retainer.
+        const missed: string[] = [];
+        for (const extra of extras.filter((x) => x.on && x.name.trim())) {
+          try {
+            await api.retainers.createProject(created.id, { name: extra.name.trim() });
+          } catch {
+            missed.push(extra.name);
+          }
+        }
+        if (missed.length) toast.error(`Retainer created. Add ${missed.join(', ')} on the retainer: they could not be added here.`);
+        onCreated(created.id);
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not create the retainer');
     } finally {
@@ -224,6 +270,11 @@ export function NewRetainerModal({ open, onClose, onCreated, prefill, initial, d
           {/* Optional, and the first thing you see on the retainer afterwards.
               Left blank it falls back to "Monthly Retainer Work" -- a name
               nobody chose, which is what this field exists to avoid. */}
+          {handedFrom && (
+            <p className="rounded-xl bg-subtle px-3 py-2 text-xs text-secondary">
+              Filled in from proposal {handedFrom}. Change anything before you create it.
+            </p>
+          )}
           <Field
             label="What work is this for?"
             value={firstProjectName}
@@ -231,6 +282,21 @@ export function NewRetainerModal({ open, onClose, onCreated, prefill, initial, d
             placeholder="e.g. Social media management"
             hint="Optional. You can add more streams of work, and rename this, at any time."
           />
+          {extras.length > 0 && (
+            <fieldset className="space-y-1.5">
+              <legend className="mb-1 text-sm font-medium text-body">Also add these as projects on the retainer</legend>
+              {extras.map((x, i) => (
+                <label key={x.name} className="flex items-center gap-2 text-sm text-body">
+                  <input
+                    type="checkbox"
+                    checked={x.on}
+                    onChange={(e) => setExtras((list) => list.map((y, j) => (j === i ? { ...y, on: e.target.checked } : y)))}
+                  />
+                  {x.name}
+                </label>
+              ))}
+            </fieldset>
+          )}
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Start date" value={startDate} onChange={setStartDate} type="date" required />
             <Field

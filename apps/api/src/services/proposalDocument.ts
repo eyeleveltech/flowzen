@@ -259,6 +259,49 @@ export const linesForPricing = (
     isPassthrough: i.isPassthrough,
   }));
 
+// ── How a one-time fee is paid (phase 3) ───────────────────────────────────
+
+export interface MilestoneShare {
+  label: string;
+  percent: number;
+}
+
+/** Whole percentages adding up to 100, at most six parts. */
+export const milestoneSplitSchema = z
+  .array(
+    z.object({
+      label: z.string().trim().min(1, 'Name every part of the payment').max(60),
+      percent: z.number().int('Use whole percentages').min(1).max(100),
+    }),
+  )
+  .min(1)
+  .max(6, 'Six parts at most')
+  .refine((parts) => parts.reduce((s, p) => s + p.percent, 0) === 100, 'The parts of the payment must add up to 100%');
+
+export function parseMilestoneSplit(raw: unknown): MilestoneShare[] | null {
+  const parsed = milestoneSplitSchema.safeParse(raw);
+  return parsed.success ? parsed.data : null;
+}
+
+/**
+ * The split as rupees: whole rupees, the last part taking the rounding so the
+ * parts add up to the fee exactly — the same rule the project form uses.
+ */
+export function splitAmounts(total: number, split: MilestoneShare[]): (MilestoneShare & { amount: number })[] {
+  let given = 0;
+  return split.map((part, i) => {
+    const amount = i === split.length - 1 ? Math.round(total) - given : Math.round((total * part.percent) / 100);
+    given += amount;
+    return { ...part, amount };
+  });
+}
+
+/** "40% advance, 30% at design sign-off and 30% at launch." */
+export const describeSplit = (split: MilestoneShare[]): string => {
+  const parts = split.map((p) => `${p.percent}% ${p.label.trim().replace(/^./, (c) => c.toLowerCase())}`);
+  return parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}.` : `${parts[0]}.`;
+};
+
 // ── Loading for render ──────────────────────────────────────────────────────
 
 export interface RenderableProposal {
@@ -274,6 +317,8 @@ export interface RenderableProposal {
   org: { website: string | null; phone: string | null; contactEmail: string | null };
   kind: 'RETAINER' | 'PROJECT';
   layout: 'MINIMAL' | 'PREMIUM' | 'COMPACT';
+  /** How the one-time fee is paid, when it has been set. */
+  milestoneSplit: MilestoneShare[] | null;
   /** Null when the figures are not shown: no line items yet, or a reader who may not see them. */
   price: ProposalPrice | null;
   pricingNote: string | null;
@@ -330,6 +375,7 @@ export async function loadRenderableProposal(
     org: { website: org.website ?? null, phone: org.phone ?? null, contactEmail: org.contactEmail ?? null },
     kind: doc.proposal.kind,
     layout: doc.layout,
+    milestoneSplit: parseMilestoneSplit(doc.milestoneSplit),
     price: showPricing ? price : null,
     pricingNote: !showPricing
       ? 'Pricing is added by Management.'
@@ -429,9 +475,14 @@ function commercialHtml(p: RenderableProposal): string {
       </div>`
     : '';
   const both = monthly.lines.length && oneTime.lines.length;
+  const split =
+    oneTime.lines.length && p.milestoneSplit
+      ? `<p class="note split">The one-time fee is paid ${escapeHtml(describeSplit(p.milestoneSplit))}</p>`
+      : '';
   return `
     ${feeTable(monthly, 'Monthly', ' (per month)')}
     ${feeTable(oneTime, 'One-time', '')}
+    ${split}
     ${pass}
     ${both ? '<p class="note">The monthly fee and the one-time fee are billed separately.</p>' : ''}`;
 }
@@ -497,6 +548,7 @@ const BASE_CSS = `
   tr.tax td { color: ${MUTED}; font-size: 8.5pt; padding-top: 5px; }
   .fee { break-inside: avoid; page-break-inside: avoid; margin-bottom: 6mm; }
   .note { font-size: 8.5pt; color: ${MUTED}; margin-top: 6px; }
+  .note.split { color: ${BODY}; font-size: 9pt; margin: -3mm 0 6mm; }
   .pending { background: ${TINT}; border: 1px dashed ${RULE}; padding: 14px; color: ${MUTED}; }
   .needs { background: ${FLAG}; color: ${FLAG_INK}; border-radius: 4px; padding: 1px 6px; font-size: 0.9em; font-weight: 600; }
   .sign { margin-top: 12mm; font-size: 9pt; color: ${MUTED}; }

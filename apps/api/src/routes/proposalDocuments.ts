@@ -15,6 +15,9 @@
  *   - Phase 2: "Send for review" hands a draft to Management (it is then
  *     theirs to edit, price, send back or finalise), the AI suggests text on
  *     request, and every final also keeps a Word file.
+ *   - Phase 3: compare two versions, start from a proforma, agreed rates per
+ *     client, past proposals' rates as suggestions, and a won proposal setting
+ *     up its retainer or project (the person confirms the form).
  *
  * Drafts are not ProposalVersions. A version is a proposal that was SENT — the
  * pipeline value, the Monday brief, the stalled-deal alert and the forecast all
@@ -35,7 +38,10 @@ import {
   emptySections,
   linesForPricing,
   loadRenderableProposal,
+  milestoneSplitSchema,
   needsInputIn,
+  parseMilestoneSplit,
+  splitAmounts,
   nextProposalRef,
   parseSections,
   pricingContextFor,
@@ -50,6 +56,8 @@ import { renderProposalDocx } from '../services/proposalDocx.js';
 import { applyChanges, askProposalAi, parseThread, type ThreadEntry } from '../services/proposalAi.js';
 import { AssistantFailed, AssistantNotConfigured } from '../services/moneyAssistant.js';
 import { REVIEW_RULE } from '../services/alertRules.js';
+import { canSeeDealValues } from '../utils/dealValues.js';
+import { asStoredDay, dayKey, orgToday } from '../utils/moneyDates.js';
 
 export const proposalDocumentsRouter = Router();
 proposalDocumentsRouter.use(authenticate);
@@ -94,12 +102,22 @@ const catalogOut = (i: Prisma.ServiceCatalogItemGetPayload<object>, withRate: bo
 
 proposalDocumentsRouter.get('/catalog', requirePermission('pipeline.read'), async (req: AuthRequest, res: Response, next) => {
   try {
+    const orgId = req.user!.organizationId;
     const all = isManagement(req) && req.query.all === '1';
     const items = await prisma.serviceCatalogItem.findMany({
-      where: { organizationId: req.user!.organizationId, ...(all ? {} : { active: true }) },
+      where: { organizationId: orgId, ...(all ? {} : { active: true }) },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
     });
-    res.json({ success: true, items: items.map((i) => catalogOut(i, isManagement(req))) });
+    // For one client, Management also gets the rate agreed with them, where there is one.
+    const companyId = typeof req.query.companyId === 'string' ? req.query.companyId : null;
+    const agreed = isManagement(req) && companyId ? await activeClientRates(orgId, companyId) : new Map<string, ClientRateNow>();
+    res.json({
+      success: true,
+      items: items.map((i) => ({
+        ...catalogOut(i, isManagement(req)),
+        ...(isManagement(req) && companyId ? { clientRate: agreed.get(i.id) ?? null } : {}),
+      })),
+    });
   } catch (e) {
     next(e);
   }
@@ -315,6 +333,7 @@ function documentOut(doc: LoadedDocument, withPrices: boolean) {
     review: doc.reviewRequestedAt
       ? { requestedAt: doc.reviewRequestedAt, by: doc.reviewRequestedBy?.name ?? null }
       : null,
+    milestoneSplit: parseMilestoneSplit(doc.milestoneSplit),
     reviewNote: doc.reviewNote,
     // The AI conversation. Staged rates are Management's, like every figure on a draft.
     aiThread: parseThread(doc.aiThread).map((e) =>
@@ -429,8 +448,26 @@ proposalDocumentsRouter.get('/:id/documents', requirePermission('pipeline.read')
   }
 });
 
+const startSchema = z.object({
+  /** Start from this client's proforma: its lines and its terms. */
+  proformaId: z.string().min(1).optional(),
+});
+
+/** A proforma's terms, as bullets: by line, or by sentence when it is one line. */
+const termsAsBullets = (terms: string): string => {
+  // List markers only ("- ", "1. ", "2) "): "18% GST" keeps its 18.
+  const lines = terms.split(/\r?\n/).map((l) => l.replace(/^\s*(?:[-•*]|\d+[.)])\s+/, '').trim()).filter(Boolean);
+  const parts = lines.length > 1 ? lines : (lines[0] ?? '').split(/(?<=\.)\s+/).map((l) => l.trim()).filter(Boolean);
+  return parts.map((l) => `- ${l}`).join('\n');
+};
+
 proposalDocumentsRouter.post('/:id/documents', requirePermission('pipeline.write'), async (req: AuthRequest, res: Response, next) => {
   try {
+    const started = startSchema.safeParse(req.body ?? {});
+    if (!started.success) {
+      res.status(400).json({ success: false, error: started.error.issues[0].message });
+      return;
+    }
     const orgId = req.user!.organizationId;
     const proposal = await prisma.proposal.findFirst({
       where: { id: String(req.params.id), organizationId: orgId, deletedAt: null },
@@ -463,13 +500,77 @@ proposalDocumentsRouter.post('/:id/documents', requirePermission('pipeline.write
     }
 
     const org = await prisma.organization.findUniqueOrThrow({ where: { id: orgId }, select: { name: true, defaultTermsAndConditions: true } });
+    const sections = defaultSections({ orgName: org.name, terms: org.defaultTermsAndConditions });
+    const monthly = proposal.kind === 'RETAINER';
+    type Seed = { name: string; description: string | null; billing: 'MONTHLY' | 'ONE_TIME'; qty: number; unit: string | null; unitRate: number };
+    let seed: Seed[] = [];
+    let note: string | null = null;
+
+    if (started.data.proformaId) {
+      // A copy: the proforma itself is only read.
+      const pf = await prisma.proforma.findFirst({
+        where: { id: started.data.proformaId, organizationId: orgId, companyId: proposal.companyId, status: { not: 'CANCELLED' } },
+        include: { lineItems: { orderBy: { serialNo: 'asc' } } },
+      });
+      if (!pf) {
+        res.status(404).json({ success: false, error: 'That proforma is not one of this client’s.' });
+        return;
+      }
+      const billing: Seed['billing'] =
+        pf.sourceType === 'MONTH_CARD' ? 'MONTHLY' : pf.sourceType === 'PROJECT' ? 'ONE_TIME' : monthly ? 'MONTHLY' : 'ONE_TIME';
+      seed = pf.lineItems.length
+        ? pf.lineItems.map((li) => {
+            const [first, ...rest] = li.particulars.split(/\r?\n/);
+            return {
+              name: first.trim().slice(0, 200) || 'Service',
+              description: rest.join(' ').trim().slice(0, 2000) || null,
+              billing,
+              qty: Number(li.units) || 1,
+              unit: billing === 'MONTHLY' ? 'month' : null,
+              unitRate: Number(li.unitCost),
+            };
+          })
+        : [{ name: pf.description?.trim().slice(0, 200) || `As on proforma ${pf.number}`, description: null, billing, qty: 1, unit: null, unitRate: Number(pf.amount) }];
+      if (pf.terms?.trim()) {
+        const at = sections.findIndex((x) => x.type === 'TERMS');
+        if (at >= 0) sections[at] = { ...sections[at], body: termsAsBullets(pf.terms) };
+      }
+      note = `Started from proforma ${pf.number}.`;
+    } else {
+      /*
+       * A price already logged by hand comes across as one line, marked as
+       * such (blueprint F): the deal's figure is not lost when its proposal
+       * starts being written here, and nobody retypes it.
+       */
+      const logged = await prisma.proposalVersion.findFirst({
+        where: { proposalId: proposal.id, sentFrom: null },
+        orderBy: { n: 'desc' },
+      });
+      if (logged && Number(logged.value) > 0) {
+        seed = [
+          {
+            name: monthly ? 'Monthly retainer' : 'Project fee',
+            description: [logged.scopeSummary?.trim().slice(0, 400), `Price from v${logged.n}, logged by hand`].filter(Boolean).join(' · '),
+            billing: monthly ? 'MONTHLY' : 'ONE_TIME',
+            qty: 1,
+            unit: monthly ? 'month' : null,
+            unitRate: Number(logged.value),
+          },
+        ];
+      }
+    }
+
     const created = await prisma.proposalDocument.create({
       data: {
         proposalId: proposal.id,
         n: 1,
         title: `Proposal for ${proposal.company.name}`,
-        sections: defaultSections({ orgName: org.name, terms: org.defaultTermsAndConditions }) as unknown as Prisma.InputJsonValue,
+        sections: sections as unknown as Prisma.InputJsonValue,
         createdById: req.user!.userId,
+        revisionNote: note,
+        ...(seed.length
+          ? { lineItems: { create: seed.map((l, i) => ({ ...l, priceSource: 'VERSION' as const, sortOrder: i })) } }
+          : {}),
       },
     });
     await prisma.activity.create({
@@ -479,7 +580,7 @@ proposalDocumentsRouter.post('/:id/documents', requirePermission('pipeline.write
         entityId: proposal.id,
         actorId: req.user!.userId,
         verb: 'proposal_document_started',
-        payload: { n: 1 },
+        payload: { n: 1, ...(note ? { note } : {}) },
       },
     });
     const doc = await prisma.proposalDocument.findUniqueOrThrow({ where: { id: created.id }, include: documentInclude });
@@ -594,9 +695,13 @@ const lineSchema = z.object({
   discountAmount: z.number().min(0, 'A discount cannot be negative').max(1e9).optional(),
   discountTrade: z.string().trim().max(200).optional().nullable(),
   isPassthrough: z.boolean().optional(),
-  priceSource: z.enum(['USER', 'VERSION', 'CATALOG']).optional(),
+  priceSource: z.enum(['USER', 'VERSION', 'CATALOG', 'CLIENT_RATE', 'HISTORY']).optional(),
 });
-const linesSchema = z.object({ items: z.array(lineSchema).max(60, 'Keep a proposal to sixty lines or fewer') });
+const linesSchema = z.object({
+  items: z.array(lineSchema).max(60, 'Keep a proposal to sixty lines or fewer'),
+  /** How the one-time fee is paid. Null clears it; left out leaves it. */
+  milestoneSplit: milestoneSplitSchema.nullable().optional(),
+});
 
 proposalDocumentsRouter.post('/documents/:docId/price', requireManagement, async (req: AuthRequest, res: Response, next) => {
   try {
@@ -640,7 +745,8 @@ proposalDocumentsRouter.put('/documents/:docId/line-items', requireManagement, a
       }
     }
 
-    await saveLines(doc, parsed.data.items);
+    const split = parsed.data.milestoneSplit;
+    await saveLines(doc, parsed.data.items, split === undefined ? {} : { milestoneSplit: split ?? Prisma.DbNull });
     const fresh = await prisma.proposalDocument.findUniqueOrThrow({ where: { id: doc.id }, include: documentInclude });
     await respondWithDocument(req, res, fresh);
   } catch (e) {
@@ -841,6 +947,7 @@ proposalDocumentsRouter.post('/documents/:docId/versions', requirePermission('pi
           revisionNote: parsed.data.revisionNote || null,
           basedOnId: doc.id,
           createdById: req.user!.userId,
+          milestoneSplit: doc.milestoneSplit === null ? Prisma.DbNull : (doc.milestoneSplit as Prisma.InputJsonValue),
           // The same lines, so the same fee: a floor reason already given still
           // stands. Changing the monthly fee clears it (PUT line-items).
           floorOverrideReason: doc.floorOverrideReason,
@@ -881,6 +988,334 @@ proposalDocumentsRouter.post('/documents/:docId/versions', requirePermission('pi
     });
     const fresh = await prisma.proposalDocument.findUniqueOrThrow({ where: { id: created.id }, include: documentInclude });
     await respondWithDocument(req, res, fresh, 201);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// ── Compare two versions (phase 3) ──────────────────────────────────────────
+
+type PriceSummary = { monthly: number; oneTime: number; passthrough: number; discount: number };
+const summaryOf = (p: ProposalPrice): PriceSummary => ({
+  monthly: p.monthly.subtotal,
+  oneTime: p.oneTime.subtotal,
+  passthrough: p.passthrough.total,
+  discount: Math.round((p.monthly.discount + p.oneTime.discount) * 100) / 100,
+});
+
+proposalDocumentsRouter.get('/:id/compare', requirePermission('pipeline.read'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const ids = [req.query.a, req.query.b].map((v) => (typeof v === 'string' ? v : ''));
+    if (!ids[0] || !ids[1] || ids[0] === ids[1]) {
+      res.status(400).json({ success: false, error: 'Pick two different versions to compare.' });
+      return;
+    }
+    const docs = await prisma.proposalDocument.findMany({
+      where: { id: { in: ids }, proposalId: String(req.params.id), proposal: { organizationId: req.user!.organizationId, deletedAt: null } },
+      include: documentInclude,
+    });
+    const [a, b] = ids.map((id) => docs.find((d) => d.id === id));
+    if (!a || !b) {
+      res.status(404).json({ success: false, error: 'One of those versions is not on this deal.' });
+      return;
+    }
+    const side = (d: LoadedDocument) => ({
+      id: d.id,
+      n: d.n,
+      ref: documentRef(d.proposal.refNo, d.n),
+      status: d.status,
+      title: d.title,
+      layout: d.layout,
+      sections: parseSections(d.sections),
+    });
+    // Figures only where both may be seen: Management, or two finals.
+    const showPrices = showsFigures(req, a.status) && showsFigures(req, b.status);
+    let price = null;
+    if (showPrices) {
+      const priced = async (d: LoadedDocument) =>
+        d.status === 'FINAL' && d.commercialSnapshot ? (d.commercialSnapshot as unknown as ProposalPrice) : (await priceOf(d)).price;
+      const [pa, pb] = await Promise.all([priced(a), priced(b)]);
+      const linesOf = (p: ProposalPrice) => [...p.monthly.lines, ...p.oneTime.lines, ...p.passthrough.lines];
+      const keyed = new Map<string, { name: string; a: unknown; b: unknown }>();
+      const brief = (l: ProposalPrice['monthly']['lines'][number]) => ({
+        billing: l.isPassthrough ? 'PASSTHROUGH' : l.billing,
+        qty: l.qty,
+        unit: l.unit,
+        unitRate: l.unitRate,
+        discountAmount: l.discountAmount,
+        amount: l.amount,
+      });
+      for (const l of linesOf(pa)) keyed.set(l.name.toLowerCase(), { name: l.name, a: brief(l), b: null });
+      for (const l of linesOf(pb)) {
+        const k = l.name.toLowerCase();
+        keyed.set(k, { name: keyed.get(k)?.name ?? l.name, a: keyed.get(k)?.a ?? null, b: brief(l) });
+      }
+      price = { a: summaryOf(pa), b: summaryOf(pb), lines: Array.from(keyed.values()) };
+    }
+    res.json({ success: true, a: side(a), b: side(b), price });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// ── Agreed rates per client (phase 3, Management) ──────────────────────────
+
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+type ClientRateNow = { id: string; rate: number; validTo: string | null };
+
+/** The rates agreed with one client that hold today, by service. */
+async function activeClientRates(organizationId: string, companyId: string): Promise<Map<string, ClientRateNow>> {
+  const org = await prisma.organization.findUnique({ where: { id: organizationId }, select: { timezone: true } });
+  const today = asStoredDay(orgToday(org?.timezone || 'Asia/Kolkata'));
+  const rows = await prisma.clientRate.findMany({
+    where: { organizationId, companyId, validFrom: { lte: today }, OR: [{ validTo: null }, { validTo: { gte: today } }] },
+    orderBy: { validFrom: 'desc' },
+  });
+  const out = new Map<string, ClientRateNow>();
+  for (const r of rows) {
+    if (!out.has(r.catalogItemId)) {
+      out.set(r.catalogItemId, { id: r.id, rate: money(r.agreedRate), validTo: r.validTo ? dayKey(r.validTo) : null });
+    }
+  }
+  return out;
+}
+
+const clientRateSchema = z.object({
+  companyId: z.string().min(1),
+  catalogItemId: z.string().min(1, 'Pick the service'),
+  agreedRate: z.number().positive('The agreed rate must be more than zero').max(1e9),
+  validFrom: z.string().regex(DAY, 'That start date is not a real date').optional(),
+  validTo: z.string().regex(DAY, 'That end date is not a real date').optional().nullable(),
+  note: z.string().trim().max(300).optional().nullable(),
+});
+
+proposalDocumentsRouter.get('/client-rates', requireManagement, async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const companyId = typeof req.query.companyId === 'string' ? req.query.companyId : undefined;
+    const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { timezone: true } });
+    const today = orgToday(org?.timezone || 'Asia/Kolkata');
+    const rows = await prisma.clientRate.findMany({
+      where: { organizationId: orgId, ...(companyId ? { companyId } : {}) },
+      orderBy: [{ validFrom: 'desc' }],
+      include: {
+        company: { select: { id: true, name: true } },
+        catalogItem: { select: { id: true, name: true, unit: true, billing: true } },
+        approvedBy: { select: { name: true } },
+      },
+      take: 500,
+    });
+    res.json({
+      success: true,
+      rates: rows.map((r) => {
+        const from = dayKey(r.validFrom);
+        const to = r.validTo ? dayKey(r.validTo) : null;
+        return {
+          id: r.id,
+          company: r.company,
+          service: r.catalogItem,
+          agreedRate: money(r.agreedRate),
+          validFrom: from,
+          validTo: to,
+          note: r.note,
+          approvedBy: r.approvedBy?.name ?? null,
+          active: from <= today && (!to || to >= today),
+        };
+      }),
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+proposalDocumentsRouter.post('/client-rates', requireManagement, async (req: AuthRequest, res: Response, next) => {
+  try {
+    const parsed = clientRateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.issues[0].message });
+      return;
+    }
+    const orgId = req.user!.organizationId;
+    const d = parsed.data;
+    const [company, item, org] = await Promise.all([
+      prisma.company.findFirst({ where: { id: d.companyId, organizationId: orgId }, select: { id: true, name: true } }),
+      prisma.serviceCatalogItem.findFirst({ where: { id: d.catalogItemId, organizationId: orgId }, select: { id: true, name: true } }),
+      prisma.organization.findUnique({ where: { id: orgId }, select: { timezone: true } }),
+    ]);
+    if (!company || !item) {
+      res.status(404).json({ success: false, error: 'That client or service was not found.' });
+      return;
+    }
+    const from = d.validFrom ?? orgToday(org?.timezone || 'Asia/Kolkata');
+    if (d.validTo && d.validTo < from) {
+      res.status(400).json({ success: false, error: 'The end date is before the start date.' });
+      return;
+    }
+    const rate = await prisma.clientRate.create({
+      data: {
+        organizationId: orgId,
+        companyId: company.id,
+        catalogItemId: item.id,
+        agreedRate: d.agreedRate,
+        validFrom: asStoredDay(from),
+        validTo: d.validTo ? asStoredDay(d.validTo) : null,
+        note: d.note || null,
+        approvedById: req.user!.userId,
+      },
+    });
+    await prisma.activity.create({
+      data: {
+        organizationId: orgId,
+        entityType: 'Company',
+        entityId: company.id,
+        actorId: req.user!.userId,
+        verb: 'client_rate_agreed',
+        payload: { service: item.name, amount: d.agreedRate, from, to: d.validTo ?? null },
+      },
+    });
+    res.status(201).json({ success: true, id: rate.id });
+  } catch (e) {
+    next(e);
+  }
+});
+
+const clientRatePatchSchema = z.object({
+  agreedRate: z.number().positive().max(1e9).optional(),
+  validTo: z.string().regex(DAY, 'That end date is not a real date').nullable().optional(),
+  note: z.string().trim().max(300).nullable().optional(),
+});
+
+proposalDocumentsRouter.patch('/client-rates/:rateId', requireManagement, async (req: AuthRequest, res: Response, next) => {
+  try {
+    const parsed = clientRatePatchSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: parsed.error.issues[0].message });
+      return;
+    }
+    const existing = await prisma.clientRate.findFirst({ where: { id: String(req.params.rateId), organizationId: req.user!.organizationId } });
+    if (!existing) {
+      res.status(404).json({ success: false, error: 'That agreed rate was not found.' });
+      return;
+    }
+    const d = parsed.data;
+    if (d.validTo && d.validTo < dayKey(existing.validFrom)) {
+      res.status(400).json({ success: false, error: 'The end date is before the start date.' });
+      return;
+    }
+    await prisma.clientRate.update({
+      where: { id: existing.id },
+      data: {
+        ...(d.agreedRate !== undefined ? { agreedRate: d.agreedRate } : {}),
+        ...(d.validTo !== undefined ? { validTo: d.validTo ? asStoredDay(d.validTo) : null } : {}),
+        ...(d.note !== undefined ? { note: d.note || null } : {}),
+      },
+    });
+    res.json({ success: true });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// ── What we charged before (phase 3, Management) ───────────────────────────
+//
+// For each line on this document, the same service on up to three earlier
+// final proposals: the rate, the client, the reference and the date. Shown as
+// a suggestion beside the line; it never fills a rate without a click.
+
+proposalDocumentsRouter.get('/documents/:docId/price-history', requireManagement, async (req: AuthRequest, res: Response, next) => {
+  try {
+    const doc = await loadDocument(req, res);
+    if (!doc) return;
+    const wanted = new Set(doc.lineItems.map((l) => l.name.trim().toLowerCase()));
+    const extra = typeof req.query.names === 'string' ? req.query.names.split('|').map((n) => n.trim().toLowerCase()).filter(Boolean) : [];
+    for (const n of extra.slice(0, 40)) wanted.add(n);
+    const history: Record<string, { rate: number; qty: number; unit: string | null; discount: number; client: string; ref: string; on: string | null }[]> = {};
+    if (wanted.size) {
+      const finals = await prisma.proposalDocument.findMany({
+        where: { status: 'FINAL', id: { not: doc.id }, proposal: { organizationId: req.user!.organizationId, deletedAt: null } },
+        orderBy: { finalisedAt: 'desc' },
+        take: 300,
+        select: { n: true, finalisedAt: true, commercialSnapshot: true, proposal: { select: { refNo: true, company: { select: { name: true } } } } },
+      });
+      for (const f of finals) {
+        const snap = f.commercialSnapshot as unknown as ProposalPrice | null;
+        if (!snap) continue;
+        for (const l of [...(snap.monthly?.lines ?? []), ...(snap.oneTime?.lines ?? [])]) {
+          const k = l.name.trim().toLowerCase();
+          if (!wanted.has(k)) continue;
+          const list = (history[k] ??= []);
+          if (list.length >= 3) continue;
+          list.push({
+            rate: l.unitRate,
+            qty: l.qty,
+            unit: l.unit,
+            discount: l.discountAmount,
+            client: f.proposal.company.name,
+            ref: documentRef(f.proposal.refNo, f.n),
+            on: f.finalisedAt ? dayKey(f.finalisedAt) : null,
+          });
+        }
+      }
+    }
+    res.json({ success: true, history });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// ── A won deal, set up as work (phase 3) ────────────────────────────────────
+//
+// What the won proposal says the retainer or project should be: the monthly
+// fee and its services as retainer projects, or the one-time fee and its
+// payment split as milestones. Read only — the retainer and project forms
+// open filled in with this, and nothing exists until somebody saves one.
+
+proposalDocumentsRouter.get('/:id/handoff', requirePermission('pipeline.read'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const proposal = await prisma.proposal.findFirst({
+      where: { id: String(req.params.id), organizationId: req.user!.organizationId, deletedAt: null },
+      include: {
+        company: { select: { id: true, name: true } },
+        wonVersion: { include: { sentFrom: { select: { id: true, n: true, title: true, commercialSnapshot: true, milestoneSplit: true } } } },
+      },
+    });
+    if (!proposal) {
+      res.status(404).json({ success: false, error: 'Proposal not found' });
+      return;
+    }
+    if (proposal.outcome !== ProposalOutcome.WON || !proposal.wonVersion) {
+      res.status(400).json({ success: false, error: 'This deal is not won yet.' });
+      return;
+    }
+    const figures = canSeeDealValues(req.user!);
+    const doc = proposal.wonVersion.sentFrom;
+    const price = (doc?.commercialSnapshot as unknown as ProposalPrice | null) ?? null;
+    const value = price ? dealValueOf(price, proposal.kind) : money(proposal.wonVersion.value);
+    const gst = price ? (proposal.kind === 'RETAINER' ? price.monthly.gstRatePercent : price.oneTime.gstRatePercent) : 18;
+    const names = (lines: { name: string }[]) => Array.from(new Set(lines.map((l) => l.name.trim()).filter(Boolean)));
+    const split = parseMilestoneSplit(doc?.milestoneSplit ?? null);
+    res.json({
+      success: true,
+      kind: proposal.kind,
+      company: proposal.company,
+      fromDocument: doc ? { id: doc.id, ref: documentRef(proposal.refNo, doc.n) } : null,
+      retainer:
+        proposal.kind === 'RETAINER'
+          ? { monthlyValue: figures ? value : null, gstPercent: gst, projects: price ? names(price.monthly.lines) : [] }
+          : null,
+      project:
+        proposal.kind === 'PROJECT'
+          ? {
+              name: doc?.title?.replace(/^proposal for\s+/i, '').trim() || null,
+              quotedValue: figures ? value : null,
+              gstPercent: gst,
+              milestones: split
+                ? splitAmounts(value, split).map((m) => ({ label: m.label, percent: m.percent, amount: figures ? m.amount : null }))
+                : null,
+            }
+          : null,
+    });
   } catch (e) {
     next(e);
   }
@@ -1093,7 +1528,7 @@ proposalDocumentsRouter.post('/documents/:docId/ai/:entryId', requirePermission(
         discountAmount: 0,
         discountTrade: null,
         isPassthrough: false,
-        priceSource: l.rateFrom === 'SERVICE_LIST' ? 'CATALOG' : 'USER',
+        priceSource: l.rateFrom === 'SERVICE_LIST' ? 'CATALOG' : l.rateFrom === 'CLIENT_RATE' ? 'CLIENT_RATE' : 'USER',
       }));
       await saveLines(doc, [...current, ...added], {
         sections: sections as unknown as Prisma.InputJsonValue,

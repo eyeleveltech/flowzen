@@ -185,6 +185,7 @@ model Organization {
   tasks                      Task[]
   internalProjects           InternalProject[]
   serviceCatalogItems        ServiceCatalogItem[]
+  clientRates                ClientRate[]
   zenConversations           ZenConversation[]
   zenMemories                ZenMemory[]
   costs                      Cost[]
@@ -316,6 +317,7 @@ model User {
   proposalFloorOverrides     ProposalDocument[]   @relation("ProposalDocumentFloorOverrideBy")
   proposalReviewsRequested   ProposalDocument[]   @relation("ProposalDocumentReviewRequestedBy")
   serviceCatalogEdits        ServiceCatalogItem[] @relation("ServiceCatalogUpdatedBy")
+  clientRatesApproved        ClientRate[]         @relation("ClientRateApprovedBy")
 
   @@index([organizationId, active])
   @@index([focusTaskId])
@@ -375,6 +377,7 @@ model Company {
   /// — chasing them, mostly. See `Task.companyId`.
   tasks         Task[]         @relation("CompanyTasks")
   calendarEvents CalendarEvent[]
+  clientRates   ClientRate[]
 
   @@unique([organizationId, name])
   @@index([organizationId, status])
@@ -621,8 +624,13 @@ enum ProposalBilling {
 /// Where a line's rate came from — shown beside it.
 enum ProposalPriceSource {
   USER
+  /// Copied from an earlier version, or from a proforma (phase 3).
   VERSION
   CATALOG
+  /// The rate agreed with this client for this service (phase 3).
+  CLIENT_RATE
+  /// A past proposal's rate, used on a click — a suggestion only (phase 3).
+  HISTORY
 }
 
 model ProposalDocument {
@@ -648,6 +656,10 @@ model ProposalDocument {
   floorOverrideReason String?
   floorOverrideById   String?
   floorOverrideAt     DateTime?
+  /// How a one-time fee is paid, as [{ label, percent }] adding up to 100
+  /// (phase 3). Printed under the one-time fee, and the milestones a won
+  /// project is set up with. Null: decided when the project is set up.
+  milestoneSplit      Json?
   /// The final PDF, made once at Finalise, so what was sent can be reproduced.
   finalPdf            Bytes?
   /// The same document in Word, made at the same moment (phase 2).
@@ -728,10 +740,38 @@ model ServiceCatalogItem {
   organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   updatedBy    User?              @relation("ServiceCatalogUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
   lineItems    ProposalLineItem[]
+  clientRates  ClientRate[]
 
   @@unique([organizationId, name])
   @@index([organizationId, active])
   @@map("service_catalog_items")
+}
+
+/// A rate agreed with one client for one service (AI Proposal Builder,
+/// phase 3) — a partner rate, a renewal price. Used before the service list's
+/// standard rate while it is valid. Management sets and ends them.
+model ClientRate {
+  id             String    @id @default(cuid())
+  organizationId String
+  companyId      String
+  catalogItemId  String
+  agreedRate     Decimal   @db.Decimal(12, 2)
+  validFrom      DateTime  @db.Date
+  /// Null: until somebody ends it.
+  validTo        DateTime? @db.Date
+  note           String?
+  approvedById   String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  company      Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  catalogItem  ServiceCatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+  approvedBy   User?              @relation("ClientRateApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, companyId])
+  @@index([companyId, catalogItemId])
+  @@map("client_rates")
 }
 
 enum ProformaStatus {

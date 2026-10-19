@@ -7,13 +7,14 @@
  * for particular industries. Below it, Finalise needs a written reason. And
  * the service list: what the studio sells, at its standard rate, for the
  * Pricing tab to pick from. Anyone writing a proposal sees the names; only
- * Management sees the rates.
+ * Management sees the rates. And (phase 3) the rates agreed with particular
+ * clients, which a proposal uses before the standard one while they hold.
  */
 
 import { useEffect, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { api, ApiError, formatMoney, type ServiceCatalogItem, type ServiceCatalogInput } from '@/lib/api-v2';
+import { api, ApiError, formatDate, formatMoney, type ClientRateRow, type ServiceCatalogItem, type ServiceCatalogInput } from '@/lib/api-v2';
 import { SectionCard } from '@/components/ui/section-card';
 import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
@@ -29,6 +30,7 @@ export function PricingSetupTab() {
     <div className="space-y-6">
       <FloorsCard />
       <ServicesCard />
+      <ClientRatesCard />
     </div>
   );
 }
@@ -291,5 +293,185 @@ function ServiceFields({ value, onChange }: { value: Draft; onChange: (d: Draft)
         <input className={INPUT} value={value.description} onChange={(e) => set({ description: e.target.value })} maxLength={2000} />
       </label>
     </div>
+  );
+}
+
+// ── Agreed client rates (phase 3) ───────────────────────────────────────────
+
+function ClientRatesCard() {
+  const [rates, setRates] = useState<ClientRateRow[] | null>(null);
+  const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
+  const [services, setServices] = useState<ServiceCatalogItem[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [form, setForm] = useState({ companyId: '', catalogItemId: '', rate: '', from: '', to: '', note: '' });
+  const [saving, setSaving] = useState(false);
+  const [showEnded, setShowEnded] = useState(false);
+
+  const load = () =>
+    api.proposalDocs
+      .clientRates()
+      .then((r) => setRates(r.rates))
+      .catch((e) => setLoadError(e instanceof ApiError ? e.message : 'Could not load the agreed rates.'));
+
+  useEffect(() => {
+    void load();
+    api.companies
+      .list()
+      .then((r) => setCompanies(r.companies.map((c: { id: string; name: string }) => ({ id: c.id, name: c.name }))))
+      .catch(() => undefined);
+    api.proposalDocs
+      .catalog(true)
+      .then((r) => setServices(r.items))
+      .catch(() => undefined);
+  }, []);
+
+  const add = async () => {
+    setSaving(true);
+    try {
+      await api.proposalDocs.addClientRate({
+        companyId: form.companyId,
+        catalogItemId: form.catalogItemId,
+        agreedRate: Number(form.rate),
+        ...(form.from ? { validFrom: form.from } : {}),
+        validTo: form.to || null,
+        note: form.note.trim() || null,
+      });
+      toast.success('Agreed rate saved');
+      setAdding(false);
+      setForm({ companyId: '', catalogItemId: '', rate: '', from: '', to: '', note: '' });
+      void load();
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Could not save the agreed rate.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const end = async (r: ClientRateRow) => {
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      await api.proposalDocs.updateClientRate(r.id, { validTo: today < r.validFrom ? r.validFrom : today });
+      toast.success(`${r.company.name}'s rate for ${r.service.name} ends today`);
+      void load();
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Could not end that rate.');
+    }
+  };
+
+  const shown = (rates ?? []).filter((r) => showEnded || r.active || r.validFrom > new Date().toISOString().slice(0, 10));
+  const canAdd = form.companyId && form.catalogItemId && Number(form.rate) > 0;
+
+  return (
+    <SectionCard
+      title="Agreed client rates"
+      description="A rate agreed with one client for one service: a partner rate, a renewal price. A proposal for that client uses it before the standard rate while it holds."
+    >
+      {loadError && <ErrorNote>{loadError}</ErrorNote>}
+      {rates && shown.length === 0 && !adding && <p className="text-sm text-secondary">No agreed rates. Every client gets the standard rates.</p>}
+      {shown.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-micro text-secondary">
+                <th className="py-1.5 font-medium">Client</th>
+                <th className="py-1.5 font-medium">Service</th>
+                <th className="py-1.5 text-right font-medium">Rate</th>
+                <th className="py-1.5 font-medium pl-4">Holds</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {shown.map((r) => (
+                <tr key={r.id} className={`border-t border-border ${r.active ? '' : 'opacity-60'}`}>
+                  <td className="py-2 font-semibold text-primary">{r.company.name}</td>
+                  <td className="py-2 text-body">
+                    {r.service.name}
+                    {r.note && <span className="block text-micro text-secondary">{r.note}</span>}
+                  </td>
+                  <td className="py-2 text-right tabular-nums text-primary">
+                    {formatMoney(r.agreedRate)}
+                    <span className="text-micro text-secondary"> / {r.service.unit}</span>
+                  </td>
+                  <td className="py-2 pl-4 text-xs text-secondary">
+                    {formatDate(r.validFrom, undefined, undefined, true)} to {r.validTo ? formatDate(r.validTo, undefined, undefined, true) : 'until ended'}
+                  </td>
+                  <td className="py-2 text-right">
+                    {r.active && !r.validTo && (
+                      <Button size="sm" variant="ghost" onClick={() => void end(r)}>
+                        End it
+                      </Button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {rates && rates.some((r) => !r.active) && (
+        <button type="button" onClick={() => setShowEnded((v) => !v)} className="text-xs text-secondary hover:text-primary">
+          {showEnded ? 'Hide ended rates' : 'Show ended rates'}
+        </button>
+      )}
+
+      {adding ? (
+        <div className="rounded-xl border border-primary/30 p-3">
+          <div className="grid gap-2 sm:grid-cols-2">
+            <label className="block">
+              <span className="text-micro text-secondary">Client</span>
+              <select className={INPUT} value={form.companyId} onChange={(e) => setForm({ ...form, companyId: e.target.value })}>
+                <option value="">Choose a client…</option>
+                {companies.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-micro text-secondary">Service</span>
+              <select className={INPUT} value={form.catalogItemId} onChange={(e) => setForm({ ...form, catalogItemId: e.target.value })}>
+                <option value="">Choose a service…</option>
+                {services.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                    {c.standardRate != null ? ` (standard ${formatMoney(c.standardRate)})` : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-micro text-secondary">Agreed rate (₹)</span>
+              <input type="number" min={0} className={INPUT} value={form.rate} onChange={(e) => setForm({ ...form, rate: e.target.value })} />
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="block">
+                <span className="text-micro text-secondary">From</span>
+                <input type="date" className={INPUT} value={form.from} onChange={(e) => setForm({ ...form, from: e.target.value })} />
+              </label>
+              <label className="block">
+                <span className="text-micro text-secondary">Until (optional)</span>
+                <input type="date" className={INPUT} value={form.to} onChange={(e) => setForm({ ...form, to: e.target.value })} />
+              </label>
+            </div>
+            <label className="block sm:col-span-2">
+              <span className="text-micro text-secondary">Why (optional)</span>
+              <input className={INPUT} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} maxLength={300} placeholder="e.g. Partner rate through Vyoma" />
+            </label>
+          </div>
+          <div className="mt-3 flex justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setAdding(false)}>Cancel</Button>
+            <Button variant="primary" size="sm" loading={saving} disabled={!canAdd} onClick={() => void add()}>
+              Save agreed rate
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <Button variant="ghost" size="sm" icon={Plus} onClick={() => setAdding(true)}>
+          Add an agreed rate
+        </Button>
+      )}
+    </SectionCard>
   );
 }

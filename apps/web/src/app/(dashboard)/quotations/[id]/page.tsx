@@ -16,7 +16,7 @@ import { use, useCallback, useState } from 'react';
 import Link from 'next/link';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Copy, CornerUpLeft, Download, FileText, ListOrdered, Send, Sparkles, Trash2, UserCheck } from 'lucide-react';
+import { ArrowLeft, Copy, CornerUpLeft, Download, FileText, ListOrdered, ReceiptText, Send, Sparkles, Trash2, UserCheck } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { STAGE_LABEL } from '@flowzen/shared';
 import {
@@ -41,6 +41,7 @@ import { NextStepFields, nextStepBody, nextStepDraft, nextStepOk, useStudioToday
 import { SectionEditor } from '@/components/proposals/SectionEditor';
 import { PricingPanel } from '@/components/proposals/PricingPanel';
 import { AiPanel } from '@/components/proposals/AiPanel';
+import { CompareView } from '@/components/proposals/CompareView';
 import { useConfirmStore } from '@/stores/confirm';
 import { usePageHeader } from '@/hooks/usePageHeader';
 
@@ -74,6 +75,7 @@ export default function ProposalPage({ params }: { params: Promise<{ id: string 
   const [sending, setSending] = useState(false);
   const [sendingBack, setSendingBack] = useState(false);
   const [reviewing, setReviewing] = useState(false);
+  const [fromProforma, setFromProforma] = useState(false);
   // The Document tab's left side: the sections by hand, or the AI.
   const [mode, setMode] = useState<'SECTIONS' | 'AI'>('SECTIONS');
 
@@ -125,10 +127,10 @@ export default function ProposalPage({ params }: { params: Promise<{ id: string 
     [qc, id],
   );
 
-  const start = async (withAi = false) => {
+  const start = async (withAi = false, proformaId?: string) => {
     setStarting(true);
     try {
-      const res = await api.proposalDocs.start(id);
+      const res = await api.proposalDocs.start(id, proformaId ? { proformaId } : {});
       await loadDeal();
       setMode(withAi ? 'AI' : 'SECTIONS');
       openDoc(res.document.id);
@@ -267,6 +269,9 @@ export default function ProposalPage({ params }: { params: Promise<{ id: string 
                 <Button onClick={() => void start(false)} disabled={starting}>
                   Start blank
                 </Button>
+                <Button icon={ReceiptText} onClick={() => setFromProforma(true)} disabled={starting}>
+                  Start from a proforma
+                </Button>
               </div>
             )
           }
@@ -372,13 +377,23 @@ export default function ProposalPage({ params }: { params: Promise<{ id: string 
             <PricingPanel
               key={`${doc.id}:${doc.status}:${doc.updatedAt}`}
               doc={doc}
+              companyId={proposal.company.id}
+              companyName={proposal.company.name}
               price={current?.price}
               problems={current?.problems ?? []}
               pricing={current?.pricing}
               onChanged={changed}
             />
           ) : (
-            <VersionsList deal={deal} activeId={docId} onOpen={openDoc} onDiscard={(d) => void discard(d)} />
+            <>
+              <VersionsList deal={deal} activeId={docId} onOpen={openDoc} onDiscard={(d) => void discard(d)} />
+              {documents.length > 1 && (
+                <section className="mt-8">
+                  <h2 className="mb-3 text-base font-semibold text-primary">Compare versions</h2>
+                  <CompareView proposalId={id} documents={documents} />
+                </section>
+              )}
+            </>
           )}
         </>
       )}
@@ -392,6 +407,16 @@ export default function ProposalPage({ params }: { params: Promise<{ id: string 
             setVersioning(false);
             await loadDeal();
             openDoc(res.document.id);
+          }}
+        />
+      )}
+      {fromProforma && (
+        <StartFromProformaModal
+          companyId={proposal.company.id}
+          onClose={() => setFromProforma(false)}
+          onPick={(proformaId) => {
+            setFromProforma(false);
+            void start(false, proformaId);
           }}
         />
       )}
@@ -646,6 +671,69 @@ function SendBackModal({
         <Button variant="primary" icon={CornerUpLeft} onClick={() => void submit()} loading={saving} disabled={note.trim().length < 3}>
           Send back
         </Button>
+      </ModalFooter>
+    </Modal>
+  );
+}
+
+/**
+ * Start v1 from one of the client's proformas: its lines become the Pricing
+ * tab's, its terms the Terms section. The proforma itself is only read.
+ */
+function StartFromProformaModal({
+  companyId,
+  onClose,
+  onPick,
+}: {
+  companyId: string;
+  onClose: () => void;
+  onPick: (proformaId: string) => void;
+}) {
+  const query = useQuery({
+    queryKey: ['proformas', 'company', companyId],
+    queryFn: () => api.proformas.list({ companyId }),
+  });
+  const rows = (query.data?.proformas ?? []).filter((pf: { status: string }) => pf.status !== 'CANCELLED') as {
+    id: string;
+    number: string;
+    status: string;
+    amount: number | string | null;
+    description?: string | null;
+    raisedAt?: string | null;
+    createdAt: string;
+  }[];
+  return (
+    <Modal open onClose={onClose} title="Start from a proforma" description="Its lines go on the Pricing tab and its terms into Terms. The proforma is not changed.">
+      <ModalBody>
+        {query.isPending ? (
+          <p className="text-sm text-secondary">Loading this client&apos;s proformas…</p>
+        ) : rows.length === 0 ? (
+          <p className="text-sm text-secondary">This client has no proformas to start from.</p>
+        ) : (
+          <ul className="space-y-2">
+            {rows.map((pf) => (
+              <li key={pf.id}>
+                <button
+                  type="button"
+                  onClick={() => onPick(pf.id)}
+                  className="flex w-full items-center justify-between gap-3 rounded-xl border border-border px-3 py-2.5 text-left transition-colors hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                >
+                  <span className="min-w-0">
+                    <span className="block font-mono text-xs text-primary">{pf.number}</span>
+                    <span className="block truncate text-xs text-secondary">
+                      {formatDate(pf.raisedAt ?? pf.createdAt)}
+                      {pf.description ? ` · ${pf.description}` : ''}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-sm font-semibold tabular-nums text-primary">{pf.amount == null ? '' : formatMoney(pf.amount)}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </ModalBody>
+      <ModalFooter>
+        <Button variant="ghost" onClick={onClose}>Cancel</Button>
       </ModalFooter>
     </Modal>
   );

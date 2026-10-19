@@ -27,7 +27,7 @@
 import { randomUUID } from 'node:crypto';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../utils/logger.js';
-import { orgToday } from '../utils/moneyDates.js';
+import { asStoredDay, orgToday } from '../utils/moneyDates.js';
 import { AssistantFailed, settingsFor } from './moneyAssistant.js';
 import type { AiTool, AiTurn } from './ai/index.js';
 import { amountsInText } from './proposalPricing.js';
@@ -57,8 +57,8 @@ export interface StagedLine {
   qty: number;
   unit: string | null;
   unitRate: number;
-  /** Where the rate came from: typed by the person, or the service list. Null when there was none. */
-  rateFrom: 'YOU' | 'SERVICE_LIST' | null;
+  /** Where the rate came from: typed by the person, the client's agreed rate, or the service list. Null when there was none. */
+  rateFrom: 'YOU' | 'CLIENT_RATE' | 'SERVICE_LIST' | null;
 }
 
 export type ThreadEntry =
@@ -353,7 +353,8 @@ export async function askProposalAi(opts: {
 }): Promise<{ entry: ThreadEntry; thread: ThreadEntry[] }> {
   const doc = await loadForAi(opts.documentId, opts.organizationId);
   if (!doc) throw new AssistantFailed('That proposal document is gone.');
-  const [org, catalog, settings] = await Promise.all([
+  const today = asStoredDay(orgToday('Asia/Kolkata'));
+  const [org, catalog, settings, agreed] = await Promise.all([
     prisma.organization.findUniqueOrThrow({
       where: { id: opts.organizationId },
       select: { name: true, timezone: true, defaultTermsAndConditions: true },
@@ -364,7 +365,22 @@ export async function askProposalAi(opts: {
       select: { id: true, name: true, billing: true, unit: true, description: true, standardRate: true },
     }),
     settingsFor(opts.organizationId),
+    // Rates agreed with this client, which come before the service list's.
+    opts.setsPrices
+      ? prisma.clientRate.findMany({
+          where: {
+            organizationId: opts.organizationId,
+            companyId: doc.proposal.companyId,
+            validFrom: { lte: today },
+            OR: [{ validTo: null }, { validTo: { gte: today } }],
+          },
+          orderBy: { validFrom: 'desc' },
+          select: { catalogItemId: true, agreedRate: true },
+        })
+      : Promise.resolve([]),
   ]);
+  const agreedRate = new Map<string, number>();
+  for (const r of agreed) if (!agreedRate.has(r.catalogItemId)) agreedRate.set(r.catalogItemId, Number(r.agreedRate));
   const { provider, apiKey, model, baseUrl } = settings;
 
   const thread = parseThread(doc.aiThread);
@@ -481,6 +497,7 @@ export async function askProposalAi(opts: {
               })();
             const stated = Number(raw.rate);
             const typed = Number.isFinite(stated) && stated > 0 && typedRates.has(Math.round(stated));
+            const clientRate = item ? (agreedRate.get(item.id) ?? null) : null;
             const listRate = item?.standardRate != null ? Number(item.standardRate) : null;
             const billing =
               raw.billing === 'MONTHLY' || raw.billing === 'ONE_TIME'
@@ -493,10 +510,10 @@ export async function askProposalAi(opts: {
               billing,
               qty: Number(raw.qty) > 0 ? Number(raw.qty) : 1,
               unit: (typeof raw.unit === 'string' && raw.unit) || item?.unit || (billing === 'MONTHLY' ? 'month' : null),
-              unitRate: typed ? stated : (listRate ?? 0),
-              rateFrom: typed ? 'YOU' : listRate != null ? 'SERVICE_LIST' : null,
+              unitRate: typed ? stated : (clientRate ?? listRate ?? 0),
+              rateFrom: typed ? 'YOU' : clientRate != null ? 'CLIENT_RATE' : listRate != null ? 'SERVICE_LIST' : null,
             });
-            done.push(typed || listRate != null ? name : `${name} (no rate: Management sets it on the Pricing tab)`);
+            done.push(typed || clientRate != null || listRate != null ? name : `${name} (no rate: Management sets it on the Pricing tab)`);
           }
           return { name: call.name, id: call.id, result: { staged: done, note: 'Shown on the Pricing tab for the person to confirm.' } };
         }
