@@ -20,8 +20,8 @@ import { InvoiceStatusBadge } from '@/components/work/InvoiceStatusBadge';
 import { moneyDate } from '@/lib/money';
 import { useWorkCacheNudge } from '@/hooks/useWorkCacheNudge';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Plus, Printer, Settings2, Trash2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Plus, Printer, Settings2, Trash2 } from 'lucide-react';
 import { api, ApiError, formatMoney, formatDate, type OrgConfig, type Company } from '@/lib/api-v2';
 import { useTeamMembers } from '@/hooks/queries';
 import toast from 'react-hot-toast';
@@ -55,6 +55,9 @@ import { withDueTime } from '@/lib/due-time';
 import { RepeatMark } from '@/components/work/RepeatMark';
 import type { TaskRepeatInfo } from '@/lib/repeat';
 import { taskTypeLabel } from '@/lib/task-type';
+import { usePageHeader } from '@/hooks/usePageHeader';
+import { Breadcrumbs } from '@/components/ui/breadcrumbs';
+import { changeTaskStatus as changeStatusAsking, waitingWords } from '@/lib/task-status';
 
 const PRIORITY_OPTIONS = Object.entries(PRIORITY_CONFIG).map(([value, cfg]) => ({ value, label: cfg.label }));
 
@@ -206,7 +209,6 @@ const MSTATUS_BACK: Record<MStatus, MStatus | null> = {
 export default function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
-  const searchParams = useSearchParams();
   const confirm = useConfirmStore((st) => st.confirm);
   const nudgeWorkCaches = useWorkCacheNudge();
 
@@ -320,6 +322,9 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     if (tab === 'activity' && activity === null) void loadActivity();
   }, [tab, activity, loadActivity]);
 
+  // The tab and the bar name the project (QA19 fixes plan, small wins).
+  usePageHeader(project?.name ?? 'Project', project?.company?.name ?? null);
+
   if (loading) return <PageSkeleton />;
 
   if (!project) {
@@ -345,13 +350,6 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   /** A cost is dated to the day, year included: a list can span two. */
   const fullDate = (v: string | null | undefined) => formatDate(v, tz, locale, true);
 
-  /*
-   * Where the back link goes. `?from=company` is set by the client's Work tab
-   * and by anything else that owns this project in its own page.
-   */
-  const cameFromCompany = searchParams.get('from') === 'company' && Boolean(project?.company?.id);
-  const backHref = cameFromCompany ? `/companies/${project?.company?.id}?tab=WORK` : '/live-work?tab=PROJECTS';
-  const backLabel = cameFromCompany ? (project?.company?.name ?? 'Client') : 'Projects';
   const money = (v: string | number | null) => formatMoney(v, currency, locale);
 
   const actual = project.actualCostTotal != null ? Number(project.actualCostTotal) : null;
@@ -478,16 +476,9 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     if (next === t.status) return;
     setBusyId(t.id);
     try {
-      if (next === 'ON_HOLD') {
-        await api.tasks.wait(t.id, 'CLIENT');
-      } else if (t.status === 'ON_HOLD') {
-        // /resume is the only route that closes out waitingSince — always go
-        // through it first, then layer the real target status on top.
-        await api.tasks.resume(t.id);
-        if (next !== 'IN_PROGRESS') await api.tasks.updateStatus(t.id, next);
-      } else {
-        await api.tasks.updateStatus(t.id, next);
-      }
+      // The shared way: On hold asks what it is waiting on, and /resume closes
+      // the wait. A client project's task always has a client to wait on.
+      if (!(await changeStatusAsking({ ...t, hasClient: true }, next))) return;
       await load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not update that task');
@@ -539,18 +530,17 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   return (
     <>
       {/*
-        Back to where you came from.
-
-        This always said "Projects" and always went to Live work, so opening a
-        project from a client's Work tab and pressing back left the client
-        entirely — and the way back was two more clicks through a list of every
-        project in the studio. The screens that link here say so with `?from=`;
-        anything else still lands on Live work, which is where a project is
-        found when it is not being looked at from its client.
+        Where this sits — Companies › Acme › the project — each step a way back
+        (QA19 fixes plan). It replaced a single back link that went to Live
+        work unless the page was opened with `?from=company`.
       */}
-      <Link href={backHref} className="mb-4 inline-flex items-center gap-1.5 text-sm text-secondary transition-colors hover:text-primary">
-        <ArrowLeft className="h-4 w-4" strokeWidth={1.75} /> {backLabel}
-      </Link>
+      <Breadcrumbs
+        items={[
+          { label: 'Companies', href: '/companies' },
+          { label: project.company.name, href: `/companies/${project.company.id}?tab=WORK` },
+          { label: project.name },
+        ]}
+      />
 
       <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
         <div className="min-w-0">
@@ -997,7 +987,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                             <RepeatMark repeat={t.repeat} />
                             {t.status === 'ON_HOLD' && t.waitingOn && (
                               <p className="mt-0.5 text-micro text-secondary">
-                                waiting on {t.waitingOn === 'CLIENT' ? 'the client' : 'someone else'}
+                                {waitingWords(t.waitingOn)}
                               </p>
                             )}
                           </td>

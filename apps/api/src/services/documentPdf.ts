@@ -15,6 +15,7 @@
 
 import fs from 'node:fs';
 import { logger } from '../utils/logger.js';
+import { escapeHtml } from '../utils/html.js';
 import path from 'node:path';
 import puppeteer from 'puppeteer';
 import { SupplyType } from '@prisma/client';
@@ -87,8 +88,6 @@ const qty = (units: number): string =>
 const formatDate = (d: Date): string =>
   new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 
-const escapeHtml = (s: string): string =>
-  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 /** Newlines in an address are the address's own line breaks, not markup. */
 const multiline = (s: string): string => escapeHtml(s).replace(/\r?\n/g, '<br />');

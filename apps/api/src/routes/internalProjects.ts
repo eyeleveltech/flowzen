@@ -28,6 +28,7 @@ import { InternalProjectStatus } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, requirePermission, type AuthRequest } from '../middleware/auth.js';
 import { TASK_PEOPLE, withPeople } from './tasks.js';
+import { taskHasClient, waitingOnShown } from '../services/taskWaiting.js';
 import { withRepeatNext } from '../services/taskRepeat.js';
 import { taskInScope } from '../services/teamScope.js';
 import { isLate, NO_PROJECT_WHERE, projectProgress, UNFINISHED } from '../services/internalWork.js';
@@ -235,6 +236,9 @@ internalProjectsRouter.get(
               // The same flag every other task list computes, so a row reads the
               // same here as it does on My Work.
               isOverdue: isLate(t, today),
+              // Internal work: an old "waiting on the client" hold shows as plain On hold (QA19, F06).
+              waitingOn: waitingOnShown(t),
+              hasClient: taskHasClient(t),
             })),
           ),
           taskCounts: { total: progress.total, done: progress.done, open: progress.open, late: progress.overdue },

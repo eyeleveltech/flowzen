@@ -98,12 +98,19 @@ describe('which rows come back', () => {
 
   it('narrows an unfiltered feed to what the caller could open anyway', async () => {
     (prisma.activity.findMany as any).mockResolvedValue([]);
+    (prisma.task.findMany as any).mockResolvedValue([{ id: 't-mine' }]);
+    (prisma.taskApprover.findMany as any).mockResolvedValue([]);
+    (prisma.approvalEscalationContact.findMany as any).mockResolvedValue([]);
     await request(app).get('/api/activities').set(...auth('employee'));
 
     const where = (prisma.activity.findMany as any).mock.calls.at(-1)[0].where;
-    // An employee gets Task and Asset — the two types open to everybody — and
-    // nothing else. Costs, invoices and clients are not in the query at all.
-    expect(where.entityType.in.sort()).toEqual(['Asset', 'Task']);
+    // An employee gets Asset, and the history of only the tasks they may read
+    // (security fixes plan, H1) — not every task in the studio. Costs,
+    // invoices and clients are not in the query at all.
+    expect(where.OR).toEqual([
+      { entityType: { in: ['Asset'] } },
+      { entityType: 'Task', entityId: { in: ['t-mine'] } },
+    ]);
   });
 
   it('gives management the full set', async () => {

@@ -2,6 +2,7 @@ import { prisma } from '../lib/prisma.js';
 import { stageProbabilities, STAGE_PROBABILITY_SELECT } from '../utils/stageProbability.js';
 import { addMonths, moneyClock, monthBounds, monthOfDay, orgMonth } from '../utils/moneyDates.js';
 import { looksLikeSalary } from '../utils/salaryCost.js';
+import { ACTIVE_DEAL_WHERE } from './activeDeal.js';
 
 /*
  * The weights this screen used to keep for itself — 10/30/60/80/90 — were a
@@ -56,9 +57,9 @@ export async function composeForecast(orgId: string, assumeWonId: string | null 
     include: { company: { select: { id: true, name: true } } },
   });
 
-  // 3. Active Pipeline Proposals (Weighted Inflows)
+  // 3. Active Pipeline Proposals (Weighted Inflows) — the shared active-deal rule (QA19, F01).
   const proposals = await prisma.proposal.findMany({
-    where: { organizationId: orgId, deletedAt: null, outcome: null },
+    where: { organizationId: orgId, ...ACTIVE_DEAL_WHERE },
     include: {
       company: { select: { id: true, name: true } },
       versions: { orderBy: { n: 'desc' }, take: 1 },

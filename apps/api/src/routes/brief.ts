@@ -5,7 +5,8 @@ import { authenticate, type AuthRequest, requirePermission } from '../middleware
 import { notUsingLastWeek } from '../services/usageSummary.js';
 import { composeApprovalsReport } from '../services/approvalsReport.js';
 import { TASK_TYPE_LABEL } from '../services/taskApprovals.js';
-import { generateBriefSummary } from '../services/briefSummary.js';
+import { generateBriefSummary, numbersChangedSince } from '../services/briefSummary.js';
+import { waitingOnShown } from '../services/taskWaiting.js';
 import { addDays, isWorkingDay, loadWorkCalendar, todayIn, weekdayOf } from '../utils/workCalendar.js';
 import { dayStartUtc, localDayAndTime, whenLabel } from '../utils/zonedTime.js';
 import { linkForUser, rawLinkFor, taskLink } from '../utils/recordLink.js';
@@ -651,6 +652,10 @@ async function teamByDepartment(
         status: true,
         dueDate: true,
         waitingOn: true,
+        // An internal task cannot be waiting on a client it does not have (QA19, F06).
+        monthCardId: true,
+        projectId: true,
+        companyId: true,
         ...DEPT_OF_PEOPLE,
       },
     }),
@@ -693,14 +698,14 @@ async function teamByDepartment(
       // Waiting on an approver is not the editor's overdue: IN_REVIEW is left out.
       if (due < today && t.status !== 'IN_REVIEW') r.overdue += 1;
       if (due >= today && due <= weeks.comingUntil) r.dueThisWeek += 1;
-      if (t.status === 'ON_HOLD' && t.waitingOn === 'CLIENT') r.waitingOnClient += 1;
+      if (t.status === 'ON_HOLD' && waitingOnShown(t) === 'CLIENT') r.waitingOnClient += 1;
       if (t.status === 'IN_REVIEW') r.inReview += 1;
 
       const late = due < today && t.status !== 'IN_REVIEW';
       if (late) r.segments.overdue += 1;
       else if (t.status === 'TODO' || t.status === 'IN_PROGRESS') r.segments.onTrack += 1;
       else if (t.status === 'IN_REVIEW') r.segments.inReview += 1;
-      else if (t.status === 'ON_HOLD' && t.waitingOn === 'CLIENT') r.segments.waitingOnClient += 1;
+      else if (t.status === 'ON_HOLD' && waitingOnShown(t) === 'CLIENT') r.segments.waitingOnClient += 1;
     }
   }
   for (const t of doneLastWeek) for (const dept of deptsOf(t)) rowFor(dept).doneLastWeek += 1;
@@ -737,7 +742,7 @@ export async function composeMondayBrief(
     comingUp(orgId, weeks, tz, opts.viewer),
     prisma.weeklyBrief.findUnique({
       where: { organizationId_weekStart: { organizationId: orgId, weekStart: asDate(weeks.weekStart) } },
-      select: { summary: true, summaryModel: true, generatedAt: true },
+      select: { summary: true, summaryModel: true, generatedAt: true, summaryInput: true },
     }),
     loadWorkCalendar(orgId),
   ]);
@@ -778,7 +783,17 @@ export async function composeMondayBrief(
     comingUp: { ...ahead, renewals: alerts.renewals },
     team,
     summary: stored?.summary
-      ? { text: plainText(stored.summary), generatedAt: stored.generatedAt.toISOString(), model: stored.summaryModel }
+      ? {
+          text: plainText(stored.summary),
+          generatedAt: stored.generatedAt.toISOString(),
+          model: stored.summaryModel,
+          /** A count the snapshot quoted has moved in the live lists since (QA19 fixes plan). */
+          numbersChanged: numbersChangedSince(stored.summaryInput, {
+            needsAction: alerts.needsAction,
+            risks: alerts.risks,
+            comingUp: { ...ahead, renewals: alerts.renewals },
+          }),
+        }
       : null,
     /** Whether a summary can be written at all — the screen says so when not. */
     aiConfigured: Boolean(org?.aiApiKey),
@@ -1136,7 +1151,7 @@ briefRouter.post(
       const now = new Date();
       const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { aiApiKey: true, timezone: true } });
       if (!org?.aiApiKey) {
-        res.status(409).json({ success: false, error: "AI isn't set up. Add a key in Settings → Zen.", code: 'NO_KEY' });
+        res.status(409).json({ success: false, error: "AI isn't set up. Add a key in Settings → Zen assistant.", code: 'NO_KEY' });
         return;
       }
       const weekStart = weeksFor(org.timezone || 'Asia/Kolkata', now).weekStart;

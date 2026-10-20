@@ -17,6 +17,29 @@ import { prisma } from '../lib/prisma.js';
 import { authenticate, hasPermission, type AuthRequest } from '../middleware/auth.js';
 import { STAGE_LABEL } from '@flowzen/shared';
 
+/**
+ * What a task in search results belongs to, always (QA19 fixes plan, F07).
+ *
+ * Only a project's name or a retainer's client came back, and null for
+ * everything else — which the palette filled in as "Enquiry", so an internal
+ * task with no project read as a sales enquiry. Now: the client and the work
+ * ("Acme · Website build", "Acme · Monthly delivery"), the internal project's
+ * name, or "Internal — no project".
+ */
+export function taskSearchContext(t: {
+  project?: { name: string; company?: { name: string } | null } | null;
+  monthCard?: { retainer: { company: { name: string } } } | null;
+  retainerProject?: { name: string } | null;
+  internalProject?: { name: string } | null;
+  company?: { name: string } | null;
+}): string {
+  if (t.project) return t.project.company ? `${t.project.company.name} · ${t.project.name}` : t.project.name;
+  if (t.monthCard) return `${t.monthCard.retainer.company.name} · ${t.retainerProject?.name ?? 'Retainer'}`;
+  if (t.internalProject) return `Internal · ${t.internalProject.name}`;
+  // An internal task about a client, filed under no project, says whose it is.
+  return t.company ? `Internal — no project · ${t.company.name}` : 'Internal — no project';
+}
+
 export const searchRouter = Router();
 
 searchRouter.use(authenticate);
@@ -113,10 +136,13 @@ searchRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction
           id: true,
           title: true,
           projectId: true,
-          project: { select: { name: true } },
+          project: { select: { name: true, company: { select: { name: true } } } },
           monthCard: {
             select: { retainerId: true, retainer: { select: { company: { select: { name: true } } } } },
           },
+          retainerProject: { select: { name: true } },
+          internalProject: { select: { name: true } },
+          company: { select: { name: true } },
         },
         orderBy: { dueDate: 'asc' },
         take: LIMIT,
@@ -164,7 +190,7 @@ searchRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction
       tasks: tasks.map((t) => ({
         id: t.id,
         title: t.title,
-        context: t.project?.name ?? t.monthCard?.retainer.company.name ?? null,
+        context: taskSearchContext(t),
         href: !canProjects
           ? '/my-work'
           : t.projectId

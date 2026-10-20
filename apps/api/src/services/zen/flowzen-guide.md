@@ -30,7 +30,7 @@ A person who types the address of a screen they cannot open is sent away from it
 The proposal itself, written in Flowzen, by hand or with the AI.
 - **Starting:** "Write with AI", "Start blank" or "Start from a proforma". All give the standard sections with the studio terms filled in. From a proforma, its lines go on the Pricing tab and its terms into Terms (the proforma is not changed). A price already logged by hand on the deal comes across as one line marked "price from v1".
 - **Document tab, Sections:** the sections (cover line, about us, what we heard, scope, timeline, investment, terms, next steps). Hide a section with the eye, reorder with the arrows, add your own. It saves itself; the preview beside it follows. A line starting "- " is a bullet; a single line right above bullets prints as their bold lead-in.
-- **Document tab, Write with AI:** ask in plain words ("write the first draft", "shorter intro", "more premium tone"). It knows the client record, the services on the Pricing tab and the studio terms, and suggests changes as cards to Accept or Discard; nothing changes until accepted. It never writes prices, uses Zen's AI setup (Setup → Organisation), and leaves what it does not know as a yellow "Needs input", which stops Finalise until filled. For Management it can also put a price you typed on the Pricing tab ("Add to Pricing").
+- **Document tab, Write with AI:** ask in plain words ("write the first draft", "shorter intro", "more premium tone"). It knows the client record, the services on the Pricing tab and the studio terms, and suggests changes as cards to Accept or Discard; nothing changes until accepted. It never writes prices, uses Zen's AI setup (Settings → Zen assistant), and leaves what it does not know as a yellow "Needs input", which stops Finalise until filled. For Management it can also put a price you typed on the Pricing tab ("Add to Pricing").
 - **Layout:** Minimal (most proposals), Premium (larger deals: full green cover, numbered sections) or Compact (one page, no cover). Changing it never rewrites a word.
 - **Prices never go in the text.** The Investment section is drawn from the Pricing tab. A rupee amount typed into the text that no line backs stops Finalise.
 - **Pricing tab (Management only):** the services, each Monthly fee, One-time fee, or Paid by client directly (ad spend: shown apart, not in the fee, not taxed). Pick from the service list or type a line. Totals come with GST by the client's state. Monthly and one-time are never added together.
@@ -116,10 +116,24 @@ Team work (Heads and Management). The Team tab is the delivery view; the Approva
 - **Row menu:** Edit details, Assign a task, Kit they hold, Access & permissions, Send a password link (valid 60 minutes), Switch off account. All but "Assign a task" and "Kit they hold" need Setup access.
 - **Invite** (Setup access): name, email, department, access preset. The invite link is shown and emailed.
 - **Opening a person:** shows their tasks grouped by state, each linked to its project or retainer month.
-- **Board tab** (/members?tab=board): one row per person — **Now** (the task they said they are on: each person sets it themselves with "Working on this now" on one of their own open tasks on My Work or in the task, which moves a To do task to In progress; one at a time; it clears itself when the task is done, cancelled, sent for approval or put on hold, or when they press Clear; no time is kept or shown), **Next up** (the top of their own My Work order), and plain counts (Open, Due this week, Overdue, Waiting, In review, Done this week — click one to see the tasks), with **Needs attention** above it: overdue tasks, on hold more than 3 working days, in review past the approval reminder time, and urgent tasks not started. No ranking or labels.
+- **Board** is no longer a tab here: it became **My department** (/my-department), and an old /members?tab=board link goes there.
 - **Approvals tab:**
   - For the last 7 or 30 days: what is waiting now, typical decision time, how many were decided on time, escalations, and each approver's record.
   - It covers the whole studio.
+
+## My department (/my-department)
+
+A department head's page for their department: their people and everything those people are working on. It is in the sidebar only for somebody who heads a department. A head of several departments switches between them at the top. Management is not given it in the sidebar; they open any department's page from Settings → Departments with "Open department page" (/my-department?department={id}). Nobody else can open it, and a head cannot open another department's page. A head sees only their own people.
+
+- **Header:** the department, how many people, its head, and **Needs attention**: overdue tasks, tasks on hold more than 3 working days, tasks stuck in review past the approval reminder time, urgent tasks not started, gear overdue back, and — from the 25th of the month — anybody whose time split for the month is not confirmed. Each item opens what it is about.
+- **People tab** (/my-department?tab=people): one card per person — name, designation, phone and email (tap to call or mail); **Working on now** (the task they said they are on: each person sets it themselves with "Working on this now" on one of their own open tasks on My Work or in the task, which moves a To do task to In progress; one at a time; it clears itself when the task is done, cancelled, sent for approval or put on hold, or when they press Clear; a head cannot set it for them; no time is kept or shown) and **Next up** (the top of their own My Work order); counts of Open, Overdue, Waiting, In review and Done this week; today's meetings and shoots; and the gear they hold. **Assign** on a card opens the new-task form with that person filled in.
+  - **Clicking a card** opens the person panel: their tasks grouped Overdue, Today, This week, Later, Waiting and In review; the clients and projects they are on; their week (task deadlines, meetings and shoots, Google busy time); the gear they hold and what is reserved for them; and this month's time split as percentages. Opening a task there lets the head reassign it or move its due date.
+- **Work tab** (/my-department?tab=work): the client work the department's people are on, by client and then each retainer or project — who from the department is on it, open and overdue tasks, and the next deadline — and the department's own internal projects with owner, people, % done, target date or days left, and open and overdue tasks. Every row opens its page.
+- **Calendar tab** (/my-department?tab=calendar): a week view with only the department's people — their meetings and shoots, task deadlines, holidays, and Google busy time (shown as "Busy" with the person's name, never the title). Narrow it to one person.
+- **Approvals tab** (/my-department?tab=approvals): the team's tasks in review (how long they have waited, the round, the link) and changes requested on the team's work in the last two weeks. If the head approves that task type — or is its escalation contact and the round has escalated — Approve and Request changes are on the row. Nobody can approve a task they are on.
+- **Equipment tab** (/my-department?tab=equipment): gear out on booking with the team and its due-back date (red once overdue), gear they hold long-term, and gear reserved for the team's coming meetings and shoots, with clash warnings.
+- **Time split tab** (/my-department?tab=time-split): this month's split per person as percentages (never money, even for an admin), confirmed or not, with Edit and Confirm for each person and "Confirm all". A closed month cannot be changed.
+- **Not here:** rankings, scores, timers, "overloaded" labels and salaries.
 
 ## All tasks (/all-work)
 
@@ -176,7 +190,7 @@ Companies access. Cold names, before they are companies.
   - The next step and its date show under the name, red once the date has passed, and the date appears on the Calendar's Sales layer. It creates no task and no alert.
   - An active lead with no next step shows a "No next step" badge, and the "Missing next step" filter lists them. Nothing refuses a save without one.
 - **Last touch:** the last real contact — a logged touch, a status change, or a date set by hand. Editing a phone number is not contact. Each active lead shows "Last contact Nd ago"; with none recorded it counts from the day the lead was added.
-- **Going stale:** an active lead whose last touch is more than 10 days ago (Settings → Organisation → Going stale). The banner says how many.
+- **Going stale:** an active lead whose last touch is more than 10 days ago (Settings → Pipeline → Going stale). The banner says how many.
 - **Log touch** (row button or menu): how (Call, WhatsApp, Email, Meeting, Other) and a short note, both required, plus the next step and date if there is one. It moves the last touch to now and is in the lead's history.
 - **Set last contact date** (row menu, or tick several rows): for correcting the record — imported names carry the import date. A date, not in the future. The CSV import also reads an optional "Last contacted" column.
 - **Delete:** goes to Trash.
@@ -207,7 +221,7 @@ Pipeline access (BD, Management). The "Sales pipeline" board.
 - **Card menu (⋯):** Log touch (how and a note; the next step if there is one), Set next step, Set last contact date. The client's Proposals tab has the same buttons on each open deal.
 - **Tiles:**
   - "Live Deals" and "Full Pipeline" count every card not in Won, so lost deals are included.
-  - "Going Stale": open deals whose last touch is more than 25 days ago (Settings → Organisation → Going stale).
+  - "Going Stale": open deals whose last touch is more than 25 days ago (Settings → Pipeline → Going stale).
   - "Weighted": each deal's value × its probability.
 - **Won card:** offers "Set up the retainer →" or "Create the project →" until the work exists.
 - **"Stage to stage":** conversion rates over 6 months.
@@ -362,15 +376,25 @@ Enter costs (Heads, Accounts, Management). How each person's month divides acros
 
 ## Setup (/settings)
 
-Setup access (Management). The sidebar calls it Setup; the page is Settings. The page always opens on Organisation. Tabs are chosen by clicking; a link cannot open a tab, so say which tab to click.
+Setup access (Management). The sidebar calls it Setup; the page is Settings. A panel on the left lists the tabs in five groups: Agency (General, Working calendar), Sales & money (Pipeline, Services & pricing, Documents & billing, Tax & numbering), People & work (Team, Departments, Approvals, Onboarding, Assets), AI & connections (Zen assistant, Email, Integrations) and Records (Activity, Usage, Trash). A link opens a tab: /settings?tab=<key>, where the key is organisation, calendar, pipeline, pricing, proforma, documents, team, departments, approvals, onboarding, assets, zen, email, integrations, activity, usage or trash. Without one it opens on General.
 
-### Settings → Organisation
+### Settings → General
 
 - **Who you are:** name, website, phone, address.
-- **Signing in:** "Allow signing in with a password".
-- **Working calendar:** day start and end (default 10:00–19:00), days worked (default Monday–Saturday) and public holidays.
+- **Signing in:** "Password sign-in" switch (turn off only once everyone signs in with Google Workspace), and "Outgoing email", which opens the Email tab.
+
+### Settings → Working calendar
+
+Day start and end (default 10:00–19:00), days worked (default Monday–Saturday) and public holidays.
+
+### Settings → Pipeline
+
 - **Stage probabilities:** Proposal sent 30%, In negotiation 60%, Proforma issued 85%, Verbal yes 90%.
-- **Zen — the assistant:** provider, key and model.
+- **Going stale:** days since the last real contact before a deal (default 25) or an outreach lead (default 10) counts as going stale.
+
+### Settings → Zen assistant
+
+- **Provider and key:** provider, key and model. The same AI writes proposals ("Write with AI").
 - **What Zen remembers:** each saved preference, with "Forget this".
 
 ### Settings → Tax & numbering
@@ -414,7 +438,8 @@ A read-only list of who is here. Inviting and access happen on Team.
 ### Settings → Departments
 
 - **Departments:** add, rename and reorder them.
-- **Heads:** set a head. Only people with Department head or Management access can be one.
+- **Heads:** set a head. Only people with Department head or Management access can be one. The head gets "My department" in their sidebar.
+- **Open department page** (Management): opens that department's My department page (/my-department?department={id}).
 - **People:** move people between departments.
 - **Merge and archive:** merge one department into another. A department can be archived only when it is empty; archived ones can be restored.
 - **Notes on the tab:**
@@ -547,7 +572,7 @@ For a Prospect, use "Add sample" instead. Sample work has no billing, but its co
 - **Where every task belongs — one of these:**
   - **Client work:** a retainer (monthly) or a one-time project. Required, because billing and profit need it.
   - **Internal (the studio's own work):** an internal project (e.g. "Hiring", "Website revamp"), or **No project** for a one-off studio job (e.g. "Renew domain", "Fix office Wi-Fi").
-  - A no-project task is a task like any other: on the person's My Work, All tasks, the Team board and the calendar, seen by them, their Head and Management.
+  - A no-project task is a task like any other: on the person's My Work, All tasks, My department and the calendar, seen by them, their Head and Management.
 - **Create:** "Task for myself" on My Work, "+ Task" on a project or retainer, "New task" on an internal project, "Create → Task" on the Calendar, or "Assign a task" on Team.
 - **The form:**
   - Fill in "What needs doing?" and "Belongs to": internal, or a client's work.

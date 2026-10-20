@@ -15,6 +15,7 @@
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { sendMail } from '../utils/mailer.js';
+import { escapeHtml } from '../utils/html.js';
 import { generateDocumentPdf } from './documentPdf.js';
 import { loadRenderableDocument, type DocumentKind } from './documentModel.js';
 
@@ -29,8 +30,6 @@ export const documentEmailSchema = z.object({
 
 export type DocumentEmailInput = z.infer<typeof documentEmailSchema>;
 
-const escapeHtml = (s: string): string =>
-  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 const formatINR = (amount: number): string =>
   '₹' + amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });

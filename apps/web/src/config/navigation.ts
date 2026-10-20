@@ -1,4 +1,5 @@
 import {
+  Building2,
   CheckSquare,
   CalendarDays,
   Columns,
@@ -59,8 +60,24 @@ export interface NavItem {
    * /profile are the two screens a signed-in person always has.
    */
   needs?: PermissionKey;
+  /**
+   * Only for somebody who heads a department (`Department.headId` is them) —
+   * My Department. Management reaches the same page from Settings →
+   * Departments instead, without it in their sidebar.
+   */
+  headsOnly?: boolean;
   isPrimaryMobile?: boolean;
 }
+
+/** Who the navigation is being drawn for, as the auth payload describes them. */
+export type NavUser = { permissions?: readonly string[]; headOf?: readonly string[]; preset?: string };
+
+/** Heads at least one department. */
+export const headsADepartment = (user: NavUser | null | undefined): boolean => (user?.headOf?.length ?? 0) > 0;
+
+/** An item this person is offered: the permission switch, and for a heads-only item, a department to head. */
+export const offered = (item: NavItem, user: NavUser | null | undefined): boolean =>
+  canSee(item, user?.permissions) && (!item.headsOnly || headsADepartment(user));
 
 export interface NavSection {
   title: string | null;
@@ -91,6 +108,13 @@ export const NAV_SECTIONS: NavSection[] = [
       // each item's own screen, so it needs nothing of its own.
       { label: 'Calendar', href: '/calendar', icon: CalendarDays, isPrimaryMobile: true },
       { label: 'Team', href: '/members', icon: Columns, needs: 'work.team', isPrimaryMobile: true },
+      /*
+       * A head's own page for their department — people, work, calendar,
+       * approvals, gear and the time split. `work.team` is what every head
+       * holds (Department head and Management are the only presets a head can
+       * have), and `headsOnly` keeps it to the people who actually head one.
+       */
+      { label: 'My department', href: '/my-department', icon: Building2, needs: 'work.team', headsOnly: true },
       /*
        * Everything anybody is carrying. `work.all` is Head and Management —
        * the same switch that opens Live work and a project — so BD and
@@ -168,13 +192,11 @@ export const NAV_ITEMS: NavItem[] = NAV_SECTIONS.flatMap((s) => s.items);
  * "MANAGEMENT / Assets" does. Sections keep their titles the moment a second
  * item appears under them, which is what everybody except an Employee sees.
  */
-export const visibleSections = (
-  user: { permissions?: readonly string[] } | null | undefined,
-): NavSection[] => {
+export const visibleSections = (user: NavUser | null | undefined): NavSection[] => {
   if (!user?.permissions) return [];
 
   return NAV_SECTIONS.map((section) => {
-    const items = section.items.filter((item) => canSee(item, user.permissions));
+    const items = section.items.filter((item) => offered(item, user));
     return { ...section, items, title: items.length > 1 ? section.title : null };
   }).filter((section) => section.items.length > 0);
 };
@@ -207,6 +229,22 @@ const UNLISTED_ROUTES: { prefix: string; needs: PermissionKey }[] = [
   { prefix: '/projects', needs: 'work.all' },
   { prefix: '/retainers', needs: 'work.all' },
 ];
+
+/**
+ * A heads-only screen at this address — My Department — beyond its permission.
+ *
+ * The permission (`work.team`) is not the whole rule: a Department head who
+ * heads nothing holds it too. So the layout also asks this: open to anybody
+ * who heads a department, and to Management (who reach it from Settings).
+ * `unknown` until the session has said which departments they head.
+ */
+export const headsOnlyAccess = (pathname: string, user: NavUser | null | undefined): 'open' | 'refused' | 'unknown' => {
+  const item = NAV_ITEMS.find((i) => i.headsOnly && (pathname === i.href || pathname.startsWith(i.href + '/')));
+  if (!item) return 'open';
+  if (user?.preset === 'MANAGEMENT') return 'open';
+  if (!user?.headOf) return 'unknown';
+  return headsADepartment(user) ? 'open' : 'refused';
+};
 
 export const permissionForPath = (pathname: string): PermissionKey | undefined =>
   NAV_ITEMS.find((item) => pathname === item.href || pathname.startsWith(item.href + '/'))?.needs ??

@@ -9,6 +9,7 @@ import { departmentFor } from './departments.js';
 import { roleForPreset } from '../utils/roles.js';
 import { hashPassword } from '../utils/password.js';
 import { sendMail } from '../utils/mailer.js';
+import { escapeHtml } from '../utils/html.js';
 import { logger } from '../utils/logger.js';
 import { Prisma, RolePreset } from '@prisma/client';
 import { bookValue } from '../utils/assetValue.js';
@@ -135,9 +136,9 @@ usersRouter.post('/:id/reset-link', requirePermission('setup.admin'), async (req
         to: user.email,
         subject: 'Set a new Flowzen password',
         text: `Hello ${user.name}, choose a new password: ${link} (the link stops working in an hour).`,
-        html: `<p>Hello ${user.name},</p>
+        html: `<p>Hello ${escapeHtml(user.name)},</p>
 <p>An admin has issued a new password link for your Flowzen account.</p>
-<p><a href="${link}">Choose a new password</a></p>
+<p><a href="${escapeHtml(link)}">Choose a new password</a></p>
 <p>The link stops working in an hour. If you did not expect this, ignore it — nothing has changed yet.</p>`,
       });
       emailed = true;
@@ -265,7 +266,7 @@ usersRouter.post('/invite', requirePermission('setup.admin'), async (req: AuthRe
       await sendMail(orgId, {
         to: user.email,
         subject: "You're invited to Flowzen",
-        html: `<p>Hi ${user.name},</p><p>You've been invited to Flowzen. <a href="${inviteLink}">Set your password</a> to get started. This link expires in ${INVITE_VALID_DAYS} days.</p>`,
+        html: `<p>Hi ${escapeHtml(user.name)},</p><p>You've been invited to Flowzen. <a href="${escapeHtml(inviteLink)}">Set your password</a> to get started. This link expires in ${INVITE_VALID_DAYS} days.</p>`,
         text: `Hi ${user.name}, you've been invited to Flowzen. Set your password: ${inviteLink} (expires in ${INVITE_VALID_DAYS} days)`,
       });
       emailed = true;

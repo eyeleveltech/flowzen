@@ -143,7 +143,11 @@ export function QuickView({
         {item.location && (
           <Line icon={MapPin}>{item.location}</Line>
         )}
-        {item.bookedBy && <Line icon={UserRound}>Booked by {item.bookedBy}</Line>}
+        {item.bookedByYou ? (
+          <Line icon={UserRound}>Booked by you — you are not on it</Line>
+        ) : (
+          item.bookedBy && <Line icon={UserRound}>Booked by {item.bookedBy}</Line>
+        )}
         {isBusy && <Line icon={Clock}>Busy in Google Calendar</Line>}
         <Line icon={CalendarDays}>{LAYER_NAME[item.layer] ?? item.layer}</Line>
 

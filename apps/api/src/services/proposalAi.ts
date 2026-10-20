@@ -20,7 +20,7 @@
  *   - **The house style.** No em dashes (removed), none of the stock phrases
  *     below (refused), never "made with AI".
  *
- * The provider, key and model are Zen's (Settings → Zen): one AI setup for
+ * The provider, key and model are Zen's (Settings → Zen assistant): one AI setup for
  * the studio, not two.
  */
 

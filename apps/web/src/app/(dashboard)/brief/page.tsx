@@ -78,6 +78,19 @@ function Heading({ children, aside }: { children: React.ReactNode; aside?: React
   );
 }
 
+/**
+ * "Live", beside a list that is read fresh on every load — against the
+ * summary above it, which is a snapshot (QA19 fixes plan, small wins).
+ */
+function LiveMark() {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-micro font-semibold uppercase tracking-[0.06em] text-success">
+      <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden="true" />
+      Live
+    </span>
+  );
+}
+
 /** The page's shape while it loads — not a sentence saying it is loading. */
 function BriefSkeleton() {
   const block = (cls: string) => <Skeleton className={cn('rounded-card motion-reduce:animate-none', cls)} />;
@@ -197,6 +210,13 @@ export default function MondayBriefPage() {
     const time = at(iso, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
     return `Written ${at(iso, { weekday: 'long' })} ${time} from that ${Number(time.slice(0, 2)) < 12 ? 'morning' : 'day'}’s numbers`;
   };
+  /*
+   * "Snapshot · written Mon 07:00" — the summary is written once, from that
+   * moment's numbers, while the lists below it are live. Saying which is which
+   * is what stops a Wednesday reader taking the paragraph for wrong.
+   */
+  const snapshotLabel = (iso: string) =>
+    `Snapshot · written ${at(iso, { weekday: 'short' })} ${at(iso, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })}`;
 
   const arrow =
     'rounded-md p-1 text-secondary hover:bg-subtle hover:text-primary disabled:opacity-30 disabled:hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40';
@@ -263,11 +283,14 @@ export default function MondayBriefPage() {
         >
           <p className="eyebrow mb-2 inline-flex items-center gap-1.5">
             <Sparkles className="h-3.5 w-3.5 text-accent" aria-hidden="true" />
-            Summary
+            {summary ? snapshotLabel(summary.generatedAt) : 'Summary'}
           </p>
           {summary ? (
             <>
               <p className="max-w-[68ch] text-base leading-relaxed text-primary">{summary.text}</p>
+              {current && summary.numbersChanged && (
+                <p className="mt-2 text-xs text-muted">Numbers have changed since this summary was written.</p>
+              )}
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                 <p className="text-xs text-secondary">{writtenLine(summary.generatedAt)}</p>
                 {current && brief.aiConfigured && (
@@ -294,7 +317,7 @@ export default function MondayBriefPage() {
           ) : (
             <p className="text-sm text-secondary">
               AI isn’t set up —{' '}
-              <Link href="/settings" className="font-medium text-primary underline underline-offset-2">
+              <Link href="/settings?tab=zen" className="font-medium text-primary underline underline-offset-2">
                 Settings
               </Link>
             </p>
@@ -391,7 +414,7 @@ export default function MondayBriefPage() {
           <>
             {/* ─── Needs your action ─────────────────────────────────── */}
             <motion.section key={`${week.shown}-action`} {...enter(3)} aria-labelledby="action">
-              <Heading>
+              <Heading aside={<LiveMark />}>
                 <span id="action">Needs your action</span>
               </Heading>
               {needsAction.length > 0 ? (
@@ -419,7 +442,7 @@ export default function MondayBriefPage() {
             {/* ─── This week ─────────────────────────────────────────── */}
             {brief.comingUp && brief.weeks.days && brief.weeks.today && (
               <motion.section key={`${week.shown}-week`} {...enter(4)} aria-labelledby="this-week">
-                <Heading>
+                <Heading aside={<LiveMark />}>
                   <span id="this-week">This week</span>
                 </Heading>
                 <WeekTimeline
@@ -434,7 +457,7 @@ export default function MondayBriefPage() {
 
             {/* ─── Risks ─────────────────────────────────────────────── */}
             <motion.section key={`${week.shown}-risks`} {...enter(5)} aria-labelledby="risks">
-              <Heading>
+              <Heading aside={<LiveMark />}>
                 <span id="risks">Risks</span>
               </Heading>
               {risks.length > 0 ? (

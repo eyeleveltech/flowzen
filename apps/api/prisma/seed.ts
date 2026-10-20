@@ -182,6 +182,11 @@ async function main() {
     prisma.peopleAllocation.deleteMany(),
     prisma.cost.deleteMany(),
     prisma.task.deleteMany(),
+    // A repeat and a calendar event each name whoever made them, and neither
+    // lets that person go while it exists — so both go before the users do.
+    // (Everything else added since cascades from its task, event or org.)
+    prisma.taskRepeat.deleteMany(),
+    prisma.calendarEvent.deleteMany(),
     prisma.milestone.deleteMany(),
     prisma.proforma.deleteMany(),
     prisma.project.deleteMany(),

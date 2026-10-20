@@ -10,17 +10,18 @@
  *
  * Sectioned rather than one long form, because the parts answer different
  * questions and are edited at different times — the tax identity is set once,
- * the team changes constantly. The sections are a column beside the panel on a
- * wide screen and a single scrolling strip on a narrow one; nine of them in one
- * wrapping row of buttons reflowed as the window changed width, which moved the
- * thing you were about to click.
+ * the team changes constantly. A side panel of grouped sections, each with
+ * its icon, and the open one beside it: a title, a line saying what it is
+ * for, then its sections as headings over clean cards (components/ui/
+ * section-card.tsx). On a narrow screen the panel is one scrolling strip.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { qk } from '@/hooks/queries';
 import Link from 'next/link';
-import { Check } from 'lucide-react';
+import { Check, KeyRound, Mail } from 'lucide-react';
 import {
   api,
   ApiError,
@@ -31,7 +32,7 @@ import {
 import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { SectionCard } from '@/components/ui/section-card';
+import { SectionCard, SettingRow } from '@/components/ui/section-card';
 import { Field, FieldSelect } from '@/components/ui/field';
 import { ListField } from '@/components/ui/list-field';
 import { Toggle } from '@/components/ui/toggle';
@@ -54,6 +55,10 @@ import { SETTINGS_GROUPS } from '@/config/settingsTabs';
 const GROUPS = SETTINGS_GROUPS;
 
 type TabKey = (typeof GROUPS)[number]['tabs'][number]['key'];
+type TabDef = (typeof GROUPS)[number]['tabs'][number];
+
+const ALL_TABS: readonly TabDef[] = GROUPS.flatMap((g) => [...g.tabs] as TabDef[]);
+const isTabKey = (v: string | null): v is TabKey => ALL_TABS.some((t) => t.key === v);
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -119,7 +124,28 @@ type Form = {
 
 export default function SettingsPage() {
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<TabKey>('organisation');
+  const router = useRouter();
+  const search = useSearchParams();
+  /*
+   * The open tab is in the address (/settings?tab=zen), so a message that
+   * says "add a key in Settings" can link straight to the right place, and
+   * the back button goes back a tab. It always opened on Organisation before.
+   */
+  const asked = search.get('tab');
+  const [tab, setTabState] = useState<TabKey>(isTabKey(asked) ? asked : 'organisation');
+  const setTab = (key: TabKey) => {
+    setTabState(key);
+    router.replace(`/settings?tab=${key}`, { scroll: false });
+  };
+  /*
+   * On a wide screen the panel and the page scroll on their own — a long tab
+   * no longer carries the list of sections away with it. So a new tab starts
+   * at its top, rather than wherever the last one was left.
+   */
+  const contentRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    contentRef.current?.scrollTo({ top: 0 });
+  }, [tab]);
   /** Set when a person is clicked on the Usage tab: the Activity tab opens filtered to them. */
   const [activityPerson, setActivityPerson] = useState('');
   const [config, setConfig] = useState<OrgConfig | null>(null);
@@ -325,93 +351,96 @@ export default function SettingsPage() {
   const tz = config.organization.timezone;
   const locale = config.organization.locale;
 
+  // What this person may open. Integrations only when the server has Google or
+  // phone-notification keys to offer; Usage and prices are Management's.
+  const visible = (t: TabDef) =>
+    (t.key !== 'integrations' || config.organization.googleCalendarConfigured || config.organization.pushConfigured) &&
+    (t.key !== 'usage' || config.me.preset === 'MANAGEMENT') &&
+    (t.key !== 'pricing' || config.me.preset === 'MANAGEMENT');
+  const groups = GROUPS.map((g) => ({ label: g.label, tabs: g.tabs.filter(visible) })).filter((g) => g.tabs.length);
+  const current = ALL_TABS.find((t) => t.key === tab) ?? ALL_TABS[0];
+
+  const open = (key: TabKey) => {
+    setTab(key);
+    setActivityPerson('');
+  };
+
   return (
     <div className="page-shell">
       <PageHeader title="Settings" subtitle={config.organization.name} />
 
-      <div className="space-y-5">
-        {error && <ErrorNote onDismiss={() => setError(null)}>{error}</ErrorNote>}
-
+      {/*
+        Wide screens: the window's height less the top bar and the page's own
+        padding (4rem + 2 × 2rem), so the window itself never scrolls here and
+        each side scrolls on its own.
+      */}
+      <div className="grid gap-6 lg:h-[calc(100vh-8rem)] lg:grid-cols-[15rem_minmax(0,1fr)] lg:gap-0">
         {/*
-          The one setting whose absence stops work. Shown on every tab, not just
-          the one it belongs to — quotations refuse without it, which is correct
-          and unhelpful if nothing says which setting is missing.
+          A side panel on a wide screen, a single scrolling strip on a narrow
+          one. Wrapping was the problem with a row of buttons: it reflowed as
+          the window changed and moved the thing you were about to click.
         */}
-        {!config.organization.state && (
-          <Note tone="warn">
-            No state is set, so quotations and invoices cannot work out the tax.{' '}
-            <button onClick={() => setTab('documents')} className="font-medium underline">
-              Set it under Tax &amp; numbering
-            </button>
-            .
-          </Note>
-        )}
+        <nav
+          aria-label="Settings sections"
+          className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1 lg:mx-0 lg:block lg:h-full lg:overflow-x-hidden lg:overflow-y-auto lg:overscroll-contain lg:border-r lg:border-line lg:pb-6 lg:pl-1 lg:pr-5"
+        >
+          <p className="hidden px-3 pb-5 pt-1 text-lg font-semibold tracking-tight text-primary lg:block">Settings</p>
+          {groups.map((group) => (
+            <div key={group.label} className="flex shrink-0 gap-1.5 lg:mb-6 lg:block">
+              <p className="hidden px-3 pb-1.5 text-xs font-semibold text-secondary lg:block">{group.label}</p>
+              {group.tabs.map((t) => {
+                const on = tab === t.key;
+                const Icon = t.icon;
+                return (
+                  <button
+                    key={t.key}
+                    type="button"
+                    onClick={() => open(t.key)}
+                    aria-current={on ? 'page' : undefined}
+                    className={`flex shrink-0 items-center gap-2.5 whitespace-nowrap rounded-lg px-3 py-2 text-left text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary/40 lg:w-full ${
+                      on
+                        ? 'bg-primary/[0.07] font-medium text-primary'
+                        : 'text-body-soft hover:bg-subtle hover:text-primary'
+                    }`}
+                  >
+                    <Icon className={`h-4 w-4 shrink-0 ${on ? 'text-primary' : 'text-secondary'}`} />
+                    {t.label}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </nav>
 
-        <div className="grid gap-5 lg:grid-cols-[14rem_minmax(0,1fr)] lg:items-start">
-          {/*
-            A column on a wide screen, a single scrolling strip on a narrow one.
-            Wrapping was the problem: it reflowed as the window changed and put
-            the section you were reading on a different line than the one you
-            clicked.
-          */}
-          <nav
-            aria-label="Settings sections"
-            className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1 lg:sticky lg:top-4 lg:mx-0 lg:flex-col lg:gap-4 lg:overflow-visible lg:px-0 lg:pb-0"
-          >
-            {GROUPS.map((group) => (
-              <div key={group.label} className="flex shrink-0 gap-1.5 lg:flex-col lg:gap-0.5">
-                <p className="eyebrow hidden px-2 pb-1 lg:block">{group.label}</p>
-                {group.tabs
-                  // Integrations only when the server has Google or phone-notification keys to offer.
-                  .filter(
-                    (t) =>
-                      t.key !== 'integrations' ||
-                      config?.organization.googleCalendarConfigured ||
-                      config?.organization.pushConfigured,
-                  )
-                  // Who is using Flowzen is for management only — the server refuses everybody else too.
-                  .filter((t) => t.key !== 'usage' || config?.me.preset === 'MANAGEMENT')
-                  // Proposal prices are Management's (AI Proposal Builder).
-                  .filter((t) => t.key !== 'pricing' || config?.me.preset === 'MANAGEMENT')
-                  .map((t) => {
-                  const on = tab === t.key;
-                  return (
-                    <button
-                      key={t.key}
-                      type="button"
-                      onClick={() => {
-                        setTab(t.key);
-                        setActivityPerson('');
-                      }}
-                      aria-current={on ? 'page' : undefined}
-                      className={`shrink-0 rounded-xl px-3 py-2 text-left text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary/40 ${
-                        on
-                          ? 'bg-primary/5 font-medium text-primary'
-                          : 'text-body hover:bg-subtle hover:text-primary'
-                      }`}
-                    >
-                      {t.label}
-                      {/*
-                        Orientation for the eye, not part of the button's name:
-                        without `aria-hidden` this reads out as "Trash Removed,
-                        not gone", and anything asking for the button called
-                        "Trash" — a screen reader user, or a test — finds
-                        nothing. Hidden entirely on a strip you scroll sideways.
-                      */}
-                      <span aria-hidden="true" className="mt-0.5 hidden text-micro font-normal text-secondary lg:block">
-                        {t.caption}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            ))}
-          </nav>
+        <div ref={contentRef} className="min-w-0 lg:h-full lg:overflow-y-auto lg:overscroll-contain lg:pb-6 lg:pl-10 lg:pr-3">
+          <div className="mx-auto max-w-4xl lg:mx-0">
+            <header className="mb-8 lg:pt-1">
+              <h1 className="text-2xl font-semibold tracking-tight text-primary">{current.label}</h1>
+              <p className="mt-1 text-sm text-secondary">{current.caption}</p>
+            </header>
 
-          <div className="min-w-0 space-y-5">
+            <div className="mb-8 space-y-3 empty:hidden">
+              {error && <ErrorNote onDismiss={() => setError(null)}>{error}</ErrorNote>}
+              {/*
+                The one setting whose absence stops work. Shown on every tab, not
+                just the one it belongs to — quotations refuse without it, which is
+                correct and unhelpful if nothing says which setting is missing.
+              */}
+              {!config.organization.state && (
+                <Note tone="warn">
+                  No state is set, so quotations and invoices cannot work out the tax.{' '}
+                  <button onClick={() => open('documents')} className="font-medium underline">
+                    Set it under Tax &amp; numbering
+                  </button>
+                  .
+                </Note>
+              )}
+            </div>
+
+            <div className="space-y-10">
 
         {tab === 'organisation' && (
-          <form onSubmit={save} className="space-y-5">
+          <form onSubmit={save} className="space-y-10">
             <SectionCard title="Who you are" description="Printed on every document you send out.">
                 <Field
                   label="Organisation name"
@@ -434,42 +463,39 @@ export default function SettingsPage() {
                 />
             </SectionCard>
 
-            <SectionCard
-              title="Signing in"
-              description="How people reach the app, and where the mail it sends comes from."
-            >
-                <div className="rounded-xl border border-border bg-surface p-3">
+            {/* Rows, like a settings list: what it is on the left, the control on the right. */}
+            <SectionCard title="Signing in" description="How people reach the app." flush>
+              <SettingRow
+                icon={KeyRound}
+                title="Password sign-in"
+                description="Turn off only once everyone signs in with Google Workspace, or people will be locked out."
+                action={
                   <Toggle
                     checked={form.allowPasswordLogin}
                     onChange={(v) => set('allowPasswordLogin', v)}
                     label="Allow signing in with a password"
+                    labelClassName="sr-only"
                   />
-                  <p className="mt-1 text-xs text-secondary">
-                    Turn off only once everyone is using Google Workspace authentication, or people will be locked out.
-                  </p>
-                </div>
-
-                <div className="rounded-xl border border-border bg-surface p-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-primary">Outbound Mail Server (SMTP)</p>
-                      <p className="text-xs text-secondary mt-0.5">
-                        Configure SMTP credentials and sender identities for quotations, invitations, and alerts.
-                      </p>
-                    </div>
-                    <Button type="button" size="sm" onClick={() => setTab('email')}>
-                      Configure Email
-                    </Button>
-                  </div>
-                </div>
+                }
+              />
+              <SettingRow
+                icon={Mail}
+                title="Outgoing email"
+                description="The mail server that sends quotations, invitations and alerts."
+                action={
+                  <Button type="button" size="sm" onClick={() => setTab('email')}>
+                    {config.mailConfigured ? 'Manage' : 'Set up'}
+                  </Button>
+                }
+              />
             </SectionCard>
 
-            {/*
-              §14 makes both of these settings — "All configurable in Setup" —
-              and until now neither had anywhere to be set. The working calendar
-              columns existed and nothing read them; the stage probabilities
-              were compiled into three different files that disagreed.
-            */}
+            {canEdit && <SaveBar saving={saving} saved={saved} />}
+          </form>
+        )}
+
+        {tab === 'calendar' && (
+          <form onSubmit={save} className="space-y-10">
             <SectionCard
               title="Working calendar"
               description="What counts as working time. Every elapsed figure in the app — how long a task took, your average close, the medians the aging alert compares against — is measured against this."
@@ -536,6 +562,18 @@ export default function SettingsPage() {
                 />
             </SectionCard>
 
+            {canEdit && <SaveBar saving={saving} saved={saved} />}
+          </form>
+        )}
+
+        {/*
+          §14 makes both of these settings — "All configurable in Setup" —
+          and until now neither had anywhere to be set. The stage
+          probabilities were compiled into three different files that
+          disagreed.
+        */}
+        {tab === 'pipeline' && (
+          <form onSubmit={save} className="space-y-10">
             <SectionCard
               title="Stage probabilities"
               description={
@@ -556,7 +594,6 @@ export default function SettingsPage() {
                   Won is always 100% and lost is always nothing — neither is a prediction.
                 </p>
             </SectionCard>
-
             <SectionCard
               title="Going stale"
               description={
@@ -574,8 +611,14 @@ export default function SettingsPage() {
                 </div>
             </SectionCard>
 
+            {canEdit && <SaveBar saving={saving} saved={saved} />}
+          </form>
+        )}
+
+        {tab === 'zen' && (
+          <form onSubmit={save} className="space-y-10">
             <SectionCard
-              title="Zen — the assistant"
+              title="Provider and key"
               description={
                 <>
                   A key turns on Zen. It is asked with the month&apos;s real figures — client names, fees,
@@ -679,8 +722,6 @@ export default function SettingsPage() {
                 </div>
             </SectionCard>
 
-            {/* Beside the key that turns Zen on, because this is the other
-                half of trusting it: what it has picked up, in plain sight. */}
             <ZenMemorySection />
 
             {canEdit && <SaveBar saving={saving} saved={saved} />}
@@ -688,7 +729,7 @@ export default function SettingsPage() {
         )}
 
         {tab === 'documents' && (
-          <form onSubmit={save} className="space-y-5">
+          <form onSubmit={save} className="space-y-10">
             <SectionCard
               title="Tax identity"
               description="Decides which tax applies on every quotation and invoice."
@@ -833,11 +874,11 @@ export default function SettingsPage() {
                 <Button size="sm">Open Team</Button>
               </Link>
             }
-            bodyClassName=""
+            flush
           >
             <ul className="divide-y divide-border">
               {team.map((m) => (
-                <li key={m.id} className="flex flex-wrap items-center gap-2 py-2.5 first:pt-0">
+                <li key={m.id} className="flex flex-wrap items-center gap-2 px-5 py-3 sm:px-6">
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm text-primary">{m.name}</p>
                     {/*
@@ -859,7 +900,7 @@ export default function SettingsPage() {
                 </li>
               ))}
               {team.length === 0 && (
-                <li className="py-2 text-sm text-secondary">Just you so far.</li>
+                <li className="px-5 py-4 text-sm text-secondary sm:px-6">Just you so far.</li>
               )}
             </ul>
           </SectionCard>
@@ -911,6 +952,7 @@ export default function SettingsPage() {
             }}
           />
         )}
+            </div>
           </div>
         </div>
       </div>
@@ -929,7 +971,7 @@ export default function SettingsPage() {
 function SaveBar({ saving, saved }: { saving: boolean; saved: boolean }) {
   return (
     /* Above the phone's tab bar, which is fixed to the bottom under `md`. */
-    <div className="sticky bottom-[4.75rem] z-10 flex items-center justify-end gap-3 rounded-card border border-border bg-white/95 px-4 py-3 backdrop-blur md:bottom-0">
+    <div className="sticky bottom-[4.75rem] z-10 flex items-center justify-end gap-3 rounded-xl border border-line bg-white/95 px-5 py-3 shadow-sm backdrop-blur md:bottom-4">
       <span className="mr-auto text-micro text-secondary">
         These settings apply to everybody in the agency.
       </span>

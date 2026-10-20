@@ -1,6 +1,7 @@
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../utils/logger.js';
 import { sendMail } from '../utils/mailer.js';
+import { escapeHtml } from '../utils/html.js';
 import { hasPermission } from '../middleware/auth.js';
 import { composeMondayBrief, type AlertRow, type MondayBrief } from '../routes/brief.js';
 import { generateBriefSummary } from '../services/briefSummary.js';
@@ -13,8 +14,7 @@ const SEND_FROM = '07:00';
 /** Needs action rows in the email; the rest are counted and left to the app. */
 const EMAIL_ROWS = 10;
 
-const esc = (s: string | null | undefined) =>
-  String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+const esc = escapeHtml;
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 /** "4 Oct" — spelled out, because en-GB's short September is "Sept". */
@@ -221,7 +221,11 @@ export async function sendMondayBriefs(now = new Date()): Promise<{ sent: number
       const composed = await composeMondayBrief(org.id, { includeUsage: true, now });
       const written = await generateBriefSummary(org.id, composed);
       const brief: MondayBrief = written
-        ? { ...composed, summary: { text: written.text, generatedAt: written.generatedAt.toISOString(), model: written.model } }
+        ? {
+            ...composed,
+            // Written just now, from these numbers: nothing has moved yet.
+            summary: { text: written.text, generatedAt: written.generatedAt.toISOString(), model: written.model, numbersChanged: false },
+          }
         : composed;
       const forManagement = renderBriefHtml(org.name, brief, appUrl);
       const forOthers = renderBriefHtml(org.name, { ...brief, notUsingFlowzen: null }, appUrl);

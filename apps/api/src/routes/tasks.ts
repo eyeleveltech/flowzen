@@ -1,11 +1,12 @@
 import { TASK_PEOPLE } from '../services/taskPeople.js';
+import { taskHasClient, waitingOnShown } from '../services/taskWaiting.js';
 import { createTaskRecord } from '../services/taskCreate.js';
 import { dayOf, ruleFromDueDate, withRepeatNext } from '../services/taskRepeat.js';
 import { Router, type Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, requirePermission, hasPermission, type AuthRequest } from '../middleware/auth.js';
-import { loadWorkCalendar, workingMinutesOn } from '../utils/workCalendar.js';
+import { formatWorkingMinutes, loadWorkCalendar, workingMinutesOn } from '../utils/workCalendar.js';
 import { computeTaskTypeMedians, taskTypeGroupKey } from '../utils/taskTypeMedian.js';
 import { defaultProjectId } from '../services/retainerProjects.js';
 import { TaskStatus, TaskWorkType, WaitingOn, Priority, TaskType, ReviewDecision, RepeatFrequency } from '@prisma/client';
@@ -33,20 +34,17 @@ async function withEscalatedTo<T extends { taskType: TaskType | null; lastReview
   }));
 }
 
-// Same 540-min-per-working-day math as calculateWorkingMinutes, just applied
-// to a raw minute count (a median) instead of a from/to timestamp pair.
-function formatWorkingMinutes(totalMinutes: number): string {
-  const days = Math.floor(totalMinutes / 540);
-  const hours = Math.floor((totalMinutes % 540) / 60);
-  const minutes = totalMinutes % 60;
-  if (days > 0) return `${days}d${hours > 0 ? ` ${hours}h` : ''}`;
-  if (hours > 0) return `${hours}h${minutes > 0 ? ` ${minutes}m` : ''}`;
-  return `${minutes}m`;
-}
 import { parsePagination } from '../utils/query.js';
 import { toCsv } from '../utils/csv.js';
 import { sendCsv } from '../utils/csvResponse.js';
 import { canSeeTask, taskInScope } from '../services/teamScope.js';
+/*
+ * Changing a task goes through taskChangeableWhere, not taskInScope (security
+ * fixes plan, H2): taskInScope narrows only a department Head, so for anybody
+ * else every task in the organisation was in reach — renamed, closed, held,
+ * taken over and deleted by id. Out of reach now reads "Task not found".
+ */
+import { taskChangeableWhere } from '../services/taskAccess.js';
 import { findOpenTwin, twinDay, twinStatus } from '../services/taskDuplicates.js';
 import { pushReviewDecided, pushReviewSubmitted, pushTaskAssigned, pushTaskEdited } from '../services/push.js';
 import { clearFocusOff, clearFocusOn, ENDS_FOCUS, focusRefusal } from '../services/taskFocus.js';
@@ -162,7 +160,10 @@ tasksRouter.get('/my', requirePermission('work.own'), async (req: AuthRequest, r
         workId: t.workId,
         status: t.status,
         priority: t.priority,
-        waitingOn: t.waitingOn,
+        // An old client hold on a task with no client shows as plain On hold (QA19, F06).
+        waitingOn: waitingOnShown(t),
+        /** Whether "Waiting on the client" can be offered when it goes on hold. */
+        hasClient: taskHasClient(t),
         waitingSince: t.waitingSince,
         waitingTotalMinutes: t.waitingTotalMinutes,
         dueDate: t.dueDate,
@@ -889,7 +890,8 @@ tasksRouter.get('/all', requirePermission('work.all'), async (req: AuthRequest, 
         status: t.status,
         priority: t.priority,
         taskType: t.taskType,
-        waitingOn: t.waitingOn,
+        waitingOn: waitingOnShown(t),
+        hasClient: taskHasClient(t),
         waitingSince: t.waitingSince,
         dueDate: t.dueDate,
         dueTime: t.dueTime,
@@ -1606,7 +1608,7 @@ tasksRouter.patch('/:id', requirePermission('work.own'), async (req: AuthRequest
     const id = String(req.params.id);
     // Somebody else's task outside a Head's departments is "not found" to them.
     const existing = await prisma.task.findFirst({
-      where: await taskInScope(req.user!, { id, organizationId: orgId, deletedAt: null }),
+      where: await taskChangeableWhere(req.user!, { id, organizationId: orgId, deletedAt: null }),
     });
     if (!existing) {
       res.status(404).json({ success: false, error: 'Task not found' });
@@ -1918,7 +1920,7 @@ tasksRouter.delete('/:id', requirePermission('work.own'), async (req: AuthReques
 
     // Somebody else's task outside a Head's departments is "not found" to them.
     const task = await prisma.task.findFirst({
-      where: await taskInScope(req.user!, { id, organizationId: orgId, deletedAt: null }),
+      where: await taskChangeableWhere(req.user!, { id, organizationId: orgId, deletedAt: null }),
     });
     if (!task) {
       res.status(404).json({ success: false, error: 'Task not found' });
@@ -1978,8 +1980,9 @@ tasksRouter.post('/:id/focus', requirePermission('work.own'), async (req: AuthRe
     const me = req.user!.userId;
     const id = String(req.params.id);
 
+    // Out of reach is "not found", as on every route that changes a task.
     const task = await prisma.task.findFirst({
-      where: { id, organizationId: orgId, deletedAt: null },
+      where: await taskChangeableWhere(req.user!, { id, organizationId: orgId, deletedAt: null }),
       select: { id: true, title: true, status: true, assignees: { select: { userId: true } } },
     });
     if (!task) {
@@ -2053,7 +2056,7 @@ tasksRouter.patch('/:id/status', requirePermission('work.own'), async (req: Auth
 
     // Somebody else's task outside a Head's departments is "not found" to them.
     const task = await prisma.task.findFirst({
-      where: await taskInScope(req.user!, { id, organizationId: orgId, deletedAt: null }),
+      where: await taskChangeableWhere(req.user!, { id, organizationId: orgId, deletedAt: null }),
     });
     if (!task) {
       res.status(404).json({ success: false, error: 'Task not found' });
@@ -2128,8 +2131,16 @@ tasksRouter.patch('/:id/status', requirePermission('work.own'), async (req: Auth
 
 // ── 5. Pause Clock on Hold (Waiting On) ─────────────────────────────────────
 
+/*
+ * What it is waiting on — or nothing (QA19 fixes plan, F06).
+ *
+ * Every screen sent CLIENT, hard-coded, so an internal task with no client
+ * read "waiting on the client". The question is asked now: the client (only
+ * for a task that has one), someone else, or left out — null — for a task that
+ * is just on hold. The clock pauses the same either way.
+ */
 const waitSchema = z.object({
-  waitingOn: z.nativeEnum(WaitingOn),
+  waitingOn: z.nativeEnum(WaitingOn).nullable().optional(),
 });
 
 tasksRouter.post('/:id/wait', requirePermission('work.own'), async (req: AuthRequest, res: Response, next) => {
@@ -2148,7 +2159,7 @@ tasksRouter.post('/:id/wait', requirePermission('work.own'), async (req: AuthReq
     // tenant-isolation gap the other four task mutations don't have.
     // Somebody else's task outside a Head's departments is "not found" to them.
     const existing = await prisma.task.findFirst({
-      where: await taskInScope(req.user!, { id, organizationId: orgId, deletedAt: null }),
+      where: await taskChangeableWhere(req.user!, { id, organizationId: orgId, deletedAt: null }),
     });
     if (!existing) {
       res.status(404).json({ success: false, error: 'Task not found' });
@@ -2160,12 +2171,20 @@ tasksRouter.post('/:id/wait', requirePermission('work.own'), async (req: AuthReq
       res.status(400).json({ success: false, error: "This task is waiting for approval, so it can't be put on hold." });
       return;
     }
+    const waitingOn = parsed.data.waitingOn ?? null;
+    if (waitingOn === WaitingOn.CLIENT && !taskHasClient(existing)) {
+      res.status(400).json({
+        success: false,
+        error: 'This task has no client to wait on. Put it on hold waiting on someone else, or just on hold.',
+      });
+      return;
+    }
 
     const updated = await prisma.task.update({
       where: { id },
       data: {
         status: TaskStatus.ON_HOLD,
-        waitingOn: parsed.data.waitingOn,
+        waitingOn,
         waitingSince: new Date(),
       },
     });
@@ -2179,7 +2198,7 @@ tasksRouter.post('/:id/wait', requirePermission('work.own'), async (req: AuthReq
         entityId: id,
         actorId: req.user!.userId,
         verb: 'task_waiting',
-        payload: { waitingOn: parsed.data.waitingOn },
+        payload: { waitingOn },
       },
     });
 
@@ -2198,7 +2217,7 @@ tasksRouter.post('/:id/resume', requirePermission('work.own'), async (req: AuthR
 
     // Somebody else's task outside a Head's departments is "not found" to them.
     const task = await prisma.task.findFirst({
-      where: await taskInScope(req.user!, { id, organizationId: orgId, deletedAt: null }),
+      where: await taskChangeableWhere(req.user!, { id, organizationId: orgId, deletedAt: null }),
     });
     if (!task) {
       res.status(404).json({ success: false, error: 'Task not found' });

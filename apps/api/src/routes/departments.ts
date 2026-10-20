@@ -5,6 +5,15 @@ import { prisma } from '../lib/prisma.js';
 import { authenticate, hasPermission, requirePermission, resolvePermissions, type AuthRequest } from '../middleware/auth.js';
 import { emitToOrganization } from '../sse.js';
 import { isDepartmentScoped } from '../services/teamScope.js';
+import {
+  composeDepartmentApprovals,
+  composeDepartmentOverview,
+  composeDepartmentWork,
+  departmentForPage,
+  departmentPeople,
+  type DepartmentPerson,
+  type PageDepartment,
+} from '../services/departmentPage.js';
 
 /**
  * /api/departments — departments as real records (Departments Plan 1).
@@ -165,6 +174,50 @@ departmentsRouter.get('/', async (req: AuthRequest, res: Response, next: NextFun
     next(e);
   }
 });
+
+// ── My Department (Department head page plan) ───────────────────────────────
+//
+// The head's page for one department. Each route answers only for the
+// department's head or Management (`departmentForPage`), and its people are
+// narrowed by the caller's team scope on top of that. The page's other tabs
+// reuse the calendar, allocation, approval and asset routes as they are.
+
+/** Runs a department page compute for an allowed caller, or answers why not. */
+function pageRoute(
+  compute: (req: AuthRequest, department: PageDepartment, people: DepartmentPerson[]) => Promise<object>,
+) {
+  return async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const allowed = await departmentForPage(req.user!, String(req.params.id));
+      if ('error' in allowed) {
+        res.status(allowed.status).json({ success: false, error: allowed.error });
+        return;
+      }
+      const people = await departmentPeople(req.user!, allowed.department.id);
+      res.json({ success: true, ...(await compute(req, allowed.department, people)) });
+    } catch (e) {
+      next(e);
+    }
+  };
+}
+
+/** GET /api/departments/:id/overview — the header, the People tab, and the team's gear. */
+departmentsRouter.get(
+  '/:id/overview',
+  pageRoute((req, department, people) => composeDepartmentOverview(req.user!.organizationId, department, people)),
+);
+
+/** GET /api/departments/:id/work — client work by client then retainer or project, and internal projects. */
+departmentsRouter.get(
+  '/:id/work',
+  pageRoute((req, department, people) => composeDepartmentWork(req.user!.organizationId, department, people)),
+);
+
+/** GET /api/departments/:id/approvals — the team's work in review, and what was sent back lately. */
+departmentsRouter.get(
+  '/:id/approvals',
+  pageRoute((req, department, people) => composeDepartmentApprovals(req.user!, department, people)),
+);
 
 /** POST /api/departments — add one, at the end of the list. */
 departmentsRouter.post('/', requirePermission('setup.admin'), async (req: AuthRequest, res: Response, next: NextFunction) => {

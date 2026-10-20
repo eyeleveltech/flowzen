@@ -96,9 +96,16 @@ export function mergeNextStep(
   return { nextStep, date };
 }
 
-/** Whether a next step is complete: both the words and the date. */
-export const hasNextStep = (v: { nextStep: string | null | undefined; date: Date | null | undefined }) =>
-  Boolean(v.nextStep?.trim()) && Boolean(v.date);
+/**
+ * Whether a next step is missing: nothing written (QA19 fixes plan, F04).
+ *
+ * It used to be "no words OR no date", so a deal whose next step was written
+ * down without a date showed "No next step" — the step was saved and the
+ * screen said there was none. Next steps are optional and so are their dates
+ * (2026-10-16): a step with words and no date is a step, shown with "date not
+ * set". The pipeline, Zen and the lists all read this one rule.
+ */
+export const isNextStepMissing = (v: { nextStep: string | null | undefined }) => !v.nextStep?.trim();
 
 /** Whole days from a moment to today (studio calendar). Never negative. */
 export function daysSince(at: Date, today: string): number {
@@ -159,7 +166,7 @@ export function nextStepState(
   needsOne: boolean,
   today: string,
 ): { missing: boolean; overdue: boolean; dueToday: boolean } {
-  const missing = needsOne && !hasNextStep(v);
+  const missing = needsOne && isNextStepMissing(v);
   const key = v.date ? dayKey(v.date) : null;
   return { missing, overdue: Boolean(needsOne && key && key < today), dueToday: Boolean(needsOne && key === today) };
 }

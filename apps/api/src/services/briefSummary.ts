@@ -76,6 +76,59 @@ export function summaryInputFrom(brief: MondayBrief) {
   };
 }
 
+/**
+ * Whether the live lists no longer say what the summary was written from
+ * (QA19 fixes plan, small wins).
+ *
+ * The summary is a snapshot — written once, at 07:00 on Monday — while the
+ * action lists, the week ahead and the risks under it are live. By Wednesday
+ * the paragraph can quote "three invoices to chase" over a list of one, and
+ * read as if it were wrong. The screen labels the two, and says so in one
+ * muted line when a count the summary saw has since moved.
+ *
+ * `saved` is the stored `summaryInput`; anything unreadable counts as
+ * unchanged, so an old row never puts the line up on its own.
+ */
+export function numbersChangedSince(
+  saved: unknown,
+  live: {
+    needsAction: { group: string; items: unknown[] }[] | null;
+    risks: { group: string; items: unknown[] }[] | null;
+    comingUp: {
+      invoicesDue: unknown[];
+      projectsEnding: unknown[];
+      renewals: unknown[];
+      events: { kind: string }[];
+    } | null;
+  },
+): boolean {
+  if (!saved || typeof saved !== 'object') return false;
+  const s = saved as {
+    needsAction?: { group: string; count: number }[];
+    risks?: { group: string; count: number }[];
+    comingUp?: { invoicesDue?: { count: number }; projectsEnding?: number; renewals?: number; shoots?: number; meetings?: number };
+  };
+  const groups = (gs: { group: string; count: number }[] | undefined) =>
+    JSON.stringify((gs ?? []).filter((g) => g.count > 0).map((g) => [g.group, g.count]).sort());
+  const liveGroups = (gs: { group: string; items: unknown[] }[] | null) =>
+    groups((gs ?? []).map((g) => ({ group: g.group, count: g.items.length })));
+  if (s.needsAction && groups(s.needsAction) !== liveGroups(live.needsAction)) return true;
+  if (s.risks && groups(s.risks) !== liveGroups(live.risks)) return true;
+  if (s.comingUp && live.comingUp) {
+    const was = [s.comingUp.invoicesDue?.count, s.comingUp.projectsEnding, s.comingUp.renewals, s.comingUp.shoots, s.comingUp.meetings];
+    const c = live.comingUp;
+    const now = [
+      c.invoicesDue.length,
+      c.projectsEnding.length,
+      c.renewals.length,
+      c.events.filter((e) => e.kind === 'SHOOT').length,
+      c.events.filter((e) => e.kind === 'MEETING').length,
+    ];
+    if (was.some((n, i) => n !== undefined && n !== now[i])) return true;
+  }
+  return false;
+}
+
 /** "2026-09-29" → the UTC midnight a `@db.Date` column stores it at. */
 const asDate = (day: string) => new Date(`${day}T00:00:00Z`);
 

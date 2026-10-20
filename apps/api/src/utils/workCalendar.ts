@@ -100,6 +100,19 @@ export function workingMinutesOn(
   );
 }
 
+/**
+ * A working-time minute count as "2d 3h", "4h 10m" or "25m" — 540 minutes to a
+ * working day, the same day calculateWorkingMinutes counts in.
+ */
+export function formatWorkingMinutes(totalMinutes: number): string {
+  const days = Math.floor(totalMinutes / 540);
+  const hours = Math.floor((totalMinutes % 540) / 60);
+  const minutes = totalMinutes % 60;
+  if (days > 0) return `${days}d${hours > 0 ? ` ${hours}h` : ''}`;
+  if (hours > 0) return `${hours}h${minutes > 0 ? ` ${minutes}m` : ''}`;
+  return `${minutes}m`;
+}
+
 // ── Calendar days ───────────────────────────────────────────────────────────
 //
 // Plain "YYYY-MM-DD" keys, read as calendar days with no time and no zone — the

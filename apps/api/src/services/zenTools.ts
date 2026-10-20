@@ -5,7 +5,9 @@ import { repeatLabel } from './taskRepeat.js';
 import { companyLink, rawLinkFor, retainerMonthLink, taskLink } from '../utils/recordLink.js';
 import { proposalProbability, STAGE_PROBABILITY_SELECT } from '../utils/stageProbability.js';
 import { dealStaleness, nextStepState, studioToday } from './salesFollowUp.js';
+import { ACTIVE_DEAL_WHERE } from './activeDeal.js';
 import { BOARD_PERSON_SELECT, composeTeamBoard } from './teamBoard.js';
+import { allDepartmentPeople, composeDepartmentOverview, composeDepartmentWork } from './departmentPage.js';
 
 /**
  * What Zen may look up, and how.
@@ -121,7 +123,7 @@ export const ZEN_TOOLS = [
           type: 'string',
           enum: ['PROSPECT', 'PROPOSAL_SENT', 'IN_NEGOTIATION', 'PROFORMA_ISSUED', 'VERBAL_YES'],
         },
-        missingNextStep: { type: 'boolean', description: 'Only open deals with no next step or no next step date.' },
+        missingNextStep: { type: 'boolean', description: 'Only open deals with no next step written. A step written without a date is not missing; its date shows as not set.' },
         stale: { type: 'boolean', description: "Only deals whose last touch is past the org's going-stale threshold." },
         overdue: { type: 'boolean', description: 'Only deals whose next step date has passed.' },
         limit: { type: 'number' },
@@ -160,6 +162,16 @@ export const ZEN_TOOLS = [
     parameters: {
       type: 'object',
       properties: { month: { type: 'string', description: 'As 2026-09.' } },
+    },
+  },
+  {
+    name: 'getDepartment',
+    description:
+      "One department as its head sees it on My Department: each person's Now (what they said they are on) and Next up, their open, overdue, waiting, in-review and done-this-week counts, today's meetings and shoots and the gear they hold; what needs attention (overdue, on hold 3+ working days, stuck in review, urgent not started, gear overdue back, the time split unconfirmed after the 25th); and the client work and internal projects its people are on. Use for \"how is Development doing\", \"what is the video team on\". Never includes pay.",
+    parameters: {
+      type: 'object',
+      properties: { department: { type: 'string', description: "The department's name, e.g. Development." } },
+      required: ['department'],
     },
   },
   {
@@ -428,13 +440,12 @@ export async function runZenTool(
       const staleDays = org?.dealStaleDays ?? 25;
       const today = await studioToday(organizationId);
       const rows = await prisma.proposal.findMany({
+        // Active deals only, by the rule every screen shares (QA19, F01); a
+        // stage asked for narrows that, and a closed stage finds nothing.
         where: {
           organizationId,
-          deletedAt: null,
-          outcome: null,
-          stage: args.stage
-            ? (String(args.stage) as never)
-            : ({ notIn: ['WON', 'LOST', 'EXPIRED'] } as never),
+          ...ACTIVE_DEAL_WHERE,
+          ...(args.stage ? { AND: [{ stage: String(args.stage) as never }] } : {}),
         },
         select: {
           id: true,
@@ -606,7 +617,12 @@ export async function runZenTool(
         month,
         departments: [...by.entries()]
           .sort(([a], [b]) => order.indexOf(a) - order.indexOf(b))
-          .map(([id, v]) => ({ department: departments.find((d) => d.id === id)?.name ?? 'No department', ...v, link: '/members' })),
+          .map(([id, v]) => ({
+            department: departments.find((d) => d.id === id)?.name ?? 'No department',
+            ...v,
+            // Its My Department page; the unplaced have none, so the Team screen.
+            link: id ? `/my-department?department=${id}` : '/members',
+          })),
         people: board.people.map((p) => ({
           name: p.name,
           department: p.department ?? 'No department',
@@ -615,7 +631,69 @@ export async function runZenTool(
           nextUp: titleOf(p.nextUpTaskId),
           nextUpLink: p.nextUpTaskId ? taskLink(p.nextUpTaskId) : null,
         })),
-        boardLink: '/members?tab=board',
+      };
+    }
+
+    case 'getDepartment': {
+      const asked = String(args.department ?? '').trim();
+      const found = asked
+        ? await prisma.department.findFirst({
+            where: { organizationId, archivedAt: null, name: { contains: asked, mode: 'insensitive' } },
+            select: { id: true, name: true, headId: true, head: { select: { name: true } } },
+          })
+        : null;
+      if (!found) return { error: `No department matching "${asked}".` };
+      const department = { id: found.id, name: found.name, headId: found.headId, headName: found.head?.name ?? null };
+      const people = await allDepartmentPeople(organizationId, found.id);
+      const [overview, work] = await Promise.all([
+        composeDepartmentOverview(organizationId, department, people),
+        composeDepartmentWork(organizationId, department, people),
+      ]);
+      const titleOf = (id: string | null) => (id ? (overview.tasks[id]?.title ?? null) : null);
+      return {
+        department: found.name,
+        head: department.headName,
+        people: overview.people.map((p) => ({
+          name: p.name,
+          designation: p.designation,
+          now: titleOf(p.nowTaskId),
+          nextUp: titleOf(p.nextUpTaskId),
+          open: p.lists.open.length,
+          overdue: p.lists.overdue.length,
+          waiting: p.lists.waiting.length,
+          inReview: p.lists.inReview.length,
+          doneThisWeek: p.lists.doneThisWeek.length,
+          todayEvents: p.todayEvents.map((e) => (e.allDay ? e.title : `${e.title} ${e.time}`)),
+          gearHeld: p.gear.length,
+        })),
+        needsAttention: overview.attention.map((a) =>
+          a.kind === 'TASK'
+            ? { task: titleOf(a.taskId), reasons: a.reasons, link: taskLink(a.taskId) }
+            : a.kind === 'GEAR_OVERDUE'
+              ? { gear: `${a.tag} ${a.name}`, with: a.holder.name, daysOverdue: a.daysOverdue }
+              : { timeSplitNotConfirmed: a.month, people: a.people.map((p) => p.name) },
+        ),
+        clientWork: work.clients.map((c) => ({
+          client: c.name,
+          work: c.items.map((i) => ({
+            name: i.kind === 'RETAINER' ? 'Retainer' : i.name,
+            people: i.people.map((p) => p.name),
+            open: i.open,
+            overdue: i.overdue,
+            nextDeadline: i.nextDeadline?.dueDate ?? null,
+            link: i.href,
+          })),
+        })),
+        internalProjects: work.internalProjects.map((p) => ({
+          name: p.name,
+          owner: p.owner?.name ?? null,
+          percentDone: p.percentDone,
+          daysLeft: p.daysLeft,
+          open: p.open,
+          overdue: p.overdue,
+          link: p.href,
+        })),
+        link: `/my-department?department=${found.id}`,
       };
     }
 

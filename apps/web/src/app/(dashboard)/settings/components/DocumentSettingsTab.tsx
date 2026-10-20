@@ -23,7 +23,7 @@ import { qk } from '@/hooks/queries';
 import { Check, Plus, Trash2 } from 'lucide-react';
 import { api, ApiError, type DocumentSettings, type SellerGap } from '@/lib/api-v2';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle, CardBody } from '@/components/ui/card';
+import { SectionCard } from '@/components/ui/section-card';
 import { Field, FieldCheckbox } from '@/components/ui/field';
 import { ErrorNote } from '@/components/ui/empty-state';
 import { PageSkeleton } from '@/components/ui/skeleton-loaders';
@@ -206,21 +206,16 @@ export function DocumentSettingsTab({ canEdit }: { canEdit: boolean }) {
   if (loading) return <PageSkeleton />;
 
   return (
-    <form onSubmit={save} className="space-y-5">
+    <form onSubmit={save} className="space-y-10">
       {error && <ErrorNote onDismiss={() => setError(null)}>{error}</ErrorNote>}
 
       <SellerGapsNote gaps={gaps} />
 
-      <Card padding="none">
-        <CardHeader>
-          <CardTitle>Who is issuing the document</CardTitle>
-        </CardHeader>
-        <CardBody className="space-y-4">
-          <p className="text-xs text-secondary">
-            Printed at the top of every proforma and tax invoice. A tax invoice is required to
-            carry the GSTIN, the state and the registered name, so anything missing here is
-            missing on the document.
-          </p>
+      <SectionCard
+        title="Who is issuing the document"
+        description={<>Printed at the top of every proforma and tax invoice. A tax invoice is required to carry the GSTIN, the state and the registered name, so anything missing here is missing on the document.</>}
+        bodyClassName="space-y-4"
+      >
           <Field
             label="Registered name"
             value={form.legalName}
@@ -324,15 +319,13 @@ export function DocumentSettingsTab({ canEdit }: { canEdit: boolean }) {
                 : 'Off — documents end at the bank details. Nothing in GST law requires the printed box; a document emailed under your own covering note is signed in practice.'
             }
           />
-        </CardBody>
-      </Card>
+        </SectionCard>
 
-      <Card padding="none">
-        <CardHeader>
-          <CardTitle>Sender details</CardTitle>
-        </CardHeader>
-        <CardBody className="space-y-4">
-          <p className="text-xs text-secondary">Printed on every proforma you send out.</p>
+      <SectionCard
+        title="Sender details"
+        description={<>Printed on every proforma you send out.</>}
+        bodyClassName="space-y-4"
+      >
           <div className="grid gap-4 sm:grid-cols-2">
             <Field
               label="Contact email"
@@ -358,17 +351,13 @@ export function DocumentSettingsTab({ canEdit }: { canEdit: boolean }) {
             disabled={!canEdit}
             hint="How long a new proforma stays valid from the day it's raised, unless changed on that one document."
           />
-        </CardBody>
-      </Card>
+        </SectionCard>
 
-      <Card padding="none">
-        <CardHeader>
-          <CardTitle>Terms &amp; conditions</CardTitle>
-        </CardHeader>
-        <CardBody className="space-y-3">
-          <p className="text-xs text-secondary">
-            The numbered list every proforma shows. Every client gets the same list.
-          </p>
+      <SectionCard
+        title="Terms & conditions"
+        description={<>The numbered list every proforma shows. Every client gets the same list.</>}
+        bodyClassName="space-y-3"
+      >
           {form.terms.map((t, i) => (
             <div key={i} className="flex items-center gap-2">
               <span className="w-5 shrink-0 text-xs text-secondary">{i + 1}.</span>
@@ -398,19 +387,13 @@ export function DocumentSettingsTab({ canEdit }: { canEdit: boolean }) {
               Add a line
             </Button>
           )}
-        </CardBody>
-      </Card>
+        </SectionCard>
 
-      <Card padding="none">
-        <CardHeader>
-          <CardTitle>HSN / SAC codes</CardTitle>
-        </CardHeader>
-        <CardBody className="space-y-3">
-          <p className="text-xs text-secondary">
-            The codes you bill under. Every line item on a document offers this list, so a code
-            is picked rather than remembered — which is the difference between the same service
-            carrying the same code every month and carrying four spellings of it.
-          </p>
+      <SectionCard
+        title="HSN / SAC codes"
+        description={<>The codes you bill under. Every line item on a document offers this list, so a code is picked rather than remembered — which is the difference between the same service carrying the same code every month and carrying four spellings of it.</>}
+        bodyClassName="space-y-3"
+      >
           {form.sacCodes.length === 0 && (
             <p className="text-xs text-secondary">None saved yet. Add the ones you use.</p>
           )}
@@ -442,15 +425,13 @@ export function DocumentSettingsTab({ canEdit }: { canEdit: boolean }) {
               Add a code
             </Button>
           )}
-        </CardBody>
-      </Card>
+        </SectionCard>
 
-      <Card padding="none">
-        <CardHeader>
-          <CardTitle>Bank details</CardTitle>
-        </CardHeader>
-        <CardBody className="space-y-4">
-          <p className="text-xs text-secondary">Where the money should actually go.</p>
+      <SectionCard
+        title="Bank details"
+        description={<>Where the money should actually go.</>}
+        bodyClassName="space-y-4"
+      >
           <Field
             label="Account holder name"
             value={form.bankAccountHolderName}
@@ -470,8 +451,7 @@ export function DocumentSettingsTab({ canEdit }: { canEdit: boolean }) {
             />
             <Field label="IFSC code" value={form.bankIfscCode} onChange={(v) => set('bankIfscCode', v)} disabled={!canEdit} />
           </div>
-        </CardBody>
-      </Card>
+        </SectionCard>
 
       {canEdit && (
         <div className="flex items-center justify-end gap-3">

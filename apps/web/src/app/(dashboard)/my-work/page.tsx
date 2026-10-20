@@ -28,7 +28,7 @@ import { ApprovalQueue } from '@/components/work/ApprovalQueue';
 import { ApprovalDrawer } from '@/components/work/ApprovalDrawer';
 import { StuckApproval } from '@/components/work/Approval';
 import { InlineDueDate } from '@/components/work/InlineDueDate';
-import { changeTaskStatus } from '@/lib/task-status';
+import { changeTaskStatus, waitingWords } from '@/lib/task-status';
 import { statusChoices } from '@/components/retainers/task-shared';
 import { Badge } from '@/components/ui/badge';
 import type { LastReview } from '@/lib/api-v2';
@@ -387,8 +387,9 @@ export default function MyWorkPage() {
     if (next === task.status) return;
     setBusyId(task.id);
     try {
-      // On hold goes through /wait and /resume, so the wait is timed.
-      await changeTaskStatus(task, next);
+      // On hold goes through /wait and /resume, so the wait is timed — and
+      // asks what it is waiting on. Cancelled, nothing moved.
+      if (!(await changeTaskStatus(task, next))) return;
       await load();
       setSelected((s) => (s && s.id === task.id ? { ...s, status: next } : s));
     } catch (e) {
@@ -472,7 +473,7 @@ export default function MyWorkPage() {
             ))}
           {t.status === 'ON_HOLD' && t.waitingOn && (
             <p className="mt-0.5 text-micro text-secondary">
-              waiting on {t.waitingOn === 'CLIENT' ? 'the client' : 'someone else'}
+              {waitingWords(t.waitingOn)}
             </p>
           )}
           {t.status === 'IN_REVIEW' && t.lastReview && (

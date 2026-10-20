@@ -298,20 +298,25 @@ export default function PipelinePage() {
     });
   }, [board]);
 
+  /*
+   * The headline is the server's (QA19 fixes plan, F01).
+   *
+   * It was summed here from "every card not in Won", which kept the whole
+   * Lost column: Live deals and Full pipeline were inflated by exactly the
+   * deals already lost. The server now counts active deals by the one rule
+   * Forecast, Proposals, the brief and Zen use too.
+   */
   const stats = useMemo(() => {
-    const allCards = columns.flatMap((c) => c.cards);
-    const live = allCards.filter((c) => c.stage !== "WON");
+    const headline = board?.success ? board.headline : undefined;
     return {
-      liveDeals: live.length,
-      fullPipeline: live.reduce((s, c) => s + (c.quotedValue || 0), 0),
-      weighted: columns
-        .filter((c) => c.stage !== "WON")
-        .reduce((s, c) => s + c.weightedValue, 0),
+      activeDeals: headline?.activeDeals ?? 0,
+      fullPipeline: headline?.value ?? 0,
+      weighted: headline?.weighted ?? 0,
       // Worked out on the server, from the last touch (Sales next step plan).
       goingStale: board?.success ? (board.staleCount ?? 0) : 0,
       staleDays: board?.success ? (board.staleDays ?? 25) : 25,
     };
-  }, [columns, board]);
+  }, [board]);
 
   /** What the drag, override, version and proforma flows call after a change. */
   const load = useCallback(async () => {
@@ -442,7 +447,14 @@ export default function PipelinePage() {
     }
   };
 
-  usePageHeader("Sales pipeline", `${stats.liveDeals} live deals`);
+  // "8 active deals · ₹10,40,000 if every one lands" — the value only for
+  // somebody who can see deal values.
+  usePageHeader(
+    "Sales pipeline",
+    `${stats.activeDeals} active ${stats.activeDeals === 1 ? "deal" : "deals"}${
+      showValues ? ` · ${formatMoney(stats.fullPipeline)} if every one lands` : ""
+    }`,
+  );
 
   return (
     <div className="page-shell">
@@ -463,15 +475,15 @@ export default function PipelinePage() {
 
       <StatRow className="mb-8">
         <StatTile
-          label="Live Deals"
-          value={stats.liveDeals}
-          note="each one a real quote"
+          label="Active Deals"
+          value={stats.activeDeals}
+          note="not won, lost or expired"
         />
         {showValues && (
           <StatTile
             label="Full Pipeline"
             value={formatMoney(stats.fullPipeline)}
-            note="if every one lands"
+            note="if every active deal lands"
           />
         )}
         {showValues && (

@@ -27,6 +27,7 @@ import { RecordPaymentModal } from '@/components/work/RecordPaymentModal';
 import { EnterInvoiceModal } from '@/components/work/EnterInvoiceModal';
 import { InvoiceActions } from '@/components/work/InvoiceActions';
 import { BILLING_LABEL, billableFrom, isLiveProforma, monthLabel } from '@/lib/retainerBilling';
+import { invoicedAndDue } from '@/lib/invoiceDates';
 
 /** What billing a month needs to know — a board row, or one built from the retainer page. */
 export type BillingSubject = Pick<
@@ -261,7 +262,7 @@ export function RetainerBillingStrip({
           : 'Not raised yet';
 
   const invoiceDetail = invoice
-    ? `${invoice.number} · due ${new Date(invoice.dueAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`
+    ? `${invoice.number} · ${invoicedAndDue(invoice, (d) => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }))}`
     : live
       ? 'Once the proforma is paid'
       : 'Not yet';

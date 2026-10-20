@@ -40,7 +40,7 @@ import {
   Briefcase,
   MessageSquarePlus,
 } from 'lucide-react';
-import { NextStepLine, useStudioToday } from '@/components/sales/NextStep';
+import { NextStepLine, isNextStepMissing, useStudioToday } from '@/components/sales/NextStep';
 import { LastContactModal, LogTouchModal, NextStepModal, VerbalYesModal, type SalesTarget } from '@/components/sales/SalesDialogs';
 import toast from 'react-hot-toast';
 import { api, ApiError, formatMoney, formatDate } from '@/lib/api-v2';
@@ -67,6 +67,7 @@ import { TaskDrawer, type DrawerTask } from '@/components/work/TaskDrawer';
 import { withDueTime } from '@/lib/due-time';
 import { RepeatMark } from '@/components/work/RepeatMark';
 import { NotFoundPanel } from '@/components/ui/not-found-panel';
+import { changeTaskStatus } from '@/lib/task-status';
 
 export default function CompanyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -1189,7 +1190,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                       <NextStepLine
                         nextStep={prop.nextStep}
                         nextStepDate={prop.nextStepDate ? String(prop.nextStepDate).slice(0, 10) : null}
-                        missing={!prop.nextStep || !prop.nextStepDate}
+                        missing={isNextStepMissing(prop.nextStep)}
                         overdue={Boolean(prop.nextStepDate) && String(prop.nextStepDate).slice(0, 10) < studioToday}
                         onClick={() => setDealAction({ action: 'NEXT_STEP', target: dealTarget(prop) })}
                       />
@@ -1742,7 +1743,8 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
         onStatusChange={async (t, next) => {
           setFollowUpBusyId(t.id);
           try {
-            await api.tasks.updateStatus(t.id, next);
+            // A follow-up is about this company, so it has a client to wait on.
+            if (!(await changeTaskStatus({ ...t, hasClient: true }, next))) return;
             await fetchDetail();
             setOpenFollowUp(null);
           } catch (e) {

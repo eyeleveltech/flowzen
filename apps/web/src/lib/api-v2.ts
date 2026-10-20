@@ -382,6 +382,8 @@ export interface OrgConfig {
     approverFor?: string[];
     /** The task types whose stuck approvals escalate to this person. */
     escalateFor?: string[];
+    /** The departments they head — My Department's switcher. */
+    headOf?: { id: string; name: string }[];
   };
   documentSettings?: DocumentSettings;
 }
@@ -1868,6 +1870,13 @@ export const api = {
         /** Open deals whose last touch is more than `staleDays` ago. */
         staleCount?: number;
         staleDays?: number;
+        /**
+         * Active deals only — no outcome and not in a closed stage — worked out
+         * on the server by the one rule every screen shares. Lost stays in its
+         * column and out of these. `value` and `weighted` are null without
+         * money.figures.
+         */
+        headline?: { activeDeals: number; value: number | null; weighted: number | null };
         /** False without money.figures: every quotedValue is null. */
         canSeeValues?: boolean;
       }>('/proposals/pipeline'),
@@ -1882,7 +1891,13 @@ export const api = {
   proposals: {
     list: (params: Record<string, string> = {}) =>
       // canSeeValues is false without money.figures: every version's value is null.
-      get<{ success: boolean; proposals: any[]; canSeeValues?: boolean }>(`/proposals?${new URLSearchParams(params)}`),
+      get<{
+        success: boolean;
+        proposals: any[];
+        /** Every active deal in the register (not just this page), by the shared rule. Value null without money.figures. */
+        active?: { count: number; value: number | null };
+        canSeeValues?: boolean;
+      }>(`/proposals?${new URLSearchParams(params)}`),
     create: (body: Record<string, unknown>) =>
       post<{ success: boolean; proposal: any; version: any }>('/proposals', body),
     addVersion: (id: string, body: Record<string, unknown>) =>
@@ -2138,7 +2153,8 @@ export const api = {
     remove: (id: string) => del<{ success: boolean }>(`/tasks/${id}`),
     updateStatus: (id: string, status: string) =>
       patch<{ success: boolean; task: any }>(`/tasks/${id}/status`, { status }),
-    wait: (id: string, waitingOn: string) =>
+    /** On hold, waiting on the client, someone else, or — null — nothing in particular. */
+    wait: (id: string, waitingOn: 'CLIENT' | 'ANOTHER_PERSON' | null) =>
       post<{ success: boolean; task: any }>(`/tasks/${id}/wait`, { waitingOn }),
     resume: (id: string) =>
       post<{ success: boolean; task: any }>(`/tasks/${id}/resume`),
@@ -2308,7 +2324,8 @@ export const api = {
   },
 
   allocations: {
-    list: (month: string) =>
+    /** With a department: My Department's Time split — its people, percentages only. */
+    list: (month: string, departmentId?: string) =>
       get<{
         success: boolean;
         month: string;
@@ -2326,7 +2343,7 @@ export const api = {
           }[];
         }[];
         summary: { totalMembers: number; fullyAllocated: number; availableCapacity: number; overallocated: number };
-      }>(`/allocations?month=${month}`),
+      }>(`/allocations?month=${month}${departmentId ? `&departmentId=${departmentId}` : ''}`),
     bulkSave: (body: { userId: string; month: string; allocations: { workType: string; workId: string; monthCardId?: string | null; projectId?: string | null; percent: number; proposedPercent?: number }[] }) =>
       post<{ success: boolean; message: string }>('/allocations/bulk', body),
     confirm: (month: string, userIds?: string[]) =>
@@ -2669,6 +2686,12 @@ export const api = {
     restore: (id: string) => post<{ success: boolean }>(`/departments/${id}/restore`),
     movePeople: (userIds: string[], departmentId: string) =>
       post<{ success: boolean; moved: number }>('/departments/move-people', { userIds, departmentId }),
+    /** My Department: the header, People cards, Needs attention and the team's gear. Head or Management only. */
+    overview: (id: string) => get<DepartmentOverview>(`/departments/${id}/overview`),
+    /** My Department → Work: client work by client then retainer or project, and internal projects. */
+    work: (id: string) => get<DepartmentWork>(`/departments/${id}/work`),
+    /** My Department → Approvals: the team's work in review, and what was sent back lately. */
+    approvals: (id: string) => get<DepartmentApprovals>(`/departments/${id}/approvals`),
   },
 
   /** The Monday brief: last week, what needs action, what is coming, the risks, the team. */
@@ -2723,10 +2746,12 @@ export const api = {
 
   calendar: {
     /** At most 62 days at a time; layers this person cannot see come back empty. */
-    get: (params: { from: string; to: string; layers: string[]; person?: string; departmentId?: string }) => {
+    get: (params: { from: string; to: string; layers: string[]; person?: string; departmentId?: string; onlyDepartment?: string }) => {
       const q = new URLSearchParams({ from: params.from, to: params.to, layers: params.layers.join(',') });
       if (params.person) q.set('person', params.person);
       if (params.departmentId) q.set('departmentId', params.departmentId);
+      // My Department: team tasks, meetings and Google busy time, all narrowed to its people.
+      if (params.onlyDepartment) q.set('onlyDepartment', params.onlyDepartment);
       return get<CalendarResponse>(`/calendar?${q}`);
     },
     /** What the event form offers: clients (projects, retainers, contacts) and pickable gear. */
@@ -2854,7 +2879,13 @@ export type MondayBrief = {
   risks: { group: string; items: BriefAlertRow[] }[] | null;
   comingUp: BriefComingUp | null;
   team: BriefTeamRow[] | null;
-  summary: { text: string; generatedAt: string; model: string | null } | null;
+  summary: {
+    text: string;
+    generatedAt: string;
+    model: string | null;
+    /** This week only: a count the snapshot quoted has since moved in the live lists. */
+    numbersChanged?: boolean;
+  } | null;
   aiConfigured: boolean;
   /** Management only, current week only. */
   notUsingFlowzen: {
@@ -2949,6 +2980,131 @@ export type TeamBoard = {
   attention: { taskId: string; reasons: TeamBoardReason[] }[];
 };
 
+/** What My Department lists as needing a look, besides the Board's own task reasons. */
+export type DepartmentAttention =
+  | { kind: 'TASK'; taskId: string; reasons: TeamBoardReason[] }
+  | {
+      kind: 'GEAR_OVERDUE';
+      assetId: string;
+      tag: string;
+      name: string;
+      holder: { id: string; name: string };
+      dueAt: string | null;
+      daysOverdue: number;
+    }
+  | { kind: 'TIME_SPLIT'; month: string; people: { id: string; name: string }[] };
+
+/** A piece of gear somebody in the department is holding. */
+export type DepartmentGear = {
+  id: string;
+  tag: string;
+  name: string;
+  category: string;
+  holderId: string;
+  /** CUSTODY: held long-term. BOOKING: out with a date it is due back. */
+  kind: 'CUSTODY' | 'BOOKING';
+  dueAt: string | null;
+  overdue: boolean;
+  daysOverdue: number;
+};
+
+export type DepartmentEventTime = { allDay: boolean; time: string | null; endTime: string | null };
+
+export type DepartmentOverview = {
+  success: boolean;
+  department: { id: string; name: string; headId: string | null; headName: string | null; peopleCount: number };
+  today: string;
+  week: { from: string; to: string };
+  /** "2026-10" — the month the Time split is for. */
+  month: string;
+  people: (TeamBoard['people'][number] & {
+    phone: string | null;
+    email: string;
+    todayEvents: ({ id: string; kind: string; title: string; location: string | null } & DepartmentEventTime)[];
+    gear: DepartmentGear[];
+  })[];
+  tasks: TeamBoard['tasks'];
+  attention: DepartmentAttention[];
+  equipment: {
+    held: DepartmentGear[];
+    /** Gear set aside for the team's coming meetings and shoots, with the register's clash warnings. */
+    reserved: ({
+      eventId: string;
+      title: string;
+      kind: string;
+      day: string;
+      people: { id: string; name: string }[];
+      assets: { id: string; tag: string; name: string }[];
+      clashes: CalendarClash[];
+    } & DepartmentEventTime)[];
+  };
+};
+
+export type DepartmentWork = {
+  success: boolean;
+  department: DepartmentOverview['department'];
+  today: string;
+  clients: {
+    id: string;
+    name: string;
+    href: string;
+    items: {
+      kind: 'RETAINER' | 'PROJECT';
+      id: string;
+      name: string;
+      href: string;
+      people: { id: string; name: string }[];
+      open: number;
+      overdue: number;
+      nextDeadline: { taskId: string; title: string; dueDate: string } | null;
+    }[];
+  }[];
+  internalProjects: {
+    id: string;
+    name: string;
+    href: string;
+    owner: { id: string; name: string } | null;
+    targetDate: string | null;
+    people: { id: string; name: string }[];
+    /** Null with no tasks yet — not a 0% that reads as stuck. */
+    percentDone: number | null;
+    /** Days to the target; negative once past. Null with no target. */
+    daysLeft: number | null;
+    pastTarget: boolean;
+    open: number;
+    overdue: number;
+  }[];
+};
+
+export type DepartmentApprovals = {
+  success: boolean;
+  department: DepartmentOverview['department'];
+  inReview: {
+    taskId: string;
+    title: string;
+    assignees: { id: string; name: string }[];
+    round: number;
+    link: string | null;
+    submittedAt: string;
+    submittedBy: { id: string; name: string } | null;
+    escalated: boolean;
+    waitingMinutes: number;
+    waitingText: string;
+    /** The caller may approve it here: an approver for its type (or its escalation contact once escalated), and not on it. */
+    canDecide: boolean;
+    notYours: string | null;
+  }[];
+  changesRequested: {
+    taskId: string;
+    title: string;
+    assignees: { id: string; name: string }[];
+    round: number;
+    feedback: string | null;
+    decidedAt: string | null;
+    decidedBy: { id: string; name: string } | null;
+  }[];
+};
+
 export type TeamScope =
   | { all: true }
   | { all: false; departments: { id: string; name: string; peopleCount: number }[] };
@@ -2998,6 +3154,10 @@ export type CalendarItem = {
   eventKind?: CalendarEventKind;
   /** The viewer is one of its people. */
   isMine?: boolean;
+  /** "Just me" shows it: the viewer is on it, or booked it (QA19 fixes plan, F05). */
+  justMe?: boolean;
+  /** Booked by the viewer, who is not on it — shown as "Booked by you". */
+  bookedByYou?: boolean;
   bookedBy?: string;
   location?: string | null;
 };

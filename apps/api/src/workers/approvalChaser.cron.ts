@@ -3,6 +3,7 @@ import { AlertSeverity, type TaskType } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../utils/logger.js';
 import { sendMail } from '../utils/mailer.js';
+import { escapeHtml, safeHref } from '../utils/html.js';
 import { emitToOrganization } from '../sse.js';
 import { loadWorkCalendar, workingMinutesOn, type WorkCalendar } from '../utils/workCalendar.js';
 import { approverIds, escalationIds, minutesLabel, TASK_TYPE_LABEL } from '../services/taskApprovals.js';
@@ -80,8 +81,6 @@ const placeOf = (t: OpenRound['task']) =>
     .filter(Boolean)
     .join(' · ');
 
-const escapeHtml = (v: string) =>
-  v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 /** The email: what it is, whose, what they said, and the one button. */
 function mailFor(round: OpenRound, kind: 'REMINDER' | 'ESCALATED', waited: string, appUrl: string) {
@@ -99,8 +98,9 @@ function mailFor(round: OpenRound, kind: 'REMINDER' | 'ESCALATED', waited: strin
       t.taskType ? ` · ${TASK_TYPE_LABEL[t.taskType]}` : ''
     }</p>`,
     round.note ? `<p style="margin:8px 0;color:#1e4034">“${escapeHtml(round.note)}”</p>` : '',
-    round.link ? `<p style="margin:8px 0"><a href="${escapeHtml(round.link)}">Open the work</a></p>` : '',
-    `<p style="margin:18px 0"><a href="${href}" style="display:inline-block;background:#163027;color:#fff;text-decoration:none;padding:10px 18px;border-radius:10px;font-weight:600">Open in Flowzen</a></p>`,
+    // A typed link: http(s) only, so a `javascript:` link never reaches an inbox.
+    safeHref(round.link) ? `<p style="margin:8px 0"><a href="${safeHref(round.link)}">Open the work</a></p>` : '',
+    `<p style="margin:18px 0"><a href="${escapeHtml(href)}" style="display:inline-block;background:#163027;color:#fff;text-decoration:none;padding:10px 18px;border-radius:10px;font-weight:600">Open in Flowzen</a></p>`,
   ].join('');
   const text = [
     kind === 'REMINDER' ? `Still waiting for approval (${waited})` : `Escalated — waiting ${waited} with no answer`,

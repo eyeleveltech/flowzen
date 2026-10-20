@@ -19,7 +19,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Download } from 'lucide-react';
 import { api, fileUrl, type AssetRegister } from '@/lib/api-v2';
-import { Card, CardHeader, CardTitle, CardBody, CardFooter } from '@/components/ui/card';
+import { SectionCard } from '@/components/ui/section-card';
 import { Button } from '@/components/ui/button';
 import { Field, FieldSelect } from '@/components/ui/field';
 import { ErrorNote, Note } from '@/components/ui/empty-state';
@@ -95,13 +95,9 @@ export function AssetsTab({
   };
 
   return (
-    <div className="space-y-5">
-      <Card padding="none">
-        <form onSubmit={savePrefix}>
-          <CardHeader>
-            <CardTitle>Tag format</CardTitle>
-          </CardHeader>
-          <CardBody className="space-y-4">
+    <div className="space-y-10">
+      <form onSubmit={savePrefix}>
+        <SectionCard title="Tag format" description="What every asset's tag starts with.">
             {error && <ErrorNote onDismiss={() => setError(null)}>{error}</ErrorNote>}
             <Field
               label="Prefix"
@@ -118,22 +114,21 @@ export function AssetsTab({
               . Changing this does not renumber anything already on the register — the sticker on the
               lens still says what it said.
             </Note>
-          </CardBody>
           {canEdit && (
-            <CardFooter>
+            <div className="flex justify-end border-t border-border pt-4">
               <Button type="submit" variant="primary" loading={saving} disabled={!prefix.trim()}>
                 Save
               </Button>
-            </CardFooter>
+            </div>
           )}
-        </form>
-      </Card>
+        </SectionCard>
+      </form>
 
-      <Card padding="none">
-        <CardHeader>
-          <CardTitle>How long each kind of kit is written off over</CardTitle>
-        </CardHeader>
-        <CardBody>
+      <SectionCard
+        title="How long each kind of kit is written off over"
+        description="The useful life a new item starts with, by category."
+        bodyClassName=""
+      >
           <div className="overflow-x-auto">
             <table className="w-full data-table">
               <thead>
@@ -169,21 +164,21 @@ export function AssetsTab({
             one this register should mirror is worth one conversation with the CA before the first
             schedule goes out.
           </p>
-        </CardBody>
-      </Card>
+      </SectionCard>
 
-      <Card padding="none">
-        <CardHeader>
-          <CardTitle>Fixed-asset schedule</CardTitle>
-          {register && (
+      <SectionCard
+        title="Fixed-asset schedule"
+        description="Every asset's cost, depreciation and closing value for a financial year."
+        aside={
+          register && (
             <a href={fileUrl(`/assets/register?fy=${fy}&format=csv`)}>
               <Button size="sm" icon={Download}>
                 CSV
               </Button>
             </a>
-          )}
-        </CardHeader>
-        <CardBody className="space-y-4">
+          )
+        }
+      >
           <div className="w-48">
             <FieldSelect label="Financial year" value={fy} onChange={setFy} options={options} />
           </div>
@@ -266,8 +261,7 @@ export function AssetsTab({
               </p>
             )
           )}
-        </CardBody>
-      </Card>
+      </SectionCard>
     </div>
   );
 }

@@ -4,10 +4,12 @@ import crypto from 'node:crypto';
 import rateLimit from 'express-rate-limit';
 import { prisma } from '../lib/prisma.js';
 import { generateToken } from '../utils/jwt.js';
+import { escapeHtml } from '../utils/html.js';
 import { comparePassword, hashPassword } from '../utils/password.js';
 import { authenticate, type AuthRequest, resolvePermissions } from '../middleware/auth.js';
 import { roleForPreset } from '../utils/roles.js';
 import { sendMail } from '../utils/mailer.js';
+import { departmentsHeadedBy } from '../services/departmentPage.js';
 
 export const authRouter = Router();
 
@@ -308,6 +310,8 @@ authRouter.post('/login', authLimiter, async (req, res: Response, next) => {
         preset: user.preset,
         role: roleForPreset(user.preset),
         permissions: effectivePermissions,
+        // The departments they head — what puts "My department" in the sidebar.
+        headOf: (await departmentsHeadedBy(user.organizationId, user.id)).map((d) => d.id),
         organization: {
           id: user.organization.id,
           name: user.organization.name,
@@ -420,8 +424,7 @@ authRouter.post('/accept-invite', authLimiter, async (req, res: Response, next) 
 // account, so a list of guessed addresses gets nowhere.
 
 /** A name goes into the HTML of an email, so it is escaped like any other markup. */
-const escapeForMail = (s: string): string =>
-  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const escapeForMail = escapeHtml;
 
 /** Short, because a live reset link is a live credential. */
 const FORGOT_VALID_MINUTES = 60;
@@ -475,7 +478,7 @@ authRouter.post('/forgot-password', authLimiter, async (req, res: Response, next
         html: `
           <p>Hello ${escapeForMail(user.name)},</p>
           <p>Somebody asked to reset the password for this Flowzen account. If that was you, use the link below — it works once and expires in ${FORGOT_VALID_MINUTES} minutes.</p>
-          <p><a href="${link}">Set a new password</a></p>
+          <p><a href="${escapeHtml(link)}">Set a new password</a></p>
           <p>If it was not you, nothing has changed and you can ignore this. Your current password still works.</p>
         `,
         text: `Somebody asked to reset the password for this Flowzen account.\n\nIf that was you: ${link}\n\nThe link works once and expires in ${FORGOT_VALID_MINUTES} minutes. If it was not you, nothing has changed.`,
@@ -611,6 +614,9 @@ authRouter.get('/me', authenticate, async (req: AuthRequest, res: Response, next
         preset: user.preset,
         role: roleForPreset(user.preset),
         permissions: effectivePermissions,
+        // The departments they head — what puts "My department" in the sidebar
+        // and opens /my-department (Department head page plan).
+        headOf: (await departmentsHeadedBy(user.organizationId, user.id)).map((d) => d.id),
         // Strip monthlyCost if user lacks setup.admin
         monthlyCost: effectivePermissions.includes('setup.admin') ? user.monthlyCost : undefined,
         organization: {

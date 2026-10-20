@@ -1,6 +1,7 @@
 import { Priority, TaskStatus } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { TASK_PEOPLE } from './taskPeople.js';
+import { taskHasClient, waitingOnShown } from './taskWaiting.js';
 import { withRepeatNext } from './taskRepeat.js';
 import { FOCUS_STATUSES } from './taskFocus.js';
 import { addDays, loadWorkCalendar, todayIn, weekdayOf, workingMinutesOn } from '../utils/workCalendar.js';
@@ -237,7 +238,8 @@ export async function composeTeamBoard(orgId: string, people: BoardPerson[], now
     completedAt: t.completedAt,
     reopenCount: t.reopenCount,
     notes: t.notes,
-    waitingOn: t.waitingOn,
+    waitingOn: waitingOnShown(t),
+    hasClient: taskHasClient(t),
     waitingSince: t.waitingSince,
     needsApproval: t.needsApproval,
     repeat: t.repeat,

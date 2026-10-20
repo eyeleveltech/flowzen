@@ -16,6 +16,7 @@
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { financialYearOf, orgToday } from '../utils/moneyDates.js';
+import { escapeHtml } from '../utils/html.js';
 import { buildSellerSnapshot, resolveState, resolveSupplyType, type SellerSnapshot } from './documentModel.js';
 import { getLogoDataUri, htmlToPdf } from './documentPdf.js';
 import {
@@ -405,8 +406,6 @@ const TINT = '#f3f6f4';
 const FLAG = '#fff4c2';
 const FLAG_INK = '#7a5b00';
 
-const escapeHtml = (s: string): string =>
-  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 /** Whole rupees on a proposal: a quote, not a tax document. */
 export const rupees = (n: number): string =>

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useUIStore, useAuthStore } from '@/stores';
+import { useShortcut } from '@/lib/shortcut';
 import { api } from '@/lib/api-v2';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useQueryClient } from '@tanstack/react-query';
@@ -96,6 +97,9 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
    * margins and people's workloads.
    */
   const mayAskAssistant = user?.preset === 'MANAGEMENT';
+  // ⌘K on a Mac, Ctrl+K everywhere else — the keys this computer has.
+  const searchKey = useShortcut('K');
+  const zenKey = useShortcut('J');
   const showBack = isMobile && pathname !== '/my-work';
 
   const queryClient = useQueryClient();
@@ -276,7 +280,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
           <Search className="h-4 w-4 shrink-0" />
           <span className="truncate">Search…</span>
           <kbd className="ml-auto inline-flex items-center gap-0.5 rounded-md border border-border bg-white px-1.5 py-0.5 text-micro font-medium text-secondary">
-            ⌘K
+            {searchKey}
           </kbd>
         </button>
 
@@ -286,7 +290,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
         {mayAskAssistant && (
           <button
             aria-label="Ask Zen"
-            title="Ask Zen (Ctrl+J)"
+            title={`Ask Zen (${zenKey})`}
             onClick={() => { setZenOpen(true); setShowNotifications(false); setShowUserMenu(false); }}
             className="flex h-9 w-9 items-center justify-center rounded-xl border border-border text-secondary hover:bg-surface hover:text-primary transition-colors duration-150 motion-reduce:transition-none outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
           >

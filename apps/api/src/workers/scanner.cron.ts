@@ -11,6 +11,7 @@ import { pushNewAlerts } from '../services/push.js';
 import { expireLapsedProformas } from '../services/proformaExpiry.js';
 import { asStoredDay, moneyClock, orgToday } from '../utils/moneyDates.js';
 import { dealStaleness } from '../services/salesFollowUp.js';
+import { ACTIVE_DEAL_WHERE, isActiveDeal } from '../services/activeDeal.js';
 
 function median(values: number[]): number {
   if (values.length === 0) return 0;
@@ -207,6 +208,9 @@ export async function evaluateAgencyHealthRules(organizationId: string): Promise
       status: 'ON_HOLD',
       waitingOn: 'CLIENT',
       waitingSince: { lt: fiveDaysAgo },
+      // Only a task with a client can be waiting on one: an old internal hold
+      // marked CLIENT shows as plain On hold (QA19 fixes plan, F06, taskHasClient).
+      OR: [{ monthCardId: { not: null } }, { projectId: { not: null } }, { companyId: { not: null } }],
     },
     take: 20,
   });
@@ -744,8 +748,8 @@ export async function evaluateAgencyHealthRules(organizationId: string): Promise
  * hand. Deliberately impure (writes), so it's kept out of the pure
  * evaluator above and called alongside it instead.
  */
-/** A deal still being worked: not won, lost or expired, and not deleted. */
-const OPEN_DEAL = { deletedAt: null, outcome: null, stage: { notIn: ['WON', 'LOST', 'EXPIRED'] as ('WON' | 'LOST' | 'EXPIRED')[] } };
+/** A deal still being worked: the shared active-deal rule (QA19 fixes plan, F01). */
+const OPEN_DEAL = ACTIVE_DEAL_WHERE;
 
 /*
  * Two things this rule used to miss, which is how a client with a live deal
@@ -774,7 +778,7 @@ export async function applyCompanyStatusDerivation(organizationId: string): Prom
   for (const c of candidates) {
     if (c.retainers.length > 0 || c.projects.length > 0) continue;
     // A deal still being worked keeps a client current, however quiet its own record is.
-    if (c.proposals.some((p) => p.outcome === null && !['WON', 'LOST', 'EXPIRED'].includes(p.stage))) continue;
+    if (c.proposals.some(isActiveDeal)) continue;
 
     const lastActivity = await prisma.activity.findFirst({
       where: {

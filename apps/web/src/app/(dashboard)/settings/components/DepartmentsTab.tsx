@@ -17,7 +17,8 @@
 
 import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowDown, ArrowUp, Check, Pencil, Plus, RotateCcw, X } from 'lucide-react';
+import Link from 'next/link';
+import { ArrowDown, ArrowUp, ArrowUpRight, Check, Pencil, Plus, RotateCcw, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api, ApiError, type Department, type DepartmentPerson } from '@/lib/api-v2';
 import { SectionCard } from '@/components/ui/section-card';
@@ -25,6 +26,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ErrorNote, Note } from '@/components/ui/empty-state';
 import { useConfirmStore } from '@/stores/confirm';
+import { useAuthStore } from '@/stores';
 import { presetLabel } from '@/lib/people';
 import { cn, getInitials } from '@/lib/utils';
 
@@ -97,6 +99,7 @@ function DepartmentCard({
   index,
   count,
   canEdit,
+  canOpenPage,
   others,
   headCandidates,
   onRename,
@@ -111,6 +114,8 @@ function DepartmentCard({
   index: number;
   count: number;
   canEdit: boolean;
+  /** Management: open the department's own page (My Department), which is otherwise its head's. */
+  canOpenPage: boolean;
   others: { id: string; name: string }[];
   headCandidates: DepartmentPerson[];
   onRename: (name: string) => Promise<boolean>;
@@ -194,6 +199,15 @@ function DepartmentCard({
         <span className="rounded-full bg-subtle px-1.5 py-px text-micro tabular-nums text-secondary">
           {dept.peopleCount} {dept.peopleCount === 1 ? 'person' : 'people'}
         </span>
+        {canOpenPage && (
+          <Link
+            href={`/my-department?department=${dept.id}`}
+            className="inline-flex items-center gap-0.5 text-xs font-medium text-primary underline-offset-2 hover:underline"
+          >
+            Open department page
+            <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
+          </Link>
+        )}
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <label className="flex items-center gap-1.5 text-xs text-secondary">
@@ -312,6 +326,8 @@ function DepartmentCard({
 }
 
 export function DepartmentsTab({ canEdit }: { canEdit: boolean }) {
+  // Each department's page is its head's; Management opens any of them from here.
+  const isManagement = useAuthStore((s) => s.user?.preset === 'MANAGEMENT');
   const queryClient = useQueryClient();
   const confirm = useConfirmStore((s) => s.confirm);
   const [newName, setNewName] = useState('');
@@ -464,6 +480,7 @@ export function DepartmentsTab({ canEdit }: { canEdit: boolean }) {
             index={i}
             count={active.length}
             canEdit={canEdit}
+            canOpenPage={isManagement}
             others={others}
             headCandidates={headCandidates}
             onRename={(name) => attempt(() => api.departments.update(d.id, { name }), `Renamed to ${name}`)}

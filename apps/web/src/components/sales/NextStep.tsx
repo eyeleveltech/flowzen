@@ -8,6 +8,10 @@
  * refuses a save without one — but a deal or lead without one shows a
  * "No next step" badge, and a date given can't be in the past. These are the
  * fields every form uses, and the line every list shows.
+ *
+ * "Missing" means nothing written (QA19 fixes plan, F04). A step written
+ * without a date is a step: it shows its words and "date not set", and no
+ * form asks for the date before it will save.
  */
 
 import { Field } from '@/components/ui/field';
@@ -22,9 +26,16 @@ export const nextStepDraft = (nextStep?: string | null, date?: string | null): N
   nextStepDate: date ? date.slice(0, 10) : '',
 });
 
-/** Both the words and a date not in the past — for "Set next step", whose whole job is setting one. */
+/** The server's rule, for screens that only have the fields: missing is nothing written. */
+export const isNextStepMissing = (nextStep?: string | null) => !nextStep?.trim();
+
+/**
+ * For "Set next step", whose whole job is setting one: the words, and a date
+ * only if one is given — which can't be past. It asked for both, which is why
+ * a step saved without a date elsewhere could not be edited without adding one.
+ */
 export const nextStepReady = (d: NextStepDraft, today: string) =>
-  Boolean(d.nextStep.trim()) && Boolean(d.nextStepDate) && d.nextStepDate >= today;
+  Boolean(d.nextStep.trim()) && (!d.nextStepDate || d.nextStepDate >= today);
 
 /** What every other form checks: it may be left empty, but a date given can't be past. */
 export const nextStepOk = (d: NextStepDraft, today: string) => !d.nextStepDate || d.nextStepDate >= today;
@@ -55,7 +66,7 @@ export function NextStepFields({
   value: NextStepDraft;
   onChange: (next: NextStepDraft) => void;
   disabled?: boolean;
-  /** Only "Set next step" asks for it — everywhere else it can be left for later. */
+  /** Only "Set next step" asks for the words — everywhere else they can be left for later. The date never is. */
   required?: boolean;
   hint?: string | null;
 }) {
@@ -75,7 +86,6 @@ export function NextStepFields({
         <Field
           label="By"
           type="date"
-          required={required}
           min={today}
           value={value.nextStepDate}
           onChange={(v) => onChange({ ...value, nextStepDate: v })}
@@ -137,12 +147,15 @@ export function NextStepLine({
   return (
     <p className={`text-micro leading-snug ${overdue ? 'text-danger' : 'text-secondary'} ${className}`}>
       <span className={overdue ? 'font-semibold' : 'font-medium text-body'}>Next:</span> {nextStep}
-      {nextStepDate && (
+      {nextStepDate ? (
         <span className={overdue ? 'font-semibold' : ''}>
           {' '}
           · {overdue ? 'was due ' : ''}
           {stepDate(nextStepDate)}
         </span>
+      ) : (
+        // Written, with no date: a step, not a missing one.
+        <span className="text-muted"> · date not set</span>
       )}
     </p>
   );

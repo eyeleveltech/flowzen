@@ -21,14 +21,21 @@ allocationsRouter.get('/', requirePermission('cost.enter'), async (req: AuthRequ
     // setup.admin) is not the same gate. This screen's whole design intent
     // (§6 PeopleAllocation) is percentages only; salary must stay hidden
     // even from whoever is confirming a split. Same gate as team.ts/projects.ts.
-    const canSeeFigures = hasPermission(req.user!, 'setup.admin');
+    /*
+     * `?departmentId=` is My Department's Time split tab: that department's
+     * people, narrowed by the caller's team scope like every head screen, and
+     * percentages only — never money, not even for an admin looking at it.
+     */
+    const departmentId = typeof req.query.departmentId === 'string' && req.query.departmentId ? req.query.departmentId : null;
+    const canSeeFigures = !departmentId && hasPermission(req.user!, 'setup.admin');
 
     const now = new Date();
     const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     const targetMonth = (req.query.month as string) || currentMonthKey;
 
+    const base = { organizationId: orgId, active: true };
     const team = await prisma.user.findMany({
-      where: { organizationId: orgId, active: true },
+      where: departmentId ? await peopleInScope(req.user!, { ...base, departmentId }) : base,
       select: {
         id: true,
         name: true,

@@ -33,6 +33,7 @@ import { MultiSelect } from '@/components/ui/multi-select';
 import { ErrorNote } from '@/components/ui/empty-state';
 import { dueTimeOptions } from '@/lib/due-time';
 import { personOptions } from '@/lib/people';
+import { useAuthStore } from '@/stores';
 
 const KINDS: { value: CalendarEventKind; label: string }[] = [
   { value: 'MEETING', label: 'Meeting' },
@@ -77,6 +78,7 @@ export function EventModal({
   event?: CalendarEventDetail | null;
 }) {
   const team = useTeamMembers();
+  const myId = useAuthStore((st) => st.user?.id ?? null);
   const { data: options } = useQuery({
     queryKey: ['calendar-event-options'],
     queryFn: () => api.calendar.eventOptions(),
@@ -197,6 +199,24 @@ export function EventModal({
 
   const canSave = Boolean(title.trim()) && Boolean(startDate);
 
+  /*
+   * What a new booking says it did (QA19 fixes plan, F05).
+   *
+   * Booking for somebody else — the boss's meeting — leaves the booker off it,
+   * so say whose it is and where everybody can find it, rather than a bare
+   * "Meeting booked" that reads as "now on your calendar".
+   */
+  const bookedMessage = () => {
+    const label = KINDS.find((k) => k.value === kind)?.label ?? 'Event';
+    if (!myId || attendeeIds.includes(myId)) return `${label} booked`;
+    const names = attendeeIds.map((id) => team.find((m) => m.id === id)?.name).filter(Boolean) as string[];
+    const forWhom =
+      names.length === 0
+        ? 'with nobody on it yet'
+        : `for ${names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`}`;
+    return `Booked ${forWhom} — visible to everyone in 'Everyone' view`;
+  };
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSave || saving) return;
@@ -219,7 +239,7 @@ export function EventModal({
     };
     try {
       const res = event ? await api.calendar.updateEvent(event.id, body) : await api.calendar.createEvent(body);
-      toast.success(event ? 'Saved' : `${KINDS.find((k) => k.value === kind)?.label} booked`);
+      toast.success(event ? 'Saved' : bookedMessage());
       if (res.clashes.length) toast(`Saved with ${res.clashes.length} warning${res.clashes.length === 1 ? '' : 's'} — see the event.`);
       onSaved(res.event.id);
     } catch (err) {

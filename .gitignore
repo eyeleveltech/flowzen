@@ -9,10 +9,11 @@ dist/
 out/
 build/
 
-# Environment
+# Environment — every .env file, in every folder (security fixes plan, S0).
+# Only the template is tracked.
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 
 # IDE
 .vscode/

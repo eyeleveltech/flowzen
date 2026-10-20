@@ -11,6 +11,11 @@ interface User {
   preset?: string;
   /** The switches the server actually enforces. The ladder is only for what to SHOW. */
   permissions?: string[];
+  /**
+   * The departments they head, by id — what puts "My department" in the
+   * sidebar and opens /my-department. Undefined until /auth/me has answered.
+   */
+  headOf?: string[];
   avatar?: string | null;
   team?: { id: string; name: string } | null;
   designation?: string | null;

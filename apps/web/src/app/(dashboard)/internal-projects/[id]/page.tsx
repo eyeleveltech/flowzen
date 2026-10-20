@@ -15,12 +15,12 @@
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import Link from 'next/link';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { api, ApiError, formatDate } from '@/lib/api-v2';
 import { useConfig, useTeamMembers } from '@/hooks/queries';
 import { usePageHeader } from '@/hooks/usePageHeader';
+import { Breadcrumbs } from '@/components/ui/breadcrumbs';
 import { Card, CardBody } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { StatTile, StatRow } from '@/components/ui/stat-tile';
@@ -36,6 +36,7 @@ import { taskTypeLabel } from '@/lib/task-type';
 import { NewInternalProjectModal } from '@/components/work/NewInternalProjectModal';
 import { calendarDay, daysLeftLabel, ProgressBar } from '@/components/work/InternalProjectBits';
 import { plural } from '@/lib/utils';
+import { changeTaskStatus } from '@/lib/task-status';
 
 const STATUS_OPTIONS = [
   { value: 'TODO', label: 'To do' },
@@ -80,7 +81,8 @@ export default function InternalProjectPage() {
     void queryClient.invalidateQueries({ queryKey: ['internal-projects'] });
   };
 
-  usePageHeader(project?.name ?? 'Internal work', project?.owner?.name ?? undefined);
+  // The tab and the bar name the work (QA19 fixes plan, small wins).
+  usePageHeader(project?.name ?? 'Internal work', project?.owner?.name ? `Internal · ${project.owner.name}` : 'Internal');
 
   const tz = config?.organization.timezone;
   const locale = config?.organization.locale;
@@ -90,7 +92,9 @@ export default function InternalProjectPage() {
   const changeStatus = async (task: any, next: string) => {
     setBusyId(task.id);
     try {
-      await api.tasks.updateStatus(task.id, next);
+      // On hold through /wait, asking what it is waiting on — internal work
+      // has no client unless the task is about one (`hasClient`, QA19 F06).
+      if (!(await changeTaskStatus(task, next))) return;
       reload();
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Could not change that');
@@ -149,13 +153,10 @@ export default function InternalProjectPage() {
 
   return (
     <div className="page-shell">
-      {/* Back to the list this came from — the Internal tab, not Live work's default. */}
-      <Link
-        href="/live-work?tab=internal"
-        className="mb-4 inline-flex items-center gap-1.5 text-sm text-secondary transition-colors hover:text-primary"
-      >
-        <ArrowLeft className="h-4 w-4" strokeWidth={1.75} /> Internal work
-      </Link>
+      {/* Internal work › the project — back to the Internal tab, not Live work's default. */}
+      <Breadcrumbs
+        items={[{ label: 'Internal work', href: '/live-work?tab=internal' }, { label: project?.name ?? 'Loading…' }]}
+      />
 
       {isPending || !project ? (
         <p className="text-sm text-secondary">Loading…</p>

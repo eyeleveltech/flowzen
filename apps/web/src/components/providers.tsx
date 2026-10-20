@@ -10,6 +10,7 @@ import { Toaster } from 'react-hot-toast';
 import { useIsMobile } from '@/hooks/use-breakpoint';
 
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { WaitingOnDialog } from '@/components/work/WaitingOnDialog';
 import { GlobalEvents } from '@/components/global-events';
 import { NumberWheelGuard } from '@/components/number-wheel-guard';
 
@@ -51,6 +52,7 @@ export function Providers({ children }: { children: ReactNode }) {
           <GlobalEvents />
           <NumberWheelGuard />
           <ConfirmDialog />
+          <WaitingOnDialog />
           <Toaster
             position={isMobile ? 'bottom-center' : 'top-right'}
             containerStyle={

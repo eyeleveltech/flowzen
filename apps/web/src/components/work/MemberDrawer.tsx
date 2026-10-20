@@ -37,6 +37,7 @@ import { getInitials, getAvatarColor, plural } from '@/lib/utils';
 import { withDueTime } from '@/lib/due-time';
 import { RepeatMark } from '@/components/work/RepeatMark';
 import type { TaskRepeatInfo } from '@/lib/repeat';
+import { waitingWords } from '@/lib/task-status';
 
 type Work = {
   kind: 'PROJECT' | 'RETAINER' | 'INTERNAL';
@@ -255,7 +256,8 @@ function TaskRow({ task, muted = false }: { task: MemberTask; muted?: boolean })
         <span className={task.overdue ? 'font-semibold text-danger' : undefined}>{withDueTime(formatDate(task.dueDate), task.dueTime)}</span>
         {task.status === 'ON_HOLD' &&
           task.waitingOn &&
-          ` · waiting on ${task.waitingOn === 'CLIENT' ? 'the client' : 'someone else'}`}
+          waitingWords(task.waitingOn) &&
+          ` · ${waitingWords(task.waitingOn)}`}
       </p>
     </>
   );

@@ -1,4 +1,4 @@
-import { INDUSTRIES, LEAD_SOURCES, LEGACY_INDUSTRY, LEGACY_SOURCE } from '@flowzen/shared';
+import { DEFAULT_LEAD_SOURCE, INDUSTRIES, LEAD_SOURCES, LEGACY_INDUSTRY, LEGACY_SOURCE } from '@flowzen/shared';
 
 /**
  * Industries and lead sources, for the screens that offer and display them.
@@ -48,6 +48,27 @@ export const SOURCE_OPTIONS = optionsFrom(LEAD_SOURCES);
 
 /** The old export name, still imported by the outreach screen. */
 export const VERTICAL_OPTIONS = INDUSTRY_OPTIONS;
+
+/*
+ * What a form starts on — always one of its options (QA19 fixes plan, F02).
+ *
+ * The lead form's state started as 'HEALTHCARE' and 'OUTREACH', legacy codes
+ * that match no option: the select showed "Select…" while those codes were
+ * posted and saved as Healthcare & Wellness and Cold Outreach. A value a form
+ * holds has to be one it shows, so a stored or legacy value is mapped to its
+ * option here, and anything that maps to none starts empty.
+ */
+
+/** An industry as one of the options, or '' — to be chosen — when it is none of them. */
+export const industryOption = (v?: string | null): string =>
+  !v ? '' : (INDUSTRIES as readonly string[]).includes(v) ? v : (LEGACY_INDUSTRY[v] ?? '');
+
+/**
+ * A source as one of the options. A new lead starts visibly on Cold Outreach,
+ * which is what an unrecognised one also shows — and so saves.
+ */
+export const sourceOption = (v?: string | null): string =>
+  v && (LEAD_SOURCES as readonly string[]).includes(v) ? v : ((v && LEGACY_SOURCE[v]) || DEFAULT_LEAD_SOURCE);
 
 /*
  * The two label maps are gone — a stored value is its own label — but the

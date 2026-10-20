@@ -17,7 +17,16 @@ import { readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { ROLE_PRESET_PERMISSIONS, type RolePreset } from '@flowzen/shared';
-import { NAV_SECTIONS, NAV_ITEMS, BOTTOM_NAV_ITEMS, canSee, visibleSections, permissionForPath } from './navigation';
+import {
+  NAV_SECTIONS,
+  NAV_ITEMS,
+  BOTTOM_NAV_ITEMS,
+  canSee,
+  headsOnlyAccess,
+  offered,
+  visibleSections,
+  permissionForPath,
+} from './navigation';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -142,8 +151,11 @@ describe('what each preset actually gets', () => {
     expect(seen).not.toContain('Forecast');
   });
 
-  it('gives Management every screen there is', () => {
-    expect(seenBy('MANAGEMENT').sort()).toEqual(NAV_ITEMS.map((i) => i.label).sort());
+  it('gives Management every screen there is — My department only if they head one', () => {
+    // Management opens any department's page from Settings → Departments instead.
+    const everything = NAV_ITEMS.map((i) => i.label);
+    expect(seenBy('MANAGEMENT').sort()).toEqual(everything.filter((l) => l !== 'My department').sort());
+    expect(labels(visibleSections({ ...as('MANAGEMENT'), headOf: ['d-mgmt'] })).sort()).toEqual(everything.sort());
   });
 });
 
@@ -223,5 +235,34 @@ describe('every screen in the app is behind the guard, not just the listed ones'
     expect(permissionForPath('/projects/abc123')).toBe('work.all');
     expect(permissionForPath('/retainers/abc123')).toBe('work.all');
     expect(permissionForPath('/companies/abc123')).toBe('company.read');
+  });
+});
+
+describe('My department — a department head\'s page (Department head page plan)', () => {
+  const item = NAV_ITEMS.find((i) => i.href === '/my-department')!;
+
+  it('is in the sidebar of somebody who heads a department, and nobody else', () => {
+    // Ravi heads Development.
+    expect(offered(item, { ...as('HEAD'), headOf: ['d-dev'] })).toBe(true);
+    // A Department head who heads nothing yet, and an Employee.
+    expect(offered(item, { ...as('HEAD'), headOf: [] })).toBe(false);
+    expect(offered(item, { ...as('EMPLOYEE'), headOf: [] })).toBe(false);
+    // Before the session has said which departments they head: not yet.
+    expect(offered(item, as('HEAD'))).toBe(false);
+  });
+
+  it('refuses the address to anybody but a head or Management', () => {
+    // An Employee (Janani) is stopped by the permission before anything else.
+    expect(permissionForPath('/my-department')).toBe('work.team');
+    expect(canSee({ needs: 'work.team' }, ROLE_PRESET_PERMISSIONS.EMPLOYEE)).toBe(false);
+    // Holding the permission is not enough: a head of nothing is refused.
+    expect(headsOnlyAccess('/my-department', { ...as('HEAD'), headOf: [] })).toBe('refused');
+    expect(headsOnlyAccess('/my-department', { ...as('HEAD'), headOf: ['d-dev'] })).toBe('open');
+    // Management, from Settings — with a department in the address or not.
+    expect(headsOnlyAccess('/my-department', { ...as('MANAGEMENT'), preset: 'MANAGEMENT', headOf: [] })).toBe('open');
+    // Unknown until /auth/me answers, so the page waits rather than flashing a refusal.
+    expect(headsOnlyAccess('/my-department', as('HEAD'))).toBe('unknown');
+    // Every other screen is untouched by it.
+    expect(headsOnlyAccess('/members', { ...as('HEAD'), headOf: [] })).toBe('open');
   });
 });

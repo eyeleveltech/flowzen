@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma.js';
 import { sendMail } from '../utils/mailer.js';
+import { escapeHtml } from '../utils/html.js';
 import { logger } from '../utils/logger.js';
 import { alertClausesFor } from '../routes/notifications.js';
 import { resolvePermissions } from '../middleware/auth.js';
@@ -84,19 +85,19 @@ const digestHtml = (name: string, alerts: Awaited<ReturnType<typeof alertsForUse
     .map(
       ([severity, list]) => `
         <p style="margin:16px 0 4px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#6d7f79">
-          ${SEVERITY_LABEL[severity] ?? severity} · ${list.length}
+          ${escapeHtml(SEVERITY_LABEL[severity] ?? severity)} · ${list.length}
         </p>
         <ul style="margin:0;padding-left:18px">
-          ${list.map((a) => `<li style="margin:4px 0">${a.message}</li>`).join('')}
+          ${list.map((a) => `<li style="margin:4px 0">${escapeHtml(a.message)}</li>`).join('')}
         </ul>`,
     )
     .join('');
 
   return `
-    <p>Hello ${name.split(' ')[0]},</p>
+    <p>Hello ${escapeHtml(name.split(' ')[0])},</p>
     <p>${alerts.length === 1 ? 'One thing is' : `${alerts.length} things are`} open on Flowzen this morning.</p>
     ${blocks}
-    <p style="margin-top:18px"><a href="${appUrl}">Open Flowzen</a></p>
+    <p style="margin-top:18px"><a href="${escapeHtml(appUrl)}">Open Flowzen</a></p>
     <p style="font-size:12px;color:#6d7f79">You are only sent this on days something is open — no mail means nothing needed you.</p>
   `;
 };

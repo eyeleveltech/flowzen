@@ -14,7 +14,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useAuthStore } from '@/stores';
-import { NAV_ITEMS, BOTTOM_NAV_ITEMS, NavItem, canSee } from '@/config/navigation';
+import { NAV_ITEMS, BOTTOM_NAV_ITEMS, NavItem, offered } from '@/config/navigation';
 import { MoreHorizontal, LogOut, X } from 'lucide-react';
 import { useApprovalQueue } from '@/lib/approvals';
 
@@ -31,7 +31,7 @@ export function BottomTabs() {
 
   // The same permission switches the API enforces — so a tab is offered only
   // when the screen behind it will actually open.
-  const allowed = (item: NavItem) => mounted && canSee(item, user?.permissions);
+  const allowed = (item: NavItem) => mounted && offered(item, user);
 
   const visiblePrimary = NAV_ITEMS.filter((i) => i.isPrimaryMobile).filter(allowed).slice(0, 4);
   const filteredMoreItems = [

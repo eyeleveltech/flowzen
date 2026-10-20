@@ -1,6 +1,7 @@
 import { AlertSeverity, AssetStatus, type Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { sendMail } from '../utils/mailer.js';
+import { escapeHtml } from '../utils/html.js';
 import { logger } from '../utils/logger.js';
 import { addDays } from '../utils/workCalendar.js';
 import { dayStartUtc, hoursLabel, localDayAndTime, whenLabel, zonedToUtc } from '../utils/zonedTime.js';
@@ -284,7 +285,9 @@ async function mailPeople(
       await sendMail(organizationId, {
         to: p.email,
         subject,
-        html: `<p>Hello ${p.name.split(' ')[0]},</p><p>${sentence}</p><p style="color:#6d7f79">${bookedBy(snapshot)}</p><p><a href="${link}">Open it in Flowzen</a></p>`,
+        // Every part of this is somebody's typing — the title, the place, the
+        // names — so every part is escaped (security fixes plan, H3).
+        html: `<p>Hello ${escapeHtml(p.name.split(' ')[0])},</p><p>${escapeHtml(sentence)}</p><p style="color:#6d7f79">${escapeHtml(bookedBy(snapshot))}</p><p><a href="${escapeHtml(link)}">Open it in Flowzen</a></p>`,
         text: `${sentence}\n${bookedBy(snapshot)}\n${link}`,
       });
     } catch (e) {

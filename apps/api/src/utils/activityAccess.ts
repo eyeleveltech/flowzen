@@ -16,8 +16,10 @@ import type { PermissionKey } from '@flowzen/shared';
 /**
  * The permission each entity's own screen requires.
  *
- * `undefined` means everybody — a Task's history is visible to anyone who can
- * reach the task, and task visibility is already narrowed elsewhere.
+ * `undefined` means no switch is needed. For a Task that is not "everybody":
+ * the feed then narrows task history to the tasks the reader may read
+ * (services/taskAccess.ts) — the people on it, its creator or assigner, its
+ * approvers, a Head in scope and Management.
  *
  * Anything NOT in this map is refused rather than allowed. A new entity type
  * arriving with no entry should disappear from the feed until somebody decides

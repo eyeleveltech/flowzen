@@ -209,11 +209,11 @@ export async function settingsFor(organizationId: string): Promise<{
   const provider = providerFor(org.aiProvider);
   const model = org.aiModel || provider.defaultModel;
   if (!model) {
-    throw new AssistantFailed(`Choose a ${provider.label} model in Settings → Zen.`);
+    throw new AssistantFailed(`Choose a ${provider.label} model in Settings → Zen assistant.`);
   }
   const baseUrl = org.aiBaseUrl || undefined;
   if (provider.needsBaseUrl && !baseUrl) {
-    throw new AssistantFailed(`Set the ${provider.label} address in Settings → Zen.`);
+    throw new AssistantFailed(`Set the ${provider.label} address in Settings → Zen assistant.`);
   }
 
   return { provider, apiKey: org.aiApiKey, model, baseUrl };

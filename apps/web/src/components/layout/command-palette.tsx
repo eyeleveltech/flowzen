@@ -34,6 +34,7 @@ import toast from 'react-hot-toast';
 import { LogActivityDialog } from '@/components/activities/LogActivityDialog';
 import { NewTaskPanel } from '@/components/tasks/NewTaskPanel';
 import { QuickEditDialog, type QuickEditSpec } from '@/components/ui/quick-edit-dialog';
+import { shortcut } from '@/lib/shortcut';
 
 /**
  * What one search box finds.
@@ -242,7 +243,8 @@ export function CommandPalette() {
           kind: 'task' as const,
           id: t.id,
           name: t.title,
-          context: t.context ?? ENQUIRY.One,
+          // The server says what every task belongs to; "Task" is only a fallback.
+          context: t.context ?? 'Task',
         })),
       );
     }
@@ -329,10 +331,10 @@ export function CommandPalette() {
       s.push({
         title: 'Tasks',
         icon: CheckSquare,
-        // A task hangs off a project OR a conversation. The server sends the
-        // project's name when there is one and null when there is not; the noun
-        // for the other case is the interface's to choose.
-        items: results.tasks.map((t) => ({ id: t.id, label: t.title, sub: t.context ?? ENQUIRY.One, href: t.href })),
+        // The server names what every task belongs to — the client and the
+        // work, an internal project, or "Internal — no project" (QA19, F07).
+        // It used to send null for those, which this filled in as "Enquiry".
+        items: results.tasks.map((t) => ({ id: t.id, label: t.title, sub: t.context ?? 'Task', href: t.href })),
       });
     }
     if (results.quotes.length) {
@@ -377,7 +379,7 @@ export function CommandPalette() {
           {
             id: 'ask-zen',
             label: 'Ask Zen',
-            sub: 'Ctrl+J',
+            sub: shortcut('J'),
             run: () => {
               setCommandPaletteOpen(false);
               setQuery('');

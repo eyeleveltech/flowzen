@@ -32,6 +32,7 @@ import {
   studioToday,
   touchSchema,
 } from '../services/salesFollowUp.js';
+import { ACTIVE_DEAL_WHERE, activeDealTotals, isActiveDeal } from '../services/activeDeal.js';
 
 export const proposalsRouter = Router();
 
@@ -283,7 +284,28 @@ proposalsRouter.get('/pipeline', requirePermission('pipeline.read'), async (req:
       .flat()
       .filter((c) => c.stale).length;
 
-    res.json({ success: true, stages: PIPELINE_STAGES, columns, staleDays, staleCount, canSeeValues: showValues });
+    /*
+     * The headline, worked out here by the one active-deal rule (QA19 fixes
+     * plan, F01). The board summed it in the browser from "everything but the
+     * Won column", which counted the whole Lost column as live: "Live deals"
+     * and "Full pipeline" were inflated by every deal already lost.
+     */
+    const totals = activeDealTotals(
+      proposals.map((p) => ({
+        outcome: p.outcome,
+        stage: p.stage,
+        value: p.versions[0] ? Number(p.versions[0].value) : 0,
+        probability: proposalProbability(p, org),
+      })),
+    );
+    const headline = {
+      activeDeals: totals.count,
+      // Null for anybody who cannot see deal values, like every card's value.
+      value: showValues ? totals.value : null,
+      weighted: showValues ? totals.weighted : null,
+    };
+
+    res.json({ success: true, stages: PIPELINE_STAGES, columns, staleDays, staleCount, headline, canSeeValues: showValues });
   } catch (error) {
     next(error);
   }
@@ -444,7 +466,11 @@ proposalsRouter.get('/', requirePermission('pipeline.read'), async (req: AuthReq
       }
     }
     const showValues = canSeeDealValues(req.user!);
-    const proposals = proposalRows.map((p) => maskDealValues({ ...p, proformas: proformasByProposal.get(p.id) ?? [] }, showValues));
+    // `active` is the shared rule (QA19 fixes plan, F01): the list's Active and
+    // Closed tabs split on it rather than on the outcome alone.
+    const proposals = proposalRows.map((p) =>
+      maskDealValues({ ...p, active: isActiveDeal(p), proformas: proformasByProposal.get(p.id) ?? [] }, showValues),
+    );
 
     if (wantsCsv) {
       const csv = toCsv(proposals, [
@@ -461,9 +487,23 @@ proposalsRouter.get('/', requirePermission('pipeline.read'), async (req: AuthReq
       return;
     }
 
+    /*
+     * The tiles, from the whole register rather than the page that came back:
+     * the same count and value the Pipeline board's headline shows.
+     */
+    const activeRows = await prisma.proposal.findMany({
+      where: { organizationId: orgId, ...(where.companyId ? { companyId: where.companyId } : {}), ...ACTIVE_DEAL_WHERE },
+      select: { versions: { orderBy: { n: 'desc' }, take: 1, select: { value: true } } },
+    });
+    const active = {
+      count: activeRows.length,
+      value: showValues ? Math.round(activeRows.reduce((s, p) => s + Number(p.versions[0]?.value ?? 0), 0)) : null,
+    };
+
     res.json({
       success: true,
       proposals,
+      active,
       canSeeValues: showValues,
       meta: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
     });

@@ -9,6 +9,7 @@ import { toCsv } from '../utils/csv.js';
 import { sendCsv } from '../utils/csvResponse.js';
 import { teamScope, peopleInScope } from '../services/teamScope.js';
 import { BOARD_PERSON_SELECT, composeTeamBoard } from '../services/teamBoard.js';
+import { taskHasClient, waitingOnShown } from '../services/taskWaiting.js';
 
 export const teamRouter = Router();
 
@@ -298,6 +299,10 @@ teamRouter.get('/:id', requirePermission('work.team'), async (req: AuthRequest, 
                 assignedAt: true,
                 completedAt: true,
                 waitingOn: true,
+                // Whether it has a client: what "waiting on the client" is shown against.
+                monthCardId: true,
+                projectId: true,
+                companyId: true,
                 waitingTotalMinutes: true,
                 needsApproval: true,
                 reviews: LAST_REVIEW,
@@ -379,7 +384,8 @@ teamRouter.get('/:id', requirePermission('work.team'), async (req: AuthRequest, 
         dueDate: t.dueDate,
         dueTime: t.dueTime,
         repeat: t.repeat,
-        waitingOn: t.waitingOn,
+        waitingOn: waitingOnShown(t),
+        hasClient: taskHasClient(t),
         needsApproval: t.needsApproval,
         lastReview: t.reviews[0] ?? null,
         // The person who asked for it, not the person who typed it in.

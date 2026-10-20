@@ -8,6 +8,7 @@ import { whenLabel } from '../utils/zonedTime.js';
 import { addDays, loadWorkCalendar, nextWorkingDay } from '../utils/workCalendar.js';
 import { companyLink, retainerMonthLink, taskLink } from '../utils/recordLink.js';
 import { draftTask, type DraftArgs, type TaskDraft } from './zenDraft.js';
+import { ACTIVE_DEAL_WHERE, isActiveDeal } from './activeDeal.js';
 
 /**
  * Whole jobs Zen prepares and a person carries out (Zen Plan 4).
@@ -849,7 +850,7 @@ async function prepareFollowUp(args: Record<string, unknown>, orgId: string, ask
   } else if (about === 'PROPOSAL' || about === 'VERBAL_YES') {
     const stages = about === 'PROPOSAL' ? ['PROPOSAL_SENT', 'IN_NEGOTIATION', 'PROFORMA_ISSUED'] : ['VERBAL_YES'];
     const proposal = await prisma.proposal.findFirst({
-      where: { organizationId: orgId, companyId: company.id, deletedAt: null, outcome: null, stage: { in: stages as never } },
+      where: { organizationId: orgId, companyId: company.id, ...ACTIVE_DEAL_WHERE, AND: [{ stage: { in: stages as never } }] },
       orderBy: { updatedAt: 'desc' },
       select: { id: true, versions: { orderBy: { n: 'desc' }, take: 1, select: { n: true, scopeSummary: true, sentAt: true } } },
     });
@@ -961,7 +962,7 @@ async function prepareSalesStep(args: Record<string, unknown>, orgId: string): P
   let pool =
     action === 'SET_UP_WORK'
       ? proposals.filter((p) => p.outcome === 'WON' && !hasWork.has(p.id))
-      : proposals.filter((p) => !p.outcome);
+      : proposals.filter(isActiveDeal);
   if (args.proposal) {
     const t = String(args.proposal).toLowerCase();
     const byKind = t.includes('retainer') ? 'RETAINER' : t.includes('project') ? 'PROJECT' : null;

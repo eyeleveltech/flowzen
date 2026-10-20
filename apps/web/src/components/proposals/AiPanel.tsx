@@ -151,8 +151,8 @@ export function AiPanel({
         <p className="mx-4 mb-2 rounded-xl border border-danger/30 bg-danger-tint px-3 py-2 text-xs text-danger">
           {error.text}{' '}
           {error.noKey && (
-            <Link href="/settings" className="font-semibold underline">
-              Open Setup
+            <Link href="/settings?tab=zen" className="font-semibold underline">
+              Open the Zen assistant settings
             </Link>
           )}
         </p>

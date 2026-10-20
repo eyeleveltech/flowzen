@@ -17,7 +17,15 @@ import { Card } from '@/components/ui/card';
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
 import { Field, FieldSelect } from '@/components/ui/field';
 import { Upload, UserPlus } from 'lucide-react';
-import { VERTICAL_LABEL, SOURCE_LABEL, VERTICAL_OPTIONS, SOURCE_OPTIONS, labelFor } from '@/lib/vertical';
+import {
+  VERTICAL_LABEL,
+  SOURCE_LABEL,
+  VERTICAL_OPTIONS,
+  SOURCE_OPTIONS,
+  industryOption,
+  labelFor,
+  sourceOption,
+} from '@/lib/vertical';
 import { RowMenu } from '@/components/ui/row-menu';
 import { useConfirmStore } from '@/stores/confirm';
 import { Pencil, Send, Building2, CalendarClock, Trash2, MessageSquarePlus, History } from 'lucide-react';
@@ -202,8 +210,15 @@ export default function OutreachPage() {
   const [newContactName, setNewContactName] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [newEmail, setNewEmail] = useState('');
-  const [newVertical, setNewVertical] = useState('HEALTHCARE');
-  const [newSource, setNewSource] = useState('OUTREACH');
+  /*
+   * What is shown is what is saved (QA19 fixes plan, F02). These started as
+   * 'HEALTHCARE' and 'OUTREACH' — legacy codes no option matches — so the
+   * select read "Select…" while every new lead was quietly filed under
+   * Healthcare & Wellness. The industry is now chosen, never defaulted; the
+   * source starts on Cold Outreach, a real option, and visibly so.
+   */
+  const [newVertical, setNewVertical] = useState('');
+  const [newSource, setNewSource] = useState(() => sourceOption(null));
   const [adding, setAdding] = useState(false);
 
   // Import modal state
@@ -238,8 +253,8 @@ export default function OutreachPage() {
   const [editPhone, setEditPhone] = useState('');
   const [editEmail, setEditEmail] = useState('');
   const [editName, setEditName] = useState('');
-  const [editVertical, setEditVertical] = useState('HEALTHCARE');
-  const [editSource, setEditSource] = useState('OUTREACH');
+  const [editVertical, setEditVertical] = useState('');
+  const [editSource, setEditSource] = useState(() => sourceOption(null));
   const [editOwnerId, setEditOwnerId] = useState('');
   const [editNextStep, setEditNextStep] = useState('');
   const [editNextDate, setEditNextDate] = useState('');
@@ -249,8 +264,10 @@ export default function OutreachPage() {
   const openEdit = (e: OutreachItem) => {
     setEditing(e);
     setEditName(e.name);
-    setEditVertical(e.vertical);
-    setEditSource(e.source);
+    // Mapped to an option, so an old code shows as what it is — and one that
+    // maps to nothing is left for the person to choose rather than re-saved.
+    setEditVertical(industryOption(e.vertical));
+    setEditSource(sourceOption(e.source));
     setEditOwnerId(e.owner?.id ?? e.ownerId ?? '');
     setEditContactName(e.contactPersonName ?? '');
     setEditPhone(e.phone ?? '');
@@ -260,7 +277,7 @@ export default function OutreachPage() {
   };
 
   const saveEdit = async () => {
-    if (!editing || !editName.trim()) return;
+    if (!editing || !editName.trim() || !editVertical) return;
     setSavingEdit(true);
     try {
       await api.outreach.update(editing.id, {
@@ -484,7 +501,7 @@ export default function OutreachPage() {
     // while the lead was cold; the person promoting it has just met them and
     // is the one who knows the legal name and the right number.
     setPromoteName(entry.name);
-    setPromoteVertical(entry.vertical);
+    setPromoteVertical(industryOption(entry.vertical));
     setPromoteOwnerId(entry.owner?.id ?? entry.ownerId ?? '');
     setPromoteContactName(entry.contactPersonName ?? '');
     setPromoteContactEmail(entry.email ?? '');
@@ -493,7 +510,7 @@ export default function OutreachPage() {
   };
 
   const confirmPromote = async () => {
-    if (!promotingEntry) return;
+    if (!promotingEntry || !promoteVertical) return;
     setPromoting(true);
     setPromoteVerdict(null);
     try {
@@ -539,7 +556,7 @@ export default function OutreachPage() {
   };
 
   const addEntry = async () => {
-    if (!newName.trim()) return;
+    if (!newName.trim() || !newVertical) return;
     setAdding(true);
     try {
       await api.outreach.create({
@@ -557,6 +574,8 @@ export default function OutreachPage() {
       setNewPhone('');
       setNewEmail('');
       setNewOwnerId('');
+      setNewVertical('');
+      setNewSource(sourceOption(null));
       load();
     } catch (e) {
       // A failed action used to log to the console and stop. The
@@ -749,7 +768,7 @@ export default function OutreachPage() {
                     row, "who am I calling today" is a question you can only
                     answer by opening every lead one at a time.
                   */}
-                  {CARRIES_ACTION[e.status] && e.nextActionDate && !e.noNextStep && (
+                  {CARRIES_ACTION[e.status] && (e.nextActionDate || e.nextStep) && !e.noNextStep && (
                     <button
                       type="button"
                       onClick={() => openAction(e, e.status)}
@@ -757,11 +776,16 @@ export default function OutreachPage() {
                       className="mt-0.5 block text-left text-micro font-normal text-secondary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                     >
                       {e.nextStep ? <span className="text-body">{e.nextStep}</span> : CARRIES_ACTION[e.status]?.dateLabel}{' '}
-                      <span className={isOverdue(e.nextActionDate) ? 'font-semibold text-danger' : 'font-semibold text-primary'}>
-                        {e.nextStep ? '· ' : ''}
-                        {isOverdue(e.nextActionDate) ? 'was due ' : ''}
-                        {formatDay(e.nextActionDate)}
-                      </span>
+                      {e.nextActionDate ? (
+                        <span className={isOverdue(e.nextActionDate) ? 'font-semibold text-danger' : 'font-semibold text-primary'}>
+                          {e.nextStep ? '· ' : ''}
+                          {isOverdue(e.nextActionDate) ? 'was due ' : ''}
+                          {formatDay(e.nextActionDate)}
+                        </span>
+                      ) : (
+                        // Written, with no date: a step, not a missing one (QA19, F04).
+                        <span className="text-muted">· date not set</span>
+                      )}
                       {e.remarks && <span className="text-secondary"> · {e.remarks}</span>}
                     </button>
                   )}
@@ -937,7 +961,14 @@ export default function OutreachPage() {
           {!newPhone.trim() && !newEmail.trim() && (
             <p className="text-xs text-secondary">Add a phone number or an email — one of the two is enough.</p>
           )}
-          <FieldSelect label="Industry" value={newVertical} onChange={setNewVertical} options={VERTICAL_OPTIONS} />
+          <FieldSelect
+            label="Industry"
+            required
+            value={newVertical}
+            onChange={setNewVertical}
+            options={VERTICAL_OPTIONS}
+            placeholder="Select industry…"
+          />
           <FieldSelect label="Source" value={newSource} onChange={setNewSource} options={SOURCE_OPTIONS} />
           {/* The form never asked, and POST quietly filed the name under
               whoever was logged in — which is right most of the time and was
@@ -955,7 +986,7 @@ export default function OutreachPage() {
           <Button
             variant="primary"
             loading={adding}
-            disabled={!newName.trim() || (!newPhone.trim() && !newEmail.trim())}
+            disabled={!newName.trim() || !newVertical || (!newPhone.trim() && !newEmail.trim())}
             onClick={() => void addEntry()}
           >
             Add to the list
@@ -1045,7 +1076,14 @@ export default function OutreachPage() {
               was often a guess when the name was scraped, and the owner of a
               cold lead is not always who ends up running the account. */}
           <div className="grid gap-4 sm:grid-cols-2">
-            <FieldSelect label="Industry" value={promoteVertical} onChange={setPromoteVertical} options={VERTICAL_OPTIONS} />
+            <FieldSelect
+              label="Industry"
+              required
+              value={promoteVertical}
+              onChange={setPromoteVertical}
+              options={VERTICAL_OPTIONS}
+              placeholder="Select industry…"
+            />
             <FieldSelect
               label="Owner"
               value={promoteOwnerId}
@@ -1071,7 +1109,7 @@ export default function OutreachPage() {
         </ModalBody>
         <ModalFooter>
           <Button variant="ghost" disabled={promoting} onClick={() => setPromotingEntry(null)}>Cancel</Button>
-          <Button variant="primary" loading={promoting} onClick={() => void confirmPromote()}>
+          <Button variant="primary" loading={promoting} disabled={!promoteVertical} onClick={() => void confirmPromote()}>
             Promote
           </Button>
         </ModalFooter>
@@ -1089,7 +1127,14 @@ export default function OutreachPage() {
             <Field label="Phone" value={editPhone} onChange={setEditPhone} placeholder="e.g. 98400 11223" />
             <Field label="Email" type="email" value={editEmail} onChange={setEditEmail} placeholder="e.g. hello@acme.com" />
           </div>
-          <FieldSelect label="Industry" value={editVertical} onChange={setEditVertical} options={VERTICAL_OPTIONS} />
+          <FieldSelect
+            label="Industry"
+            required
+            value={editVertical}
+            onChange={setEditVertical}
+            options={VERTICAL_OPTIONS}
+            placeholder="Select industry…"
+          />
           <FieldSelect label="Source" value={editSource} onChange={setEditSource} options={SOURCE_OPTIONS} />
           <FieldSelect
             label="Owner"
@@ -1165,7 +1210,7 @@ export default function OutreachPage() {
           <Button
             variant="primary"
             loading={savingEdit}
-            disabled={!editName.trim() || Boolean(editActive && editNextDate && editNextDate < today)}
+            disabled={!editName.trim() || !editVertical || Boolean(editActive && editNextDate && editNextDate < today)}
             onClick={() => void saveEdit()}
           >
             Save changes

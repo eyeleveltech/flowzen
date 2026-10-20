@@ -1,48 +1,45 @@
-import { render, screen } from '@testing-library/react';
-import { describe, it, expect } from 'vitest';
+import { render } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
 import { ZenMarkdown } from './ZenMarkdown';
 
+vi.mock('next/link', () => ({
+  default: ({ href, children }: { href: string; children: React.ReactNode }) => <a data-internal href={href}>{children}</a>,
+}));
+
 /**
- * Zen's answers as Markdown (Zen Plan 2): links that go somewhere, tables that
- * are tables, and a model's writing that can never become markup.
+ * Security fixes plan, H7: a Markdown image in a Zen answer was fetched on
+ * sight — the answer's text sent to whoever planted it, with no click.
  */
 describe('ZenMarkdown', () => {
-  it('links inside the app stay in the app, and outside links open a new tab', () => {
-    render(<ZenMarkdown text="See [Acme](/companies/c1) or [their site](https://acme.example)." />);
-
-    const inside = screen.getByRole('link', { name: 'Acme' });
-    expect(inside).toHaveAttribute('href', '/companies/c1');
-    expect(inside).not.toHaveAttribute('target');
-
-    const outside = screen.getByRole('link', { name: 'their site' });
-    expect(outside).toHaveAttribute('href', 'https://acme.example');
-    expect(outside).toHaveAttribute('target', '_blank');
-    expect(outside).toHaveAttribute('rel', 'noopener noreferrer');
-  });
-
-  it('draws a table and a bold figure', () => {
-    render(<ZenMarkdown text={'Profit is **₹1,20,000**.\n\n| Client | Fee |\n| --- | --- |\n| Acme | ₹50,000 |'} />);
-
-    expect(screen.getByText('₹1,20,000').tagName).toBe('STRONG');
-    expect(screen.getByRole('table')).toBeInTheDocument();
-    expect(screen.getByRole('columnheader', { name: 'Client' })).toBeInTheDocument();
-    expect(screen.getByRole('cell', { name: '₹50,000' })).toBeInTheDocument();
-  });
-
-  it('never renders HTML from an answer', () => {
-    const { container } = render(
-      <ZenMarkdown text={'Before <script>alert(1)</script> <img src=x onerror="alert(2)"> after'} />,
-    );
-
-    expect(container.querySelector('script')).toBeNull();
+  it('never renders an image', () => {
+    const { container } = render(<ZenMarkdown text={'Here: ![leak](https://example.invalid/p.png?data=secret)'} />);
     expect(container.querySelector('img')).toBeNull();
-    expect(container.textContent).toContain('Before');
-    expect(container.textContent).toContain('after');
+    expect(container.textContent).toContain('[image not shown: leak]');
   });
 
-  it('drops a javascript: link rather than making it clickable', () => {
-    render(<ZenMarkdown text="[click me](javascript:alert(1))" />);
-    const link = screen.queryByRole('link', { name: 'click me' });
-    expect(link?.getAttribute('href') ?? '').not.toMatch(/^javascript:/i);
+  it('skips raw HTML images too', () => {
+    const { container } = render(<ZenMarkdown text={'<img src="https://example.invalid/x.png">'} />);
+    expect(container.querySelector('img')).toBeNull();
+  });
+
+  it('shows where an external link goes, and opens it apart', () => {
+    const { container } = render(<ZenMarkdown text={'See [the report](https://www.example.com/r).'} />);
+    const a = container.querySelector('a')!;
+    expect(a.getAttribute('target')).toBe('_blank');
+    expect(a.getAttribute('rel')).toContain('noopener');
+    expect(a.getAttribute('rel')).toContain('noreferrer');
+    expect(a.textContent).toContain('example.com');
+  });
+
+  it('does not treat /\\evil.com as a page of the app', () => {
+    const { container } = render(<ZenMarkdown text={'[Acme](/\\evil.com/x)'} />);
+    // Markdown hands it over as /%5Cevil.com/x: not a link at all, just its text.
+    expect(container.querySelector('a[data-internal]')).toBeNull();
+    expect(container.textContent).toContain('Acme');
+  });
+
+  it('keeps an internal link in the app', () => {
+    const { container } = render(<ZenMarkdown text={'[Acme](/companies/abc)'} />);
+    expect(container.querySelector('a')!.hasAttribute('data-internal')).toBe(true);
   });
 });

@@ -245,7 +245,7 @@ describe('working on now', () => {
     });
 
     it('when the task is put on hold', async () => {
-      const res = await request(app).post('/api/tasks/t-r3/wait').set(...as('usr-ravi')).send({ waitingOn: 'CLIENT' });
+      const res = await request(app).post('/api/tasks/t-r3/wait').set(...as('usr-ravi')).send({ waitingOn: 'ANOTHER_PERSON' });
       expect(res.status).toBe(200);
       expect(cleared()).toBe(true);
     });

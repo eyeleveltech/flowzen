@@ -117,7 +117,7 @@ const OPEN = [
   { status: 'TODO', dueDate: day('2026-10-01'), waitingOn: null, assignees: [person('Video', 'Ravi'), person('Video', 'Shyam')], assignee: placed('Video') },
   // Past due but waiting on an approver: in review, NOT overdue.
   { status: 'IN_REVIEW', dueDate: day('2026-09-30'), waitingOn: null, assignees: [person('Video', 'Ravi')], assignee: placed('Video') },
-  { status: 'ON_HOLD', dueDate: day('2026-10-20'), waitingOn: 'CLIENT', assignees: [person('Design', 'Janani')], assignee: placed('Design') },
+  { status: 'ON_HOLD', dueDate: day('2026-10-20'), waitingOn: 'CLIENT', monthCardId: 'mc-1', assignees: [person('Design', 'Janani')], assignee: placed('Design') },
   { status: 'IN_PROGRESS', dueDate: day('2026-10-09'), waitingOn: null, assignees: [person('Design', 'Janani')], assignee: placed('Design') },
   // No assignee rows: falls back to the task's own assignee.
   { status: 'TODO', dueDate: day('2026-10-10'), waitingOn: null, assignees: [], assignee: placed('Development') },

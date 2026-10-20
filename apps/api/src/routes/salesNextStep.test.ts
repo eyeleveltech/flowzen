@@ -353,9 +353,10 @@ describe("a lead's next step is optional; Dead clears it", () => {
     p.outreachEntry.groupBy.mockResolvedValue([]);
     await request(app).get('/api/outreach?missingNextStep=true').set('Authorization', auth);
     const where = p.outreachEntry.findMany.mock.calls[0][0].where;
+    // Missing is nothing written: a step without a date is a step (QA19 fixes plan, F04).
     expect(where.AND[0]).toEqual({
       status: { in: ['FOLLOW_UP', 'MEETING', 'INTERESTED'] },
-      OR: [{ nextStep: null }, { nextStep: '' }, { nextActionDate: null }],
+      OR: [{ nextStep: null }, { nextStep: '' }],
     });
   });
 });

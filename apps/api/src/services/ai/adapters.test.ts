@@ -642,7 +642,7 @@ describe('Anthropic', () => {
   it('turns the SDK errors into the sentences the panel already shows', async () => {
     const body = (type: string, msg: string) => ({ type: 'error', error: { type, message: msg } });
     const cases: [unknown, string][] = [
-      [new Anthropic.AuthenticationError(401, body('authentication_error', 'invalid x-api-key'), 'invalid x-api-key', new Headers()), 'Anthropic refused that key. Check it in Settings → Zen.'],
+      [new Anthropic.AuthenticationError(401, body('authentication_error', 'invalid x-api-key'), 'invalid x-api-key', new Headers()), 'Anthropic refused that key. Check it in Settings → Zen assistant.'],
       [new Anthropic.RateLimitError(429, body('rate_limit_error', 'slow down'), 'slow down', new Headers()), 'Anthropic is rate-limiting this key. Try again shortly.'],
       [new Anthropic.NotFoundError(404, body('not_found_error', 'model: nope'), 'model: nope', new Headers()), 'Anthropic has no model called "claude-opus-5-5". Change it in Settings.'],
       [new Anthropic.APIConnectionError({ message: 'fetch failed' }), 'Could not reach Anthropic. Check the server can make outbound requests.'],

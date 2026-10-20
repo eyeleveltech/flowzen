@@ -111,8 +111,10 @@ describe('salaries', () => {
     const text = JSON.stringify(out);
 
     expect(out.costs.map((c: any) => c.what)).toEqual(['Software']);
-    expect(out.byCategory).toContainEqual({ category: 'Salaries', amount: 126000, entries: 2 });
-    expect(out.salaries).toEqual({ amount: 126000, entries: 2 });
+    // People cost is one team total, and stays out of the categories and the total.
+    expect(out.byCategory).toEqual([{ category: 'Software', amount: 5200, entries: 1 }]);
+    expect(out.peopleCost).toEqual({ amount: 126000, entries: 2 });
+    expect(out.total).toBe(5200);
     expect(text).not.toContain('Janani');
     expect(text).not.toContain('Ravi');
     expect(text).not.toContain('65000');
@@ -139,6 +141,76 @@ describe('salaries', () => {
     expect(text).not.toContain('61000');
     expect(text).not.toContain('61,000');
     expect(text).not.toContain('55,000');
+  });
+});
+
+describe('pay under any name (security fixes plan, H8)', () => {
+  const cost = (category: string, vendor: string, amount: number) => ({
+    category,
+    vendor,
+    amount,
+    incurredAt: new Date('2026-09-30'),
+    type: 'COMPANY',
+    confirmed: true,
+    recurring: false,
+    monthCard: null,
+    project: null,
+  });
+
+  it('is never itemised, whatever it is called', async () => {
+    p.cost.findMany.mockResolvedValue([
+      cost('Payroll', 'Janani', 65000),
+      cost('Wages', 'Ravi', 21000),
+      cost('Stipend', 'Intern Asha', 12000),
+      cost('CTC', 'Shyam', 58000),
+      cost('Other', 'Ravi bonus', 9000),
+      cost('Software', 'Adobe', 5200),
+    ]);
+    const out = await run('getCosts', { month: '2026-09' });
+    const text = JSON.stringify(out);
+    expect(out.costs.map((c: any) => c.paidTo)).toEqual(['Adobe']);
+    for (const who of ['Janani', 'Ravi', 'Asha', 'Shyam']) expect(text).not.toContain(who);
+    // Whole numbers only: the team total 165000 contains 65000.
+    for (const n of ['65000', '21000', '12000', '58000', '9000']) expect(text).not.toMatch(new RegExp(`(?<![0-9])${n}(?![0-9])`));
+    expect(out.peopleCost).toEqual({ amount: 165000, entries: 5 });
+  });
+
+  it('is left out of a filtered list, which could single one person out', async () => {
+    p.cost.findMany.mockResolvedValue([cost('Salaries', 'Janani', 65000)]);
+    const out = await run('getCosts', { month: '2026-09', vendor: 'Janani' });
+    expect(JSON.stringify(out)).not.toContain('65000');
+    expect(out.peopleCost).toEqual({ amount: null, why: 'Not shown in a filtered list.' });
+    expect(out.total).toBe(0);
+  });
+
+  it('is not shown as a total of one', async () => {
+    p.cost.findMany.mockResolvedValue([cost('Salaries', 'Janani', 65000), cost('Software', 'Adobe', 5200)]);
+    const out = await run('getCosts', { month: '2026-09' });
+    expect(JSON.stringify(out)).not.toContain('65000');
+    expect(out.peopleCost.amount).toBeNull();
+  });
+
+  it('is dropped from the history, entered, edited or deleted', async () => {
+    p.user.findMany.mockResolvedValue([]);
+    const row = (id: string, verb: string, payload: unknown) => ({
+      id,
+      at: new Date('2026-09-20T10:00:00Z'),
+      entityType: 'Cost',
+      entityId: `c-${id}`,
+      verb,
+      actor: { id: 'u-boss', name: 'Akmal' },
+      payload,
+    });
+    p.activity.findMany.mockResolvedValue([
+      row('1', 'created', { category: 'Wages', vendor: 'Ravi', amount: 21000, type: 'COMPANY' }),
+      row('2', 'cost_updated', { was: { amount: 60000, vendor: 'Janani', category: 'Other' }, now: { amount: 65000, vendor: 'Janani', category: 'Bonus' } }),
+      row('3', 'deleted', { category: 'Payroll', vendor: 'Shyam', amount: 58000 }),
+      row('4', 'created', { category: 'Software', vendor: 'Adobe', amount: 5200, type: 'COMPANY' }),
+    ]);
+    const out = await run('getHistory', {});
+    const text = JSON.stringify(out);
+    expect(out.changes).toHaveLength(1);
+    for (const who of ['Ravi', 'Janani', 'Shyam', '21000', '65000', '58000']) expect(text).not.toContain(who);
   });
 });
 

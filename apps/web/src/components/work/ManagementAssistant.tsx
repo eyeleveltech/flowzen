@@ -56,6 +56,7 @@ import { useZenPageContext, zenScreen } from '@/hooks/useZenPageContext';
 import { ZenMarkdown } from './ZenMarkdown';
 import { ZenMessageCard, ZenPlanCard } from './ZenCards';
 import { ZEN_DOCK_WIDTH } from '@/components/layout/zen-dock';
+import { shortcut } from '@/lib/shortcut';
 
 /** Full-screen sheet on a phone; docked or expanded from 1024px. */
 export type ZenMode = 'sheet' | 'docked' | 'expanded';
@@ -930,7 +931,7 @@ export function ManagementAssistant({
               {expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
             </button>
           )}
-          <button type="button" onClick={onClose} aria-label="Close Zen" title="Close (Ctrl+J)" className={iconButton}>
+          <button type="button" onClick={onClose} aria-label="Close Zen" title={`Close (${shortcut('J')})`} className={iconButton}>
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -940,8 +941,8 @@ export function ManagementAssistant({
         <div className="p-5">
           <p className="text-sm text-secondary">
             Add an AI key in{' '}
-            <a href="/settings" className="font-medium text-primary hover:underline">
-              Settings → Zen
+            <a href="/settings?tab=zen" className="font-medium text-primary hover:underline">
+              Settings → Zen assistant
             </a>{' '}
             to turn this on.
           </p>

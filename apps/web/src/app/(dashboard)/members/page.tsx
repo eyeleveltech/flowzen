@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { teamTabRedirect } from '@/lib/departmentPage';
 import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { TableRowsSkeleton } from '@/components/ui/skeleton-loaders';
 import { ErrorNote, Note } from '@/components/ui/empty-state';
@@ -27,7 +29,6 @@ import { useDepartments, useTeamScope } from '@/hooks/queries';
 import { TeamScopeLine } from '@/components/work/TeamScopeLine';
 import { Tabs, useTabState, type TabDef } from '@/components/ui/tabs';
 import { ApprovalsReport } from '@/components/work/ApprovalsReport';
-import { TeamBoard } from '@/components/work/TeamBoard';
 
 interface TeamMember {
   id: string;
@@ -82,19 +83,27 @@ export default function MembersPage() {
   const [openMemberId, setOpenMemberId] = useState<string | null>(null);
 
   /*
-   * Three views of the team. Team is the delivery table below, unchanged;
-   * Board is what each person is on now, what is next and what needs
-   * attention (Team plan 1); Approvals is where approvals get stuck (Plan 3).
-   * `?tab=board` and `?tab=approvals` link straight to them. The whole screen
-   * already needs `work.team`, which is both tabs' own gate, so there is
-   * nothing further to hide.
+   * Two views of the team. Team is the delivery table below, unchanged;
+   * Approvals is where approvals get stuck (Plan 3). `?tab=approvals` links
+   * straight to it. The whole screen already needs `work.team`, which is the
+   * tab's own gate, so there is nothing further to hide.
+   *
+   * Board was the third. It showed task counts and nothing else, and a head
+   * needs their people, work, calendar, approvals, gear and time split — so it
+   * became My Department (Department head page plan). An old `?tab=board`
+   * link goes there.
    */
-  const tabs: TabDef<'team' | 'board' | 'approvals'>[] = [
+  const tabs: TabDef<'team' | 'approvals'>[] = [
     { key: 'team', label: 'Team' },
-    { key: 'board', label: 'Board' },
     { key: 'approvals', label: 'Approvals' },
   ];
   const [tab, setTab] = useTabState(tabs);
+  const router = useRouter();
+  const wantedTab = useSearchParams().get('tab');
+  const redirectTo = teamTabRedirect(wantedTab);
+  useEffect(() => {
+    if (redirectTo) router.replace(redirectTo);
+  }, [redirectTo, router]);
 
   /**
    * Team capacity, cached per department filter.
@@ -175,7 +184,7 @@ export default function MembersPage() {
    */
   usePageHeader('Team', tab === 'approvals' ? 'Approvals' : filterName);
 
-  /** By department — the Team and Board tabs share it, so switching keeps the choice. */
+  /** By department. */
   const deptSelect = filterOptions.length > 1 && (
     <select
       aria-label="Filter the team by department"
@@ -193,18 +202,6 @@ export default function MembersPage() {
       <Tabs className="mb-6" tabs={tabs} active={tab} onChange={setTab} />
 
       {tab === 'approvals' && <ApprovalsReport />}
-
-      {tab === 'board' && (
-        <TeamBoard
-          deptFilter={deptFilter}
-          header={
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <TeamScopeLine className="mr-auto" />
-              {deptSelect}
-            </div>
-          }
-        />
-      )}
 
       {tab === 'team' && (
       <>

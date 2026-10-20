@@ -73,6 +73,8 @@ export type DrawerTask = {
   notes?: string | null;
   reopenCount?: number;
   waitingOn?: 'CLIENT' | 'ANOTHER_PERSON' | null;
+  /** Whether it has a client — "Waiting on the client" is only offered when it does. */
+  hasClient?: boolean;
   /** The lead — the first of `assignees`, kept apart so "whose task" always has an answer. */
   assignee?: { id: string; name: string; designation?: string | null } | null;
   /** Everybody on it, the lead included. */
@@ -577,7 +579,7 @@ export function TaskDrawer({
                       label="Waiting on"
                       value={
                         <Badge tone="warn">
-                          {task.waitingOn === 'ANOTHER_PERSON' ? 'Another person' : 'The client'}
+                          {task.waitingOn === 'ANOTHER_PERSON' ? 'Someone else' : 'The client'}
                         </Badge>
                       }
                     />

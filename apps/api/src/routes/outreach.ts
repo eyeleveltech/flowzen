@@ -65,10 +65,11 @@ outreachRouter.get('/', requirePermission('company.read'), async (req: AuthReque
     const staleDays = org?.outreachStaleDays ?? 10;
     const today = await studioToday(orgId);
     const staleBefore = new Date(asStoredDay(today).getTime() - staleDays * 86_400_000);
-    // An active lead with no next step, or no date for it.
+    // An active lead with no next step written — a step without a date is
+    // still a step (QA19 fixes plan, F04, the same rule as isNextStepMissing).
     const missingNextStep = {
       status: { in: ACTIVE_OUTREACH },
-      OR: [{ nextStep: null }, { nextStep: '' }, { nextActionDate: null }],
+      OR: [{ nextStep: null }, { nextStep: '' }],
     };
 
     /*
@@ -235,6 +236,16 @@ const outreachCreateSchema = z
 
 outreachRouter.post('/', requirePermission('company.write'), async (req: AuthRequest, res: Response, next) => {
   try {
+    /*
+     * An industry is chosen, never assumed (QA19 fixes plan, F02). Said in
+     * words before the schema runs, which would only answer "Required". A
+     * legacy code — 'HEALTHCARE' from an import — is still accepted below.
+     */
+    const sentIndustry = req.body?.vertical;
+    if (typeof sentIndustry !== 'string' || !sentIndustry.trim()) {
+      res.status(400).json({ success: false, error: 'Choose an industry for this lead.' });
+      return;
+    }
     const parsed = outreachCreateSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ success: false, error: parsed.error.issues[0].message });

@@ -9,7 +9,7 @@ import { logger } from '../../utils/logger.js';
  */
 export class AssistantNotConfigured extends Error {
   constructor() {
-    super('No AI key is set. Add one in Settings → Zen.');
+    super('No AI key is set. Add one in Settings → Zen assistant.');
     this.name = 'AssistantNotConfigured';
   }
 }
@@ -38,7 +38,7 @@ export function httpFailure(opts: {
   logger.error(`${label} ${status} for org ${organizationId}: ${body.slice(0, 300)}`);
 
   if (status === 401 || status === 403) {
-    return new AssistantFailed(`${label} refused that key. Check it in Settings → Zen.`);
+    return new AssistantFailed(`${label} refused that key. Check it in Settings → Zen assistant.`);
   }
   /*
    * 400 is the awkward one. On Gemini it usually means the key is wrong; on the
@@ -63,7 +63,7 @@ export function httpFailure(opts: {
       );
     }
     if (/api.?key|credential|unauthor/i.test(body)) {
-      return new AssistantFailed(`${label} refused that key. Check it in Settings → Zen.`);
+      return new AssistantFailed(`${label} refused that key. Check it in Settings → Zen assistant.`);
     }
     const said = providerMessage(body);
     return new AssistantFailed(

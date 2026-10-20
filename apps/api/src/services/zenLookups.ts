@@ -3,6 +3,7 @@ import type { AiTool } from './ai/types.js';
 import { composeApprovalsReport } from './approvalsReport.js';
 import { composeForecast } from './forecast.js';
 import { leadStaleness, nextStepState, studioToday } from './salesFollowUp.js';
+import { ACTIVE_DEAL_WHERE } from './activeDeal.js';
 import { describe, resolveSubjects } from './activityLog.js';
 import { CHASER_RULES } from './alertRules.js';
 import { companyLink, rawLinkFor, retainerMonthLink, taskLink } from '../utils/recordLink.js';
@@ -40,8 +41,23 @@ const monthRange = (month: string) => {
 };
 const insensitive = (v: unknown) => ({ contains: String(v), mode: 'insensitive' as const });
 
-/** A salary is summed, never itemised: it names a person and what they are paid. */
-const isSalary = (category: string) => /salar/i.test(category);
+/**
+ * Pay — what a person is paid — never reaches the AI provider itemised
+ * (security fixes plan, H8). "Salaries" alone was the test, so a cost filed
+ * as Payroll, Wages, Stipend, Bonus or CTC went out with the person's name
+ * and the amount. The vendor is read as well as the category: a cost under
+ * "Other" paid to "Janani bonus" is still somebody's pay.
+ */
+export const PAY_WORDS = /salar|payroll|wage|stipend|bonus|\bctc\b|remunerat|incentive|gratuity/i;
+export const isPay = (...texts: (string | null | undefined)[]): boolean => texts.some((t) => Boolean(t) && PAY_WORDS.test(t!));
+const isSalary = (category: string, vendor?: string | null) => isPay(category, vendor);
+
+/**
+ * People cost as one total, and only when it cannot single anybody out: never
+ * in a filtered list (a vendor or category filter isolates one person), and
+ * never when the month has fewer than two such entries.
+ */
+const PEOPLE_COST_MIN_ENTRIES = 2;
 
 /** Where an alert, a history row or anything else about a record opens. */
 export const linkTo = (entityType: string, entityId: string): string | null =>
@@ -161,7 +177,7 @@ export const ZEN_LOOKUPS = [
         query: { type: 'string', description: 'Part of the lead name.' },
         notTouchedForDays: { type: 'number', description: 'Only leads with nothing recorded for at least this many days.' },
         followUpDue: { type: 'boolean', description: 'Only leads whose follow-up or meeting date has arrived or passed.' },
-        missingNextStep: { type: 'boolean', description: 'Only active leads (follow-up, meeting, interested) with no next step or no date.' },
+        missingNextStep: { type: 'boolean', description: 'Only active leads (follow-up, meeting, interested) with no next step written. A step written without a date is not missing.' },
         limit: { type: 'number' },
       },
     },
@@ -195,7 +211,7 @@ export const ZEN_LOOKUPS = [
   {
     name: 'getCosts',
     description:
-      'The cost register for a month: every cost with what it was, who was paid, the amount and what it was against, plus totals by category. Filter by client, category (e.g. Software), vendor, or kind. Salaries are only ever one summed line.',
+      'The cost register for a month: every cost with what it was, who was paid, the amount and what it was against, plus totals by category. Filter by client, category (e.g. Software), vendor, or kind. People cost (salaries, wages, payroll, bonuses) is never itemised: it is one team total, and left out of filtered lists.',
     parameters: {
       type: 'object',
       properties: {
@@ -517,7 +533,7 @@ export async function runZenLookup(name: ZenLookupName, args: Record<string, unk
         select: { number: true, status: true, amount: true, total: true, validTill: true },
       });
       const fee = money(card.revenue);
-      const visible = card.costs.filter((c) => !isSalary(c.category));
+      const visible = card.costs.filter((c) => !isSalary(c.category, c.vendor));
       const external = card.costs.reduce((s, c) => s + money(c.amount), 0);
       const paid = card.invoice ? card.invoice.payments.reduce((s, p) => s + money(p.amount), 0) : 0;
       const late = (t: (typeof card.tasks)[number]) =>
@@ -617,24 +633,32 @@ export async function runZenLookup(name: ZenLookupName, args: Record<string, unk
           project: { select: { id: true, name: true, company: { select: { name: true } } } },
         },
       });
-      const salaries = rows.filter((c) => isSalary(c.category));
-      const itemised = rows.filter((c) => !isSalary(c.category));
+      const pay = rows.filter((c) => isSalary(c.category, c.vendor));
+      const itemised = rows.filter((c) => !isSalary(c.category, c.vendor));
+      // Any filter can narrow people cost down to one person, so a filtered
+      // list leaves it out entirely; so does a month with a single entry.
+      const filtered = Boolean(args.category || args.vendor || kind || companyId);
+      const peopleCostShown = !filtered && pay.length >= PEOPLE_COST_MIN_ENTRIES;
       const byCategory = new Map<string, { amount: number; count: number }>();
-      for (const c of rows) {
-        const key = isSalary(c.category) ? 'Salaries' : c.category;
-        const line = byCategory.get(key) ?? { amount: 0, count: 0 };
+      for (const c of itemised) {
+        const line = byCategory.get(c.category) ?? { amount: 0, count: 0 };
         line.amount += money(c.amount);
         line.count += 1;
-        byCategory.set(key, line);
+        byCategory.set(c.category, line);
       }
       return {
         month,
-        total: rows.reduce((s, c) => s + money(c.amount), 0),
-        note: 'Amounts include GST. Salaries are one summed line and never itemised.',
+        total: itemised.reduce((s, c) => s + money(c.amount), 0),
+        note:
+          'Amounts include GST. The total and the categories leave out people cost (salaries, wages, payroll, bonuses): that is only ever one team total, and never shown in a filtered list.',
         byCategory: [...byCategory.entries()]
           .map(([category, v]) => ({ category, amount: Math.round(v.amount), entries: v.count }))
           .sort((a, b) => b.amount - a.amount),
-        salaries: salaries.length ? { amount: Math.round(salaries.reduce((s, c) => s + money(c.amount), 0)), entries: salaries.length } : null,
+        peopleCost: peopleCostShown
+          ? { amount: Math.round(pay.reduce((s, c) => s + money(c.amount), 0)), entries: pay.length }
+          : pay.length
+            ? { amount: null, why: filtered ? 'Not shown in a filtered list.' : 'Not shown for a single entry.' }
+            : null,
         link: '/money',
         costs: itemised.slice(0, limited(args.limit)).map((c) => ({
           what: c.category,
@@ -664,7 +688,7 @@ export async function runZenLookup(name: ZenLookupName, args: Record<string, unk
         const company = await findCompany(organizationId, String(args.assumeWonClient));
         if (!company) return { error: `No company matching "${args.assumeWonClient}".` };
         const deal = await prisma.proposal.findFirst({
-          where: { organizationId, companyId: company.id, deletedAt: null, outcome: null },
+          where: { organizationId, companyId: company.id, ...ACTIVE_DEAL_WHERE },
           orderBy: { updatedAt: 'desc' },
           select: { id: true },
         });
@@ -675,8 +699,8 @@ export async function runZenLookup(name: ZenLookupName, args: Record<string, unk
       return {
         link: '/forecast',
         currentMonthlyRetainers: f.summary.currentMrr,
-        // The team's total only, as the screen shows it — never one person's.
-        monthlyPayrollTotal: f.summary.monthlyPayroll,
+        // People cost as the team's total only, as the screen shows it — never one person's.
+        monthlyPeopleCostTotal: f.summary.monthlyPayroll,
         monthlyRecurringCosts: f.summary.monthlyRecurringCosts,
         // Say these before any surplus: a forecast without salaries or recurring costs overstates cash.
         caveats: f.warnings,
@@ -690,7 +714,7 @@ export async function runZenLookup(name: ZenLookupName, args: Record<string, unk
           fromProjectMilestones: m.inflows.projects,
           fromAssumedWonDeal: m.inflows.assumedWon,
           pipelineWeightedNotCounted: m.inflows.pipelineWeighted,
-          payroll: m.outflows.payroll,
+          peopleCost: m.outflows.payroll,
           recurringCosts: m.outflows.recurring,
           owedNotPaid: m.outflows.committed,
           netCashFlow: m.netCashFlow,
@@ -761,8 +785,12 @@ export async function runZenLookup(name: ZenLookupName, args: Record<string, unk
         take: limited(args.limit),
         include: { actor: { select: { id: true, name: true } } },
       });
-      // A salary change is somebody's pay; it never leaves through Zen.
-      const clean = rows.map((r) => ({ ...r, payload: scrubSalary(r.payload) }));
+      // A salary change is somebody's pay; it never leaves through Zen. Nor
+      // does a cost entered, edited or deleted as pay: its row names the
+      // person and the amount, so the row goes, not just a field of it.
+      const clean = rows
+        .filter((r) => !(r.entityType === 'Cost' && PAY_WORDS.test(JSON.stringify(r.payload ?? {}))))
+        .map((r) => ({ ...r, payload: scrubSalary(r.payload) }));
       const [subjects, team] = await Promise.all([
         resolveSubjects(organizationId, clean),
         prisma.user.findMany({ where: { organizationId }, select: { id: true, name: true } }),

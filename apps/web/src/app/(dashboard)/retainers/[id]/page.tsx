@@ -35,13 +35,15 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useWorkCacheNudge } from '@/hooks/useWorkCacheNudge';
+import { usePageHeader } from '@/hooks/usePageHeader';
+import { Breadcrumbs } from '@/components/ui/breadcrumbs';
 import { cn } from '@/lib/utils';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { useAuthStore } from '@/stores';
 import { useConfirmStore } from '@/stores/confirm';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, ChevronLeft, ChevronRight, CircleSlash, LockOpen, Pencil, Plus, Printer, ReceiptText, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CircleSlash, LockOpen, Pencil, Plus, Printer, ReceiptText, Trash2 } from 'lucide-react';
 import { api, ApiError, formatMoney, formatDate, type OrgConfig } from '@/lib/api-v2';
 import { useTeamMembers } from '@/hooks/queries';
 import toast from 'react-hot-toast';
@@ -69,6 +71,7 @@ import { RecordPaymentModal } from '@/components/work/RecordPaymentModal';
 import { RetainerBillingStrip, type BillingSubject } from '@/components/work/RetainerBilling';
 import { RetainerBillingHistory } from '@/components/work/RetainerBillingBoard';
 import { billingStepFor } from '@/lib/retainerBilling';
+import { invoicedAndDue } from '@/lib/invoiceDates';
 import { useZenForm } from '@/lib/zenForms';
 import { getPriorityDot, getPriorityLabel } from '@/lib/priority';
 
@@ -159,6 +162,8 @@ type Invoice = {
   /** The GST inside `amount`, when it was recorded. */
   gstAmount?: string | number | null;
   status: string;
+  /** When it was raised — not to be confused with when it is due. */
+  raisedAt?: string;
   dueAt: string;
   paidAt: string | null;
   payments: Payment[];
@@ -323,14 +328,6 @@ export default function RetainerMonthCardPage() {
   const openProjectId = searchParams.get('project');
 
   /*
-   * Where the back link goes. `?from=company` is set by the client's Work tab;
-   * anything else lands on Live work, which is where a retainer is found when
-   * it is not being looked at from its client.
-   */
-  const cameFromCompany = searchParams.get('from') === 'company' && Boolean(retainer?.company?.id);
-  const backHref = cameFromCompany ? `/companies/${retainer?.company?.id}?tab=WORK` : '/live-work';
-  const backLabel = cameFromCompany ? (retainer?.company?.name ?? 'Client') : 'Live work';
-  /*
    * What the drill-in is showing, and what it is hiding.
    *
    * A project's tasks were rendered as one Card per month, stacked. A campaign
@@ -444,6 +441,13 @@ export default function RetainerMonthCardPage() {
     router.push(`/retainers/${id}?${q}`);
   };
 
+  /*
+   * The tab and the bar say which retainer this is (QA19 fixes plan, small
+   * wins). The page set no header, so it kept whatever the last screen left —
+   * "Companies" — and the tab read just "Flowzen".
+   */
+  usePageHeader(retainer ? `${retainer.company.name} retainer` : 'Retainer', retainer ? monthLabel(month) : null);
+
   if (loadingRetainer) return <PageSkeleton />;
 
   if (!retainer) {
@@ -537,6 +541,7 @@ export default function RetainerMonthCardPage() {
           amount: Number(inv.amount ?? 0),
           // So Record payment starts split in the invoice's own GST ratio.
           gstAmount: inv.gstAmount == null ? null : Number(inv.gstAmount),
+          raisedAt: inv.raisedAt,
           dueAt: inv.dueAt,
           paid: inv.payments.reduce((a, x) => a + Number(x.amount ?? 0), 0),
         }
@@ -785,11 +790,14 @@ export default function RetainerMonthCardPage() {
 
   return (
     <>
-      {/* Back to the client when that is where this was opened from — see the
-          note on the project page's own back link. */}
-      <Link href={backHref} className="mb-4 inline-flex items-center gap-1.5 text-sm text-secondary transition-colors hover:text-primary">
-        <ArrowLeft className="h-4 w-4" strokeWidth={1.75} /> {backLabel}
-      </Link>
+      {/* Where this sits — Companies › Acme › Retainer — each step a way back. */}
+      <Breadcrumbs
+        items={[
+          { label: 'Companies', href: '/companies' },
+          { label: retainer.company.name, href: `/companies/${retainer.company.id}?tab=WORK` },
+          { label: 'Retainer' },
+        ]}
+      />
 
       <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-start">
         <div className="min-w-0 sm:flex-1">
@@ -973,7 +981,7 @@ export default function RetainerMonthCardPage() {
                         ? `+${retainer.gstPercent}% GST = ${money(Number(revenue) * (1 + Number(retainer.gstPercent) / 100))}`
                         : null,
                       monthCard.invoice
-                        ? `invoiced ${date(monthCard.invoice.dueAt)}`
+                        ? invoicedAndDue(monthCard.invoice, date)
                         : Number(revenue ?? 0) <= 0
                           ? 'no fee this month — nothing to bill'
                           : 'not invoiced yet',
@@ -1301,7 +1309,7 @@ export default function RetainerMonthCardPage() {
                       <div>
                         <p className="text-sm font-semibold text-primary">{monthCard.invoice.number}</p>
                         <p className={`mt-0.5 text-xs ${invoiceOverdueDays > 0 ? 'font-medium text-danger' : 'text-secondary'}`}>
-                          Due {date(monthCard.invoice.dueAt)}
+                          {invoicedAndDue(monthCard.invoice, date, { capital: true })}
                           {invoiceOverdueDays > 0 && ` · ${plural(invoiceOverdueDays, 'day')} overdue`}
                         </p>
                       </div>

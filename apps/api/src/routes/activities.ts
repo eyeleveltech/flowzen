@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, hasPermission, type AuthRequest } from '../middleware/auth.js';
 import { parsePagination } from '../utils/query.js';
-import { TaskWorkType, TaskStatus } from '@prisma/client';
+import { TaskWorkType, TaskStatus, type Prisma } from '@prisma/client';
+import { canReadTask, readableTaskIds } from '../services/taskAccess.js';
 import {
   ACTIVITY_READ_PERMISSION as READ_PERMISSION,
   canReadActivityType,
@@ -36,6 +37,16 @@ import {
  *    `money.figures`, even for somebody allowed to see the row. Being able to
  *    open a project is not the same as being allowed to read what it is worth,
  *    and the feed must not become the back door for the second question.
+ *
+ * 3. A TASK'S HISTORY (security fixes plan, H1). Tasks had no permission of
+ *    their own here, so anybody signed in read every task's history — titles,
+ *    review links, and approvers' feedback on other people's work — while the
+ *    task itself answered "You can't see this task." Now a task's history goes
+ *    only to the people who may read the task (services/taskAccess.ts), and
+ *    any other task is "not found".
+ *
+ * 4. NO EMAILS. Each row names who did it; an actor's email address is never
+ *    in the feed. People's details have their own screen and their own gate.
  */
 
 export const activitiesRouter = Router();
@@ -70,11 +81,7 @@ activitiesRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunc
       scoped ? { defaultLimit: 200, maxLimit: 500 } : { defaultLimit: 20, maxLimit: 100 },
     );
 
-    const where: {
-      organizationId: string;
-      entityType?: string | { in: string[] };
-      entityId?: string;
-    } = { organizationId: orgId };
+    const where: Prisma.ActivityWhereInput = { organizationId: orgId };
 
     if (typeof entityType === 'string' && entityType) {
       if (!canReadActivityType(req, entityType)) {
@@ -86,16 +93,39 @@ activitiesRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunc
         return;
       }
       where.entityType = entityType;
-      if (typeof entityId === 'string' && entityId) where.entityId = entityId;
+      if (entityType === 'Task') {
+        if (typeof entityId === 'string' && entityId) {
+          // A task this person cannot read is "not found", as on every task route.
+          if (!(await canReadTask(req.user!, entityId))) {
+            res.status(404).json({ success: false, error: 'Task not found' });
+            return;
+          }
+          where.entityId = entityId;
+        } else {
+          const ids = await readableTaskIds(req.user!);
+          if (ids) where.entityId = { in: ids };
+        }
+      } else if (typeof entityId === 'string' && entityId) {
+        where.entityId = entityId;
+      }
     } else {
       // No entity named: answer with the types this person could open anyway,
-      // rather than everything in the organisation.
+      // rather than everything in the organisation — and of the tasks, only
+      // the ones they may read.
       const allowed = Object.keys(READ_PERMISSION).filter((t) => canReadActivityType(req, t));
       if (allowed.length === 0) {
         res.json({ success: true, data: [], activities: [], meta: { page, limit, total: 0, totalPages: 1 } });
         return;
       }
-      where.entityType = { in: allowed };
+      const ids = allowed.includes('Task') ? await readableTaskIds(req.user!) : null;
+      if (ids) {
+        where.OR = [
+          { entityType: { in: allowed.filter((t) => t !== 'Task') } },
+          { entityType: 'Task', entityId: { in: ids } },
+        ];
+      } else {
+        where.entityType = { in: allowed };
+      }
     }
 
     const [activities, total] = await Promise.all([
@@ -105,7 +135,8 @@ activitiesRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunc
         skip,
         take,
         include: {
-          actor: { select: { id: true, name: true, email: true, dept: true } },
+          // Name only: an email address is never part of the feed.
+          actor: { select: { id: true, name: true, dept: true } },
         },
       }),
       prisma.activity.count({ where }),

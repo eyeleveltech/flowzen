@@ -217,11 +217,12 @@ export default function AllWorkPage() {
   const tasks = (data?.tasks ?? []) as Task[];
 
   // Right on the row, or from the drawer — the same call either way.
-  const setStatus = async (t: { id: string; status: string }, next: string) => {
+  const setStatus = async (t: { id: string; status: string; title?: string; hasClient?: boolean }, next: string) => {
     if (next === t.status) return;
     setBusyId(t.id);
     try {
-      await changeTaskStatus(t, next);
+      // False when "Waiting on…" was cancelled: nothing moved.
+      if (!(await changeTaskStatus(t, next))) return;
       toast.success(`Moved to ${STATUS_OPTIONS.find((o) => o.value === next)?.label ?? next}`);
       void refetch();
     } catch (e) {

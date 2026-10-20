@@ -20,9 +20,8 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 import { api, ApiError, type RetainerProject } from '@/lib/api-v2';
@@ -60,6 +59,9 @@ import {
 import { withDueTime } from '@/lib/due-time';
 import { RepeatMark } from '@/components/work/RepeatMark';
 import { taskTypeLabel } from '@/lib/task-type';
+import { usePageHeader } from '@/hooks/usePageHeader';
+import { Breadcrumbs } from '@/components/ui/breadcrumbs';
+import { changeTaskStatus, waitingWords } from '@/lib/task-status';
 
 export default function RetainerProjectPage() {
   const { id, projectId } = useParams<{ id: string; projectId: string }>();
@@ -184,16 +186,9 @@ export default function RetainerProjectPage() {
     if (next === t.status) return;
     setBusyId(t.id);
     try {
-      if (next === 'ON_HOLD') {
-        await api.tasks.wait(t.id, 'CLIENT');
-      } else if (t.status === 'ON_HOLD') {
-        // /resume is the only route that closes out waitingSince — always go
-        // through it first, then layer the real target status on top.
-        await api.tasks.resume(t.id);
-        if (next !== 'IN_PROGRESS') await api.tasks.updateStatus(t.id, next);
-      } else {
-        await api.tasks.updateStatus(t.id, next);
-      }
+      // The shared way: On hold asks what it is waiting on, and /resume closes
+      // the wait. A retainer's task always has a client to wait on.
+      if (!(await changeTaskStatus({ ...t, hasClient: true }, next))) return;
       await load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not update that task');
@@ -223,6 +218,9 @@ export default function RetainerProjectPage() {
     }
   };
 
+  // The tab and the bar name the work (QA19 fixes plan, small wins).
+  usePageHeader(project?.name ?? 'Retainer work', companyName ? `${companyName} retainer` : null);
+
   if (loading) return <PageSkeleton />;
   if (loadFailure || !project) {
     return (
@@ -237,13 +235,15 @@ export default function RetainerProjectPage() {
 
   return (
     <>
-      <Link
-        href={`/retainers/${id}`}
-        className="mb-4 inline-flex items-center gap-1.5 text-sm text-secondary transition-colors hover:text-primary"
-      >
-        <ArrowLeft className="h-4 w-4" strokeWidth={1.75} />
-        {companyName || 'Retainer'}
-      </Link>
+      {/* Companies › Acme › Retainer › Monthly delivery — each step a way back. */}
+      <Breadcrumbs
+        items={[
+          { label: 'Companies', href: '/companies' },
+          ...(companyName ? [{ label: companyName, href: companyId ? `/companies/${companyId}?tab=WORK` : undefined }] : []),
+          { label: 'Retainer', href: `/retainers/${id}` },
+          { label: project.name },
+        ]}
+      />
 
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
@@ -428,7 +428,7 @@ export default function RetainerProjectPage() {
                           <RepeatMark repeat={t.repeat} />
                           {t.status === 'ON_HOLD' && t.waitingOn && (
                             <p className="mt-0.5 text-micro text-secondary">
-                              waiting on {t.waitingOn === 'CLIENT' ? 'the client' : 'someone else'}
+                              {waitingWords(t.waitingOn)}
                             </p>
                           )}
                         </td>

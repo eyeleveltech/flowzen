@@ -9,9 +9,11 @@ import { buildSellerSnapshot, resolveState, sellerBlockGaps } from '../services/
 import { authenticate, requirePermission, hasPermission, type AuthRequest } from '../middleware/auth.js';
 import { encryptSecret } from '../utils/crypto.js';
 import { resolveMailConfig, sendMail } from '../utils/mailer.js';
+import { escapeHtml } from '../utils/html.js';
 import { AI_PROVIDER_IDS } from '../services/ai/index.js';
 import { AREAS, areaWhere, dayStartIn, describe, resolveSubjects } from '../services/activityLog.js';
 import { approverFor, escalateFor, minutesLabel, TASK_TYPE_LABEL } from '../services/taskApprovals.js';
+import { departmentsHeadedBy } from '../services/departmentPage.js';
 
 export const configRouter = Router();
 
@@ -204,6 +206,8 @@ configRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction
         // The types whose stuck approvals escalate to them — once a round
         // escalates it shows in their queue too.
         escalateFor: await escalateFor(orgId, req.user!.userId),
+        // The departments they head, for My Department's switcher.
+        headOf: await departmentsHeadedBy(orgId, req.user!.userId),
       },
       verticals: [
         'HEALTHCARE',
@@ -478,7 +482,7 @@ configRouter.post('/mail/test', requirePermission('setup.admin'), async (req: Au
     await sendMail(orgId, {
       to,
       subject: 'Flowzen — this is a test',
-      html: `<p>If you're reading this, outbound mail from Flowzen works.</p><p>Sent to ${to}.</p>`,
+      html: `<p>If you're reading this, outbound mail from Flowzen works.</p><p>Sent to ${escapeHtml(to)}.</p>`,
       text: `If you're reading this, outbound mail from Flowzen works. Sent to ${to}.`,
     });
 

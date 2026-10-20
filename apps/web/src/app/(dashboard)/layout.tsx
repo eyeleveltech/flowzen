@@ -5,7 +5,7 @@ import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { api } from '@/lib/api-v2';
 import { useAuthStore, useUIStore } from '@/stores';
-import { permissionForPath, canSee } from '@/config/navigation';
+import { permissionForPath, canSee, headsOnlyAccess } from '@/config/navigation';
 import { Sidebar } from '@/components/layout/sidebar';
 import { TopNav } from '@/components/layout/top-nav';
 import { BottomTabs } from '@/components/layout/bottom-tabs';
@@ -89,8 +89,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
    * wait, and only for the frame it takes to read localStorage.
    */
   const known = Boolean(user?.permissions);
-  const refused = known && Boolean(needs) && !canSee({ needs }, user!.permissions);
-  const waiting = Boolean(needs) && !known;
+  // My Department: a department's head, or Management — not every holder of its permission.
+  const headsOnly = headsOnlyAccess(pathname, user);
+  const refused = known && ((Boolean(needs) && !canSee({ needs }, user!.permissions)) || headsOnly === 'refused');
+  const waiting = (Boolean(needs) && !known) || (!refused && headsOnly === 'unknown');
 
   /*
    * Who is using Flowzen (routes/usage.ts): the screen a person opens, sent

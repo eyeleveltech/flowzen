@@ -74,6 +74,10 @@ export type CalendarItem = {
   eventKind?: 'MEETING' | 'SHOOT' | 'OTHER';
   /** The caller is one of its people — drawn stronger. */
   isMine?: boolean;
+  /** "Just me" shows it: the caller is on it, or booked it. */
+  justMe?: boolean;
+  /** Booked by the caller, who is not on it. */
+  bookedByYou?: boolean;
   bookedBy?: string;
   location?: string | null;
 };
@@ -110,6 +114,12 @@ const querySchema = z.object({
   person: z.string().optional(),
   /** A department's id — the team layer narrowed to the people in it. */
   departmentId: z.string().optional(),
+  /**
+   * A department's id — EVERYTHING about people narrowed to it: the team
+   * layer, meetings and shoots, and Google busy time. My Department's
+   * calendar; the Calendar page itself never sends it.
+   */
+  onlyDepartment: z.string().optional(),
 });
 
 /** A `@db.Date` column as the day it is. */
@@ -125,7 +135,8 @@ calendarRouter.get('/', requirePermission('work.own'), async (req: AuthRequest, 
       res.status(400).json({ success: false, error: parsed.error.issues[0].message });
       return;
     }
-    const { from, to, person, departmentId } = parsed.data;
+    const { from, to, person, onlyDepartment } = parsed.data;
+    const departmentId = parsed.data.departmentId ?? onlyDepartment;
     const span = (asDate(to).getTime() - asDate(from).getTime()) / 86_400_000 + 1;
     if (Number.isNaN(span) || span < 1) {
       res.status(400).json({ success: false, error: 'The end date comes before the start.' });
@@ -234,7 +245,12 @@ calendarRouter.get('/', requirePermission('work.own'), async (req: AuthRequest, 
           endsAt: { gt: dayStartUtc(from, timezone) },
           // One person's schedule, for anybody: events are seen by everyone,
           // so picking a person to find them a free slot shows nothing new.
-          ...(person ? { attendees: { some: { userId: person } } } : {}),
+          // Or one department's people, for My Department.
+          ...(person
+            ? { attendees: { some: { userId: person } } }
+            : onlyDepartment
+              ? { attendees: { some: { user: { departmentId: onlyDepartment, active: true } } } }
+              : {}),
         },
         select: {
           id: true,
@@ -253,6 +269,8 @@ calendarRouter.get('/', requirePermission('work.own'), async (req: AuthRequest, 
       for (const ev of events) {
         const s = localDayAndTime(ev.startsAt, timezone);
         const e = localDayAndTime(ev.endsAt, timezone);
+        const attending = ev.attendees.some((a) => a.userId === me);
+        const bookedByMe = ev.createdById === me;
         items.push({
           id: `event:${ev.id}`,
           layer: 'events',
@@ -267,7 +285,18 @@ calendarRouter.get('/', requirePermission('work.own'), async (req: AuthRequest, 
           done: ev.endsAt <= now,
           eventId: ev.id,
           eventKind: ev.kind,
-          isMine: ev.attendees.some((a) => a.userId === me),
+          isMine: attending,
+          /*
+           * What "Just me" shows (QA19 fixes plan, F05): events I am on, and
+           * events I booked. An event booked for somebody else — the boss's
+           * meeting, set up by whoever runs the diary — vanished from its
+           * creator's own calendar the moment it was saved. The creator is
+           * not added as an attendee to fix it: booking for another person
+           * stays a real thing to do.
+           */
+          justMe: attending || bookedByMe,
+          /** Booked by the caller, who is not attending — shown as "Booked by you". */
+          bookedByYou: bookedByMe && !attending,
           bookedBy: ev.createdBy.name,
           location: ev.location,
         });
@@ -281,7 +310,7 @@ calendarRouter.get('/', requirePermission('work.own'), async (req: AuthRequest, 
           organizationId: orgId,
           startsAt: { lt: dayStartUtc(addDays(to, 1), timezone) },
           endsAt: { gt: dayStartUtc(from, timezone) },
-          ...(person ? { userId: person } : {}),
+          ...(person ? { userId: person } : onlyDepartment ? { user: { departmentId: onlyDepartment, active: true } } : {}),
         },
         select: { id: true, userId: true, title: true, startsAt: true, endsAt: true, allDay: true, user: { select: { name: true } } },
       });

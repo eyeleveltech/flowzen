@@ -1427,7 +1427,7 @@ const aiAskSchema = z.object({ message: z.string().trim().min(1, 'Say what you w
 
 const aiErrorReply = (e: unknown, res: Response): boolean => {
   if (e instanceof AssistantNotConfigured) {
-    res.status(409).json({ success: false, error: 'No AI key is set. Add one in Setup → Organisation, under Zen.', code: 'NO_KEY' });
+    res.status(409).json({ success: false, error: 'No AI key is set. Add one in Settings → Zen assistant.', code: 'NO_KEY' });
     return true;
   }
   if (e instanceof AssistantFailed) {

@@ -35,17 +35,7 @@ import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import listPlugin from '@fullcalendar/list';
 import interactionPlugin, { type DateClickArg } from '@fullcalendar/interaction';
-import type {
-  DatesSetArg,
-  DayCellContentArg,
-  DayHeaderContentArg,
-  EventClickArg,
-  EventContentArg,
-  EventDropArg,
-  EventInput,
-  EventMountArg,
-  SlotLabelContentArg,
-} from '@fullcalendar/core';
+import type { DatesSetArg, EventClickArg, EventDropArg, EventInput } from '@fullcalendar/core';
 import toast from 'react-hot-toast';
 import { CalendarPlus, Check, CheckSquare, ChevronDown, ChevronLeft, ChevronRight, Menu, Plus, TriangleAlert, Users } from 'lucide-react';
 import {
@@ -70,6 +60,19 @@ import { EventModal, type EventModalStart } from '@/components/calendar/EventMod
 import { EventDrawer } from '@/components/calendar/EventDrawer';
 import { MiniMonth } from '@/components/calendar/MiniMonth';
 import { QuickView } from '@/components/calendar/QuickView';
+import {
+  addDays,
+  dayCell,
+  dayHeader,
+  dayOfUtc,
+  eventContent,
+  hoverTitle,
+  orgNow,
+  slotLabel,
+  timeOfUtc,
+  toCalendarEvents,
+  zoneLabel,
+} from '@/components/calendar/calendarDrawing';
 import { useConfirmStore } from '@/stores/confirm';
 import { useAuthStore } from '@/stores';
 import { personOptions } from '@/lib/people';
@@ -148,45 +151,6 @@ const useInBrowser = () =>
     () => false,
   );
 
-/* ── Dates ──────────────────────────────────────────────────────────────── */
-
-/** FullCalendar runs in UTC here, so its dates ARE the wall-clock values. */
-const dayOfUtc = (d: Date) => d.toISOString().slice(0, 10);
-const timeOfUtc = (d: Date) => d.toISOString().slice(11, 16);
-const addDays = (day: string, n: number) => {
-  const d = new Date(`${day}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + n);
-  return dayOfUtc(d);
-};
-const WEEKDAY = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-const MONTH = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-/** Now, as the organisation's wall clock — what "today" and the now-line mean. */
-function orgNow(timezone: string): string {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: timezone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23',
-  }).formatToParts(new Date());
-  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '00';
-  return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}:00`;
-}
-
-/** "GMT+05:30" — Google puts the zone in the corner above the hours. */
-function zoneLabel(timezone: string): string {
-  try {
-    const name = new Intl.DateTimeFormat('en-US', { timeZone: timezone, timeZoneName: 'shortOffset' })
-      .formatToParts(new Date())
-      .find((p) => p.type === 'timeZoneName')?.value;
-    return (name ?? '').replace(/GMT([+-])(\d)(?=:|$)/, 'GMT$10$2');
-  } catch {
-    return '';
-  }
-}
 
 /** Is a key press meant for the calendar, not a field or a dialog? */
 const typingSomewhere = () => {
@@ -300,42 +264,28 @@ function CalendarScreen() {
   const timezone = data?.timezone ?? config?.organization.timezone ?? 'Asia/Kolkata';
   const available = data?.available ?? ['mine', 'equipment', 'holidays'];
   /*
-   * "Just my calendar": the meetings you are on and your own busy time, not
-   * the whole team's. Team tasks, money and the rest are other calendars,
-   * shown when ticked.
+   * "Just my calendar": the meetings you are on, the ones you booked, and your
+   * own busy time — not the whole team's. Team tasks, money and the rest are
+   * other calendars, shown when ticked.
+   *
+   * Booked counts as yours (QA19 fixes plan, F05): a meeting set up for the
+   * boss, with nobody else on it, used to vanish from its creator's calendar
+   * the moment it was saved. The server says which ones — `justMe`.
    */
   const items = useMemo(() => {
     const all = data?.items ?? [];
     if (person !== JUST_ME) return all;
-    return all.filter((it) => !((it.layer === 'events' || it.layer === 'google') && !it.isMine));
+    return all.filter((it) => {
+      if (it.layer === 'events') return it.justMe ?? it.isMine;
+      if (it.layer === 'google') return it.isMine;
+      return true;
+    });
   }, [data, person]);
   const workingDays = data?.workingDays ?? [1, 2, 3, 4, 5, 6];
   const today = orgNow(timezone).slice(0, 10);
 
-  const events: EventInput[] = useMemo(
-    () =>
-      items.map((it) => ({
-        id: it.id,
-        title: it.title,
-        start: it.time ? `${it.date}T${it.time}:00` : it.date,
-        // Meetings, shoots and busy time have an end; everything else is a moment.
-        ...(it.endDate ? { end: it.endTime ? `${it.endDate}T${it.endTime}:00` : it.endDate } : {}),
-        allDay: it.allDay,
-        editable: it.draggable,
-        durationEditable: false,
-        classNames: [
-          'gc-ev',
-          `gc-c-${it.overdue ? 'overdue' : it.layer}`,
-          it.done ? 'gc-done' : '',
-          it.layer === 'google' ? 'gc-busy' : '',
-          // A meeting I am not on: outlined, as Google draws one not yet mine.
-          it.layer === 'events' && !it.isMine ? 'gc-outline' : '',
-          it.draggable ? 'gc-drag' : '',
-        ].filter(Boolean),
-        extendedProps: { item: it },
-      })),
-    [items],
-  );
+  // Drawn the way every calendar in the app is drawn (components/calendar/calendarDrawing).
+  const events: EventInput[] = useMemo(() => toCalendarEvents(items), [items]);
 
   /*
    * Days off, shaded — weekdays nobody works and the holidays in Settings —
@@ -470,15 +420,7 @@ function CalendarScreen() {
   };
 
   /** The browser's own hover text: the whole title, when, where — and who booked it. */
-  const onEventMount = (arg: EventMountArg) => {
-    const item = arg.event.extendedProps.item as CalendarItem | undefined;
-    if (!item) return;
-    arg.el.title = item.eventId
-      ? [item.title, item.time ? `${item.time}–${item.endTime}` : 'All day', item.location, `Booked by ${item.bookedBy}`]
-          .filter(Boolean)
-          .join(' · ')
-      : item.title;
-  };
+  const onEventMount = hoverTitle;
 
   const saveMove = async (eventId: string, body: Pick<CalendarEventInput, 'startsAt' | 'endsAt' | 'allDay'>, revert: () => void) => {
     try {
@@ -556,64 +498,6 @@ function CalendarScreen() {
     setChooser(arg.allDay ? { date: dayOfUtc(arg.date) } : { date: dayOfUtc(arg.date), time: timeOfUtc(arg.date) });
   };
 
-  /* ── Google's drawing ── */
-
-  /** The week's day heading — "MON" over a big 5, today's circled; the month's just "MON". */
-  const dayHeader = (arg: DayHeaderContentArg) => {
-    // Schedule's day rows say the whole date ("Thursday 1 October").
-    if (arg.view.type === 'agenda') return arg.text;
-    const wd = WEEKDAY[arg.date.getUTCDay()];
-    if (arg.view.type !== 'timeGridWeek') return <span className="gc-dh-wd">{wd}</span>;
-    return (
-      <div className={cn('gc-dh', arg.isToday && 'gc-dh-today')}>
-        <span className="gc-dh-wd">{wd}</span>
-        <span className="gc-dh-num">{arg.date.getUTCDate()}</span>
-      </div>
-    );
-  };
-
-  /** A month cell's number, small and centred; "1 Oct" on the first. */
-  const dayCell = (arg: DayCellContentArg) => {
-    if (arg.view.type !== 'dayGridMonth') return undefined;
-    const d = arg.date.getUTCDate();
-    return (
-      <span className={cn('gc-daynum', arg.isToday && 'gc-daynum-today')}>
-        {d === 1 ? `${d} ${MONTH[arg.date.getUTCMonth()]}` : d}
-      </span>
-    );
-  };
-
-  /** "10 AM" at the top of each hour; nothing at midnight, as Google leaves it. */
-  const slotLabel = (arg: SlotLabelContentArg) => {
-    const h = arg.date.getUTCHours();
-    return h === 0 ? '' : `${((h + 11) % 12) + 1} ${h < 12 ? 'AM' : 'PM'}`;
-  };
-
-  const eventContent = (arg: EventContentArg) => {
-    const item = arg.event.extendedProps.item as CalendarItem | undefined;
-    const timed = !arg.event.allDay;
-    if (arg.view.type === 'timeGridWeek' && timed) {
-      return (
-        <div className="gc-ev-body">
-          <div className="gc-ev-title">{arg.event.title}</div>
-          <div className="gc-ev-time">
-            {arg.timeText}
-            {item?.location ? `, ${item.location}` : ''}
-          </div>
-        </div>
-      );
-    }
-    if (arg.view.type === 'dayGridMonth' && timed) {
-      return (
-        <div className="gc-ev-dotrow">
-          <span className="gc-ev-dot" aria-hidden="true" />
-          <span className="gc-ev-time">{arg.timeText}</span>
-          <span className="gc-ev-title">{arg.event.title}</span>
-        </div>
-      );
-    }
-    return <div className="gc-ev-title">{arg.event.title}</div>;
-  };
 
   if (error && !data) {
     return (

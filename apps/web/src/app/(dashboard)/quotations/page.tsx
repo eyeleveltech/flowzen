@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { TableRowsSkeleton } from '@/components/ui/skeleton-loaders';
 import { financialYearStart, todayIn } from '@/lib/money';
-import { NextStepLine } from '@/components/sales/NextStep';
+import { NextStepLine, isNextStepMissing } from '@/components/sales/NextStep';
 import { LastContactModal } from '@/components/sales/SalesDialogs';
 import { ErrorNote, LoadError } from '@/components/ui/empty-state';
 import { plural } from '@/lib/utils';
@@ -72,6 +72,8 @@ interface ProposalItem {
   kind: 'RETAINER' | 'PROJECT';
   stage: string;
   outcome?: string | null;
+  /** The server's one active-deal rule: no outcome and not in a closed stage. */
+  active?: boolean;
   company: { id: string; name: string; vertical: string };
   owner?: { id: string; name: string } | null;
   versions: { n: number; value: number; createdAt: string }[];
@@ -199,8 +201,16 @@ export default function ProposalsPage() {
 
   const daysSince = (date: string) => Math.ceil((Date.now() - new Date(date).getTime()) / (1000 * 3600 * 24));
 
-  const live = proposals.filter(p => !p.outcome);
-  const closed = proposals.filter(p => p.outcome === 'WON' || p.outcome === 'LOST' || p.outcome === 'EXPIRED');
+  /*
+   * Active and closed by the server's rule (QA19 fixes plan, F01), so this
+   * list, the Pipeline board, Forecast, the brief and Zen count the same deals.
+   * A deal is one or the other — never both, never neither.
+   */
+  const isActive = (p: ProposalItem) => p.active ?? !p.outcome;
+  const live = proposals.filter(isActive);
+  const closed = proposals.filter((p) => !isActive(p));
+  // The tiles, from the whole register — the page above is capped.
+  const activeCount = data?.success ? (data.active?.count ?? live.length) : live.length;
   /*
    * Every proforma, from the proforma list — not from the proposals.
    *
@@ -216,7 +226,10 @@ export default function ProposalsPage() {
   });
   const proformas: ProformaRow[] = proformaData?.proformas ?? [];
 
-  const liveValue = live.reduce((s, p) => s + Number(p.versions[0]?.value ?? 0), 0);
+  const liveValue =
+    data?.success && data.active?.value != null
+      ? data.active.value
+      : live.reduce((s, p) => s + Number(p.versions[0]?.value ?? 0), 0);
   // §8: "Discount given — version1.value − wonVersion.value." First ask
   // against what the deal actually closed at, won proposals only — this used
   // to just re-sum every proposal's v1 value regardless of outcome, which is
@@ -285,11 +298,11 @@ export default function ProposalsPage() {
 
       <StatRow className="mb-8">
         <StatTile
-          label="Live Proposals"
-          value={live.length}
+          label="Active Proposals"
+          value={activeCount}
           note={`${revised.length} ${revised.length === 1 ? 'has' : 'have'} been revised`}
         />
-        {showValues && <StatTile label="Value Out There" value={formatMoney(liveValue)} note="at current versions" />}
+        {showValues && <StatTile label="Value Out There" value={formatMoney(liveValue)} note="if every active deal lands" />}
         {showValues && (
           <StatTile
             label="Given Away This Year"
@@ -307,7 +320,7 @@ export default function ProposalsPage() {
 
       <Tabs
         tabs={[
-          { key: 'LIVE', label: 'Live', count: live.length },
+          { key: 'LIVE', label: 'Active', count: live.length },
           { key: 'CLOSED', label: 'Closed', count: closed.length },
           { key: 'PROFORMAS', label: 'Proformas', count: proformas.length },
           // Only for somebody who could actually put one back.
@@ -570,7 +583,7 @@ export default function ProposalsPage() {
                         <NextStepLine
                           nextStep={p.nextStep}
                           nextStepDate={stepDay}
-                          missing={!p.nextStep || !stepDay}
+                          missing={isNextStepMissing(p.nextStep)}
                           overdue={Boolean(stepDay) && stepDay! < todayIn(tz)}
                         />
                       </td>
