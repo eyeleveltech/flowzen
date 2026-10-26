@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculateWorkingMinutes } from './workingHours.js';
+import { calculateWorkingMinutes, formatWorkingMinutes } from './workingHours.js';
 
 /**
  * The agency clock: Mon–Sat, 10:00–19:00 IST, 540 minutes in a full day.
@@ -83,5 +83,24 @@ describe('calculateWorkingMinutes', () => {
         expect(Number.isFinite(calculateWorkingMinutes(from, to).totalMinutes)).toBe(true);
       }
     }
+  });
+});
+
+describe('elapsed time reads in days and hours only', () => {
+  it('a day is a working day, and minutes are left off', () => {
+    expect(formatWorkingMinutes(600)).toBe('1d 1h');
+    expect(formatWorkingMinutes(1080)).toBe('2d');
+    expect(formatWorkingMinutes(270)).toBe('4h');
+    expect(formatWorkingMinutes(59)).toBe('<1h');
+    expect(formatWorkingMinutes(0)).toBe('0h');
+    // A studio with an 8-hour day counts its own days.
+    expect(formatWorkingMinutes(600, 480)).toBe('1d 2h');
+  });
+
+  it('a task open from Monday 10:00 to Wednesday 12:00 reads 2d 2h', () => {
+    // 9h Monday + 9h Tuesday + 2h Wednesday = 20 working hours = 2 days of 9h, and 2h.
+    const r = calculateWorkingMinutes('2026-08-24T04:30:00Z', '2026-08-26T06:30:00Z');
+    expect(r.totalMinutes).toBe(1200);
+    expect(r.formatted).toBe('2d 2h');
   });
 });

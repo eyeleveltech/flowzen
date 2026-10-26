@@ -8,7 +8,7 @@ import { findClashes, type Clash } from './calendarEvents.js';
 import { isLate, projectProgress } from './internalWork.js';
 import { daysLate } from '../utils/assetDue.js';
 import { dayStartUtc, localDayAndTime } from '../utils/zonedTime.js';
-import { addDays, formatWorkingMinutes, loadWorkCalendar, todayIn, workingMinutesOn } from '../utils/workCalendar.js';
+import { addDays, dayMinutesOf, formatWorkingMinutes, loadWorkCalendar, todayIn, workingMinutesOn } from '../utils/workCalendar.js';
 
 /**
  * My Department — one page for a department's head (Department head page plan).
@@ -490,7 +490,7 @@ export async function composeDepartmentApprovals(
         submittedBy: r.submittedBy,
         escalated: Boolean(r.escalatedAt),
         waitingMinutes: minutes,
-        waitingText: formatWorkingMinutes(minutes),
+        waitingText: formatWorkingMinutes(minutes, dayMinutesOf(calendar)),
         canDecide: !onIt && (approves || escalated),
         /** Why the buttons are not offered, when the caller approves this type. */
         notYours: onIt && approves ? "You're on this task, so another approver has to decide it." : null,

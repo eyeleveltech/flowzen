@@ -13,7 +13,8 @@ describe('Phase 3: Work Execution & Delivery Engine Logic Tests', () => {
     expect(result.totalMinutes).toBe(270);
     expect(result.hours).toBe(4);
     expect(result.minutes).toBe(30);
-    expect(result.formatted).toBe('4h 30m');
+    // Days and hours only: 4h 30m reads "4h".
+    expect(result.formatted).toBe('4h');
   });
 
   it('2. Deducts waitingTotalMinutes from working elapsed time', () => {
@@ -25,7 +26,7 @@ describe('Phase 3: Work Execution & Delivery Engine Logic Tests', () => {
     expect(result.totalMinutes).toBe(210);
     expect(result.hours).toBe(3);
     expect(result.minutes).toBe(30);
-    expect(result.formatted).toBe('3h 30m');
+    expect(result.formatted).toBe('3h');
   });
 
   it('3. Verifies Sunday exclusion (Sunday is non-working day 0)', () => {
@@ -35,7 +36,7 @@ describe('Phase 3: Work Execution & Delivery Engine Logic Tests', () => {
 
     const result = calculateWorkingMinutes(sundayStart, sundayEnd, 0);
     expect(result.totalMinutes).toBe(0);
-    expect(result.formatted).toBe('0m');
+    expect(result.formatted).toBe('0h');
   });
 
   it('4. Verifies Retainer vs Project operational rules', () => {

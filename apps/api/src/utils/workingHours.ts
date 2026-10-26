@@ -8,6 +8,23 @@
  * - Waiting time (`waitingTotalMinutes`) is deducted from the total.
  */
 
+/**
+ * Working time in days and hours only — "2d 3h", "2d", "4h", or "<1h" under
+ * an hour. A day is one working day of the studio (`dayMinutes`: 10:00–19:00
+ * is 540), so "1d" is a day's work, not twenty-four hours of clock.
+ *
+ * Minutes were shown too ("84h 30m"), which is precision nobody acts on and a
+ * figure nobody reads at a glance; a task three working days in reads "3d".
+ */
+export function formatWorkingMinutes(totalMinutes: number, dayMinutes = 540): string {
+  const day = Math.max(60, dayMinutes);
+  const days = Math.floor(totalMinutes / day);
+  const hours = Math.floor((totalMinutes % day) / 60);
+  if (days > 0) return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
+  if (hours > 0) return `${hours}h`;
+  return totalMinutes > 0 ? '<1h' : '0h';
+}
+
 export interface WorkingTimeResult {
   totalMinutes: number;
   hours: number;
@@ -42,7 +59,7 @@ export function calculateWorkingMinutes(
   const endDate = new Date(to);
 
   if (isNaN(startDate.getTime()) || isNaN(endDate.getTime()) || startDate >= endDate) {
-    return { totalMinutes: 0, hours: 0, minutes: 0, formatted: '0m' };
+    return { totalMinutes: 0, hours: 0, minutes: 0, formatted: formatWorkingMinutes(0) };
   }
 
   // Convert to IST timestamp (+05:30)
@@ -86,17 +103,11 @@ export function calculateWorkingMinutes(
   const hours = Math.floor(netMinutes / 60);
   const minutes = netMinutes % 60;
 
-  let formatted = '';
-  if (hours > 0) {
-    formatted = `${hours}h ${minutes > 0 ? `${minutes}m` : ''}`.trim();
-  } else {
-    formatted = `${minutes}m`;
-  }
-
   return {
     totalMinutes: netMinutes,
     hours,
     minutes,
-    formatted,
+    // Days and hours, a day being this studio's working day.
+    formatted: formatWorkingMinutes(netMinutes, (endHour - startHour) * 60),
   };
 }

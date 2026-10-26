@@ -186,8 +186,8 @@ export default function RetainerProjectPage() {
     if (next === t.status) return;
     setBusyId(t.id);
     try {
-      // The shared way: On hold asks what it is waiting on, and /resume closes
-      // the wait. A retainer's task always has a client to wait on.
+      // The shared way: On hold asks what it is waiting on, and leaving it
+      // closes the wait (on the server, in the same request). A retainer's task always has a client to wait on.
       if (!(await changeTaskStatus({ ...t, hasClient: true }, next))) return;
       await load();
     } catch (e) {

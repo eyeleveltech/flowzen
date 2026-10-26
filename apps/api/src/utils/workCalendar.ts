@@ -1,5 +1,7 @@
 import { prisma } from '../lib/prisma.js';
-import { calculateWorkingMinutes, type WorkingTimeResult } from './workingHours.js';
+import { calculateWorkingMinutes, formatWorkingMinutes, type WorkingTimeResult } from './workingHours.js';
+
+export { formatWorkingMinutes };
 
 /**
  * The organisation's own working calendar, applied wherever a clock is read.
@@ -100,18 +102,8 @@ export function workingMinutesOn(
   );
 }
 
-/**
- * A working-time minute count as "2d 3h", "4h 10m" or "25m" — 540 minutes to a
- * working day, the same day calculateWorkingMinutes counts in.
- */
-export function formatWorkingMinutes(totalMinutes: number): string {
-  const days = Math.floor(totalMinutes / 540);
-  const hours = Math.floor((totalMinutes % 540) / 60);
-  const minutes = totalMinutes % 60;
-  if (days > 0) return `${days}d${hours > 0 ? ` ${hours}h` : ''}`;
-  if (hours > 0) return `${hours}h${minutes > 0 ? ` ${minutes}m` : ''}`;
-  return `${minutes}m`;
-}
+/** The length of this studio's working day in minutes — what "1d" means when time is shown in days and hours. */
+export const dayMinutesOf = (calendar: WorkCalendar): number => Math.max(60, (calendar.endHour - calendar.startHour) * 60);
 
 // ── Calendar days ───────────────────────────────────────────────────────────
 //

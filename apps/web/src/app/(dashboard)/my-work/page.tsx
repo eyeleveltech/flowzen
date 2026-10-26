@@ -45,6 +45,8 @@ import { taskTypeLabel } from '@/lib/task-type';
 import { NowBadge, canBeNow, useWorkingOnNow } from '@/components/work/WorkingOnNow';
 import { qk } from '@/hooks/queries';
 import { useRemembered } from '@/lib/remembered';
+import { ColumnFilter, ColumnTextFilter } from '@/components/ui/column-filter';
+import { NO_FILTERS, filterOptions, isFiltering, matchesFilters, type MyWorkFilters } from '@/lib/myWorkFilters';
 
 
 type TStatus = 'TODO' | 'IN_PROGRESS' | 'IN_REVIEW' | 'ON_HOLD' | 'DONE' | 'CANCELLED';
@@ -141,6 +143,12 @@ type Buckets = {
   completed: TaskItem[];
 };
 const EMPTY_BUCKETS: Buckets = { overdue: [], today: [], thisWeek: [], later: [], inReview: [], completed: [] };
+
+/** Today on this computer's calendar, as "2026-10-26" — the date the due filter reads from. */
+const localDayKey = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 
 /** The cells of one draggable row on the page, found by its task id. */
 const rowCells = (id: string) =>
@@ -319,6 +327,37 @@ export default function MyWorkPage() {
     if (taskParam) router.replace('/my-work');
   };
 
+  /*
+   * The column filters. Nothing ticked is everything; every column's filter
+   * has to pass. Held for this visit — the list itself is what is remembered.
+   */
+  const [filters, setFilters] = useState<MyWorkFilters>(NO_FILTERS);
+  const filtering = isFiltering(filters);
+  const setFilter = <K extends keyof MyWorkFilters>(key: K) => (value: MyWorkFilters[K]) =>
+    setFilters((f) => ({ ...f, [key]: value }));
+  const filterCtx = useMemo(
+    () => ({ today: localDayKey(), dayMinutes: data?.success ? (data.dayMinutes ?? 540) : 540 }),
+    [data],
+  );
+  // Offered from the whole list, so a value never disappears from its own filter.
+  const options = useMemo(() => filterOptions(everyTask, filterCtx), [everyTask, filterCtx]);
+  /** The list as the filters leave it — what the table draws. */
+  const shown: Buckets = useMemo(() => {
+    if (!filtering) return buckets;
+    const keep = (list: TaskItem[]) => list.filter((t) => matchesFilters(t, filters, filterCtx));
+    return {
+      overdue: keep(buckets.overdue),
+      today: keep(buckets.today),
+      thisWeek: keep(buckets.thisWeek),
+      later: keep(buckets.later),
+      inReview: keep(buckets.inReview),
+      completed: keep(buckets.completed),
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [everyTask, filters, filtering, filterCtx]);
+  const shownTotal =
+    shown.overdue.length + shown.today.length + shown.thisWeek.length + shown.later.length + shown.inReview.length + shown.completed.length;
+
   // The open task follows the list: after an edit, an approval sent or a
   // decision, the drawer shows the task as it is now, not as it was clicked.
   useEffect(() => {
@@ -336,7 +375,7 @@ export default function MyWorkPage() {
    */
   const workGroups = useMemo(() => {
     const groups = new Map<string, { key: string; label: string; sub?: string; rank: number; tasks: TaskItem[] }>();
-    for (const t of [...buckets.overdue, ...buckets.today, ...buckets.thisWeek, ...buckets.later]) {
+    for (const t of [...shown.overdue, ...shown.today, ...shown.thisWeek, ...shown.later]) {
       const w = workGroupOf(t);
       const g = groups.get(w.key) ?? { ...w, tasks: [] };
       g.tasks.push(t);
@@ -345,7 +384,7 @@ export default function MyWorkPage() {
     return [...groups.values()].sort(
       (a, b) => a.rank - b.rank || `${a.sub ?? ''} ${a.label}`.localeCompare(`${b.sub ?? ''} ${b.label}`),
     );
-  }, [buckets]);
+  }, [shown]);
 
   // Derived from the tasks above rather than stored beside them — three more
   // pieces of state that could go stale against the list they describe.
@@ -627,7 +666,8 @@ export default function MyWorkPage() {
   );
   const section = (label: string, items: TaskItem[], arrange?: string) => {
     if (items.length === 0) return null;
-    if (!arrange) {
+    // Arranging saves a group's whole order, so it waits until every row of it is on screen.
+    if (!arrange || filtering) {
       return (
         <tbody key={label} className="divide-y divide-border">
           {heading(label)}
@@ -708,6 +748,23 @@ export default function MyWorkPage() {
           </div>
         </CardHeader>
 
+        {/* Filtered: say how much is showing, and how to get the rest back. */}
+        {filtering && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border bg-surface px-5 py-2 text-xs text-secondary">
+            <span>
+              Showing <span className="font-semibold tabular-nums text-primary">{shownTotal}</span> of {plural(total, 'task')}
+            </span>
+            <button
+              type="button"
+              onClick={() => setFilters(NO_FILTERS)}
+              className="rounded-sm font-semibold text-primary underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-primary/40"
+            >
+              Clear filters
+            </button>
+            {groupBy === 'when' && <span className="ml-auto">Arranging by drag is off while filtering.</span>}
+          </div>
+        )}
+
         {/* What they said they are on — wherever that row is on the list. */}
         {focus && (
           <div className="flex items-center gap-2 border-b border-border bg-info-tint/40 px-5 py-2.5 text-sm">
@@ -757,15 +814,66 @@ export default function MyWorkPage() {
                 <tr className="border-b border-border">
                   {/* The grip column — the grip is its own label. */}
                   <th className="w-8" aria-label="Arrange" />
-                  <th className="eyebrow text-left">Task</th>
-                  <th className="eyebrow text-left">Type of work</th>
-                  <th className="eyebrow text-left">For</th>
-                  <th className="eyebrow text-left">Due</th>
-                  <th className="eyebrow text-left">Priority</th>
-                  <th className="eyebrow text-left">Elapsed</th>
-                  <th className="eyebrow text-left">Status</th>
+                  <th className="eyebrow text-left">
+                    <span className="inline-flex items-center gap-1.5">
+                      Task
+                      <ColumnTextFilter column="Task" value={filters.text} onChange={setFilter('text')} placeholder="Task, client or project…" />
+                    </span>
+                  </th>
+                  <th className="eyebrow text-left">
+                    <span className="inline-flex items-center gap-1.5">
+                      Type of work
+                      <ColumnFilter column="Type of work" options={options.type} selected={filters.type} onChange={setFilter('type')} />
+                    </span>
+                  </th>
+                  <th className="eyebrow text-left">
+                    <span className="inline-flex items-center gap-1.5">
+                      For
+                      <ColumnFilter column="Client" options={options.client} selected={filters.client} onChange={setFilter('client')} />
+                    </span>
+                  </th>
+                  <th className="eyebrow text-left">
+                    <span className="inline-flex items-center gap-1.5">
+                      Due
+                      <ColumnFilter column="Due" options={options.due} selected={filters.due} onChange={setFilter('due')} />
+                    </span>
+                  </th>
+                  <th className="eyebrow text-left">
+                    <span className="inline-flex items-center gap-1.5">
+                      Priority
+                      <ColumnFilter column="Priority" options={options.priority} selected={filters.priority} onChange={setFilter('priority')} />
+                    </span>
+                  </th>
+                  <th className="eyebrow text-left">
+                    <span className="inline-flex items-center gap-1.5">
+                      Elapsed
+                      <ColumnFilter column="Elapsed" options={options.elapsed} selected={filters.elapsed} onChange={setFilter('elapsed')} />
+                    </span>
+                  </th>
+                  <th className="eyebrow text-left">
+                    <span className="inline-flex items-center gap-1.5">
+                      Status
+                      <ColumnFilter column="Status" options={options.status} selected={filters.status} onChange={setFilter('status')} />
+                    </span>
+                  </th>
                 </tr>
               </thead>
+              {filtering && shownTotal === 0 && (
+                <tbody>
+                  <tr>
+                    <td colSpan={8} className="px-5 py-10 text-center text-sm text-secondary">
+                      No tasks match these filters.{' '}
+                      <button
+                        type="button"
+                        onClick={() => setFilters(NO_FILTERS)}
+                        className="rounded-sm font-semibold text-primary underline-offset-2 hover:underline"
+                      >
+                        Clear filters
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              )}
               {groupBy === 'work' ? (
                 <>
                   {/* The work still to do, under what it belongs to — in My Work's own order. */}
@@ -803,17 +911,17 @@ export default function MyWorkPage() {
                       </tbody>
                     );
                   })}
-                  {section('Waiting for approval', buckets.inReview)}
-                  {section('Done this week', buckets.completed)}
+                  {section('Waiting for approval', shown.inReview)}
+                  {section('Done this week', shown.completed)}
                 </>
               ) : (
                 <DragDropContext onBeforeCapture={onBeforeCapture} onDragEnd={(r) => void onDragEnd(r)}>
-                  {section('Overdue', buckets.overdue, 'overdue')}
-                  {section('Due today', buckets.today, 'today')}
-                  {section('Later this week', [...buckets.thisWeek, ...buckets.later], 'week')}
+                  {section('Overdue', shown.overdue, 'overdue')}
+                  {section('Due today', shown.today, 'today')}
+                  {section('Later this week', [...shown.thisWeek, ...shown.later], 'week')}
                   {/* Below the active work: open, but the approver's move. */}
-                  {section('Waiting for approval', buckets.inReview)}
-                  {section('Done this week', buckets.completed)}
+                  {section('Waiting for approval', shown.inReview)}
+                  {section('Done this week', shown.completed)}
                 </DragDropContext>
               )}
             </table>

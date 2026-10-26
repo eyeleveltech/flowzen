@@ -2093,7 +2093,13 @@ export const api = {
 
   tasks: {
     my: () =>
-      get<{ success: boolean; counts: any; tasks: { today: any[]; overdue: any[]; thisWeek: any[]; later: any[]; completed: any[] } }>('/tasks/my'),
+      get<{
+        success: boolean;
+        counts: any;
+        tasks: { today: any[]; overdue: any[]; thisWeek: any[]; later: any[]; completed: any[] };
+        /** One working day in minutes — what "a day" of elapsed time means. */
+        dayMinutes?: number;
+      }>('/tasks/my'),
     list: (params: Record<string, string> = {}) =>
       get<{ success: boolean; tasks: any[] }>(`/tasks?${new URLSearchParams(params)}`),
     /**

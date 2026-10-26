@@ -6,7 +6,7 @@ import { Router, type Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, requirePermission, hasPermission, type AuthRequest } from '../middleware/auth.js';
-import { formatWorkingMinutes, loadWorkCalendar, workingMinutesOn } from '../utils/workCalendar.js';
+import { dayMinutesOf, formatWorkingMinutes, loadWorkCalendar, workingMinutesOn } from '../utils/workCalendar.js';
 import { computeTaskTypeMedians, taskTypeGroupKey } from '../utils/taskTypeMedian.js';
 import { defaultProjectId } from '../services/retainerProjects.js';
 import { TaskStatus, TaskWorkType, WaitingOn, Priority, TaskType, ReviewDecision, RepeatFrequency } from '@prisma/client';
@@ -205,7 +205,7 @@ tasksRouter.get('/my', requirePermission('work.own'), async (req: AuthRequest, r
         workingHoursText: workingHours.formatted,
         workingMinutes: workingHours.totalMinutes,
         typeMedianMinutes,
-        typeMedianText: typeMedianMinutes != null ? formatWorkingMinutes(typeMedianMinutes) : null,
+        typeMedianText: typeMedianMinutes != null ? formatWorkingMinutes(typeMedianMinutes, dayMinutesOf(calendar)) : null,
         needsApproval: t.needsApproval,
         // The repeat, if it is a copy in one; `nextDue` is added below.
         repeat: t.repeat,
@@ -214,7 +214,7 @@ tasksRouter.get('/my', requirePermission('work.own'), async (req: AuthRequest, r
         // "No answer for 2h 10m" reads on the editor's row.
         reviewWaitingText:
           isInReview && lastReview && lastReview.decision == null
-            ? formatWorkingMinutes(workingMinutesOn(calendar, lastReview.submittedAt, now).totalMinutes)
+            ? formatWorkingMinutes(workingMinutesOn(calendar, lastReview.submittedAt, now).totalMinutes, dayMinutesOf(calendar))
             : null,
         isOverdue,
         isToday,
@@ -289,6 +289,8 @@ tasksRouter.get('/my', requirePermission('work.own'), async (req: AuthRequest, r
         inReview,
         completed,
       },
+      // One working day in minutes — what My Work's Elapsed filter counts a "day" as.
+      dayMinutes: dayMinutesOf(calendar),
     });
   } catch (error) {
     next(error);
@@ -457,7 +459,7 @@ tasksRouter.get('/approvals', requirePermission('work.own'), async (req: AuthReq
           // Here because it escalated to them, not because they approve the type.
           asEscalation: !(t.taskType && types.includes(t.taskType)),
           waitingMinutes,
-          waitingText: formatWorkingMinutes(waitingMinutes),
+          waitingText: formatWorkingMinutes(waitingMinutes, dayMinutesOf(calendar)),
         };
       })
       .sort((a, b) => a.review.submittedAt.getTime() - b.review.submittedAt.getTime());
@@ -2100,12 +2102,29 @@ tasksRouter.patch('/:id/status', requirePermission('work.own'), async (req: Auth
       reopenCount += 1;
     }
 
+    /*
+     * Leaving On hold closes the wait here, in the same write — the minutes
+     * waited go into `waitingTotalMinutes`, exactly as /resume does.
+     *
+     * Every screen used to take a task off hold in two requests: /resume
+     * (which moves it to In progress), then this route for where it was
+     * really going. When the second failed, or the screen's copy of the task
+     * was out of date, the task was left In progress — a task somebody had
+     * just marked Done showed as In progress.
+     */
+    const leavingHold = task.status === TaskStatus.ON_HOLD && status !== 'ON_HOLD';
+    const waitedMinutes =
+      leavingHold && task.waitingSince ? Math.max(0, Math.floor((Date.now() - task.waitingSince.getTime()) / 60_000)) : 0;
+
     const updated = await prisma.task.update({
       where: { id },
       data: {
         status: status as TaskStatus,
         completedAt,
         reopenCount,
+        ...(leavingHold
+          ? { waitingOn: null, waitingSince: null, waitingTotalMinutes: task.waitingTotalMinutes + waitedMinutes }
+          : {}),
       },
     });
     // Done, cancelled or on hold: nobody is working on it now any more.
@@ -2180,12 +2199,16 @@ tasksRouter.post('/:id/wait', requirePermission('work.own'), async (req: AuthReq
       return;
     }
 
+    // A finished task put on hold is reopened, as the status route reopens one:
+    // it is open work again, so it loses its completed date and counts a reopen.
+    const reopening = existing.status === TaskStatus.DONE || existing.status === TaskStatus.CANCELLED;
     const updated = await prisma.task.update({
       where: { id },
       data: {
         status: TaskStatus.ON_HOLD,
         waitingOn,
         waitingSince: new Date(),
+        ...(reopening ? { completedAt: null, reopenCount: existing.reopenCount + 1 } : {}),
       },
     });
     // On hold is waiting, not working.
@@ -2225,6 +2248,20 @@ tasksRouter.post('/:id/resume', requirePermission('work.own'), async (req: AuthR
     }
     if (task.status === TaskStatus.IN_REVIEW) {
       res.status(400).json({ success: false, error: 'This task is waiting for approval, not on hold.' });
+      return;
+    }
+    /*
+     * Only a task on hold can be resumed. This accepted any status, so a
+     * screen holding an out-of-date "On hold" copy of a task somebody had
+     * since finished moved the Done (or Cancelled) task back to In progress —
+     * with its completed date still set and no reopen counted.
+     */
+    if (task.status !== TaskStatus.ON_HOLD) {
+      const now = task.status === TaskStatus.DONE ? 'done' : task.status === TaskStatus.CANCELLED ? 'cancelled' : null;
+      res.status(409).json({
+        success: false,
+        error: now ? `This task is ${now} — it isn't on hold any more. Refresh to see it as it is now.` : "This task isn't on hold.",
+      });
       return;
     }
 
@@ -2655,9 +2692,11 @@ tasksRouter.get('/:id/reviews', requirePermission('work.own'), async (req: AuthR
         : [];
 
     let waitingMinutes: number | null = null;
+    let waitingText: string | null = null;
     if (open) {
       const calendar = await loadWorkCalendar(orgId);
       waitingMinutes = workingMinutesOn(calendar, open.submittedAt, new Date()).totalMinutes;
+      waitingText = formatWorkingMinutes(waitingMinutes, dayMinutesOf(calendar));
     }
 
     res.json({
@@ -2714,7 +2753,7 @@ tasksRouter.get('/:id/reviews', requirePermission('work.own'), async (req: AuthR
           )) == null,
       },
       waitingMinutes,
-      waitingText: waitingMinutes != null ? formatWorkingMinutes(waitingMinutes) : null,
+      waitingText,
     });
   } catch (error) {
     next(error);

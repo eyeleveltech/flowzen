@@ -3,10 +3,15 @@
  *
  * On hold is not just a status: putting a task on hold records what it is
  * waiting on and from when (`/wait`), and taking it off closes that wait and
- * folds the minutes into `waitingTotalMinutes` (`/resume`) — so the elapsed
- * clock does not charge the assignee for time spent waiting on a client. The
- * plain status route does neither. My Work knew this; All tasks set ON_HOLD
- * through the status route, so its holds were never timed.
+ * folds the minutes into `waitingTotalMinutes` — so the elapsed clock does not
+ * charge the assignee for time spent waiting on a client. My Work knew this;
+ * All tasks set ON_HOLD through the status route, so its holds were never
+ * timed.
+ *
+ * Taking a task off hold is ONE request now: the status route closes the wait
+ * itself. It used to be /resume (to In progress) and then the status route —
+ * and when the second failed, or this screen's copy was out of date, a task
+ * just marked Done was left In progress.
  */
 
 import { api } from '@/lib/api-v2';
@@ -30,11 +35,8 @@ export async function changeTaskStatus(
     const choice = await useWaitingOnStore.getState().ask({ hasClient: task.hasClient ?? true, title: task.title });
     if (choice === undefined) return false;
     await api.tasks.wait(task.id, choice);
-  } else if (task.status === 'ON_HOLD') {
-    // Resume closes the wait and lands on In progress; anything else goes on top.
-    await api.tasks.resume(task.id);
-    if (next !== 'IN_PROGRESS') await api.tasks.updateStatus(task.id, next);
   } else {
+    // Off hold or not, one request: the server closes a wait on the way out.
     await api.tasks.updateStatus(task.id, next);
   }
   return true;
