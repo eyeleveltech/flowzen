@@ -25,7 +25,7 @@ export const statusLabel = (s: string) => TASK_STATUS_OPTIONS.find((o) => o.valu
 export const PERSON_COUNTS: { key: TeamBoardList; label: string; hint: string }[] = [
   { key: 'open', label: 'Open', hint: 'To do, In progress and On hold' },
   { key: 'overdue', label: 'Overdue', hint: 'Open, past its due date' },
-  { key: 'waiting', label: 'Waiting', hint: 'On hold' },
+  { key: 'waiting', label: 'On hold', hint: 'Waiting on the client, someone else, or just paused' },
   { key: 'inReview', label: 'In review', hint: 'Sent for approval, with an approver' },
   { key: 'doneThisWeek', label: 'Done this week', hint: 'Finished since Monday' },
 ];

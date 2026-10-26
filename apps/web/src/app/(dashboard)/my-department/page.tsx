@@ -26,7 +26,6 @@ import { usePageHeader } from '@/hooks/usePageHeader';
 import { useConfig, useDepartments, useTeamMembers } from '@/hooks/queries';
 import { useAuthStore } from '@/stores';
 import { Tabs, useTabState, type TabDef } from '@/components/ui/tabs';
-import { Select } from '@/components/ui/select';
 import { PageSkeleton } from '@/components/ui/skeleton-loaders';
 import { NotFoundPanel } from '@/components/ui/not-found-panel';
 import { ScreenMessage } from '@/components/ui/screen-message';
@@ -35,6 +34,7 @@ import { AssignTaskModal } from '@/components/work/AssignTaskModal';
 import { changeTaskStatus } from '@/lib/task-status';
 import { plural } from '@/lib/utils';
 import { AttentionList } from '@/components/department/AttentionList';
+import { DepartmentHeader } from '@/components/department/DepartmentHeader';
 import { PeopleTab } from '@/components/department/PeopleTab';
 import { PersonPanel } from '@/components/department/PersonPanel';
 import { WorkTab } from '@/components/department/WorkTab';
@@ -170,40 +170,39 @@ function MyDepartment() {
 
   return (
     <div className="page-shell space-y-6">
-      {/* The department, its head, and — for anybody with more than one — the switch. */}
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="min-w-0">
-          <p className="eyebrow">Department</p>
-          <h2 className="truncate text-xl font-semibold text-primary">{overview.department.name}</h2>
-          <p className="text-xs text-secondary">
-            {plural(overview.department.peopleCount, 'person', 'people')}
-            {overview.department.headName ? ` · Head: ${overview.department.headName}` : ' · No head set'}
-          </p>
-        </div>
-        {choices.length > 1 && (
-          <div className="w-full sm:w-64">
-            <Select
-              ariaLabel="Which department"
-              value={departmentId}
-              onChange={switchTo}
-              options={choices.map((d) => ({ value: d.id, label: d.name }))}
-            />
-          </div>
-        )}
+      {/* The department, its day in a sentence, and the team — each face opens their panel. */}
+      <DepartmentHeader
+        overview={overview}
+        choices={choices}
+        departmentId={departmentId}
+        onSwitch={switchTo}
+        onOpenPerson={setPersonId}
+      />
+
+      {/* Narrower than a wide screen: "Needs you" is a bar above the tabs, opened on demand. */}
+      <div className="xl:hidden">
+        <AttentionList variant="bar" overview={overview} onOpenTask={setOpenTaskId} onTimeSplit={() => setTab('time-split')} />
       </div>
 
-      <AttentionList overview={overview} onOpenTask={setOpenTaskId} onTimeSplit={() => setTab('time-split')} />
-
-      <Tabs tabs={TABS} active={tab} onChange={setTab} />
-
-      {tab === 'people' && (
-        <PeopleTab overview={overview} onOpenPerson={setPersonId} onOpenTask={setOpenTaskId} onAssign={setAssigning} />
-      )}
-      {tab === 'work' && <WorkTab departmentId={departmentId} />}
-      {tab === 'calendar' && <CalendarTab overview={overview} timezone={config?.organization.timezone ?? 'Asia/Kolkata'} />}
-      {tab === 'approvals' && <ApprovalsTab departmentId={departmentId} onOpenTask={setOpenTaskId} />}
-      {tab === 'equipment' && <EquipmentTab overview={overview} />}
-      {tab === 'time-split' && <TimeSplitTab departmentId={departmentId} departmentName={overview.department.name} month={overview.month} />}
+      {/* Wide: the tab on the left, "Needs you" beside it all the way down. */}
+      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_19rem]">
+        <div className="min-w-0 space-y-5">
+          <Tabs tabs={TABS} active={tab} onChange={setTab} />
+          {tab === 'people' && (
+            <PeopleTab overview={overview} onOpenPerson={setPersonId} onOpenTask={setOpenTaskId} onAssign={setAssigning} />
+          )}
+          {tab === 'work' && <WorkTab departmentId={departmentId} />}
+          {tab === 'calendar' && <CalendarTab overview={overview} timezone={config?.organization.timezone ?? 'Asia/Kolkata'} />}
+          {tab === 'approvals' && <ApprovalsTab departmentId={departmentId} onOpenTask={setOpenTaskId} />}
+          {tab === 'equipment' && <EquipmentTab overview={overview} />}
+          {tab === 'time-split' && (
+            <TimeSplitTab departmentId={departmentId} departmentName={overview.department.name} month={overview.month} />
+          )}
+        </div>
+        <div className="hidden xl:sticky xl:top-20 xl:block">
+          <AttentionList variant="rail" overview={overview} onOpenTask={setOpenTaskId} onTimeSplit={() => setTab('time-split')} />
+        </div>
+      </div>
 
       <PersonPanel
         person={person}
