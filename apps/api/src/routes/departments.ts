@@ -6,7 +6,6 @@ import { authenticate, hasPermission, requirePermission, resolvePermissions, typ
 import { emitToOrganization } from '../sse.js';
 import { isDepartmentScoped } from '../services/teamScope.js';
 import {
-  composeDepartmentApprovals,
   composeDepartmentOverview,
   composeDepartmentWork,
   departmentForPage,
@@ -180,7 +179,7 @@ departmentsRouter.get('/', async (req: AuthRequest, res: Response, next: NextFun
 // The head's page for one department. Each route answers only for the
 // department's head or Management (`departmentForPage`), and its people are
 // narrowed by the caller's team scope on top of that. The page's other tabs
-// reuse the calendar, allocation, approval and asset routes as they are.
+// reuse the calendar, allocation and asset routes as they are.
 
 /** Runs a department page compute for an allowed caller, or answers why not. */
 function pageRoute(
@@ -211,12 +210,6 @@ departmentsRouter.get(
 departmentsRouter.get(
   '/:id/work',
   pageRoute((req, department, people) => composeDepartmentWork(req.user!.organizationId, department, people)),
-);
-
-/** GET /api/departments/:id/approvals — the team's work in review, and what was sent back lately. */
-departmentsRouter.get(
-  '/:id/approvals',
-  pageRoute((req, department, people) => composeDepartmentApprovals(req.user!, department, people)),
 );
 
 /** POST /api/departments — add one, at the end of the list. */

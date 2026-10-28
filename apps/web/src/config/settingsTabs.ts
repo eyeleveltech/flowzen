@@ -1,5 +1,4 @@
 import {
-  BadgeCheck,
   BarChart3,
   Building2,
   CalendarClock,
@@ -52,7 +51,6 @@ export const SETTINGS_GROUPS = [
     tabs: [
       { key: 'team', label: 'Team', caption: 'Who is here.', icon: Users },
       { key: 'departments', label: 'Departments', caption: 'The teams, their heads and who is in each.', icon: Network },
-      { key: 'approvals', label: 'Approvals', caption: 'Who signs off each kind of work.', icon: BadgeCheck },
       { key: 'onboarding', label: 'Onboarding', caption: 'What a new client needs before work starts.', icon: ClipboardList },
       { key: 'assets', label: 'Assets', caption: 'Asset tags and depreciation.', icon: Package },
     ],

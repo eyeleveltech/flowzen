@@ -21,13 +21,11 @@ export function daySentence(overview: DepartmentOverview): { text: string; tone:
   const open = union('open');
   const overdue = union('overdue');
   const waiting = union('waiting');
-  const inReview = union('inReview');
   const done = union('doneThisWeek');
   return [
     { text: plural(open, 'open task'), tone: 'calm' as const },
     overdue ? { text: `${overdue} overdue`, tone: 'late' as const } : { text: 'nothing overdue', tone: 'calm' as const },
     waiting ? { text: `${waiting} on hold`, tone: 'calm' as const } : null,
-    inReview ? { text: `${inReview} in review`, tone: 'calm' as const } : null,
     done ? { text: `${done} done this week`, tone: 'calm' as const } : null,
   ].filter((x): x is { text: string; tone: 'calm' | 'late' } => Boolean(x));
 }

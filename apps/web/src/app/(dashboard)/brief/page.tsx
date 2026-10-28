@@ -30,7 +30,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Gauge,
-  Hourglass,
   MessagesSquare,
   Receipt,
   Sparkles,
@@ -50,13 +49,19 @@ import { AlertGroup } from '@/components/brief/AlertGroup';
 import { WeekTimeline } from '@/components/brief/WeekTimeline';
 import { TeamBars } from '@/components/brief/TeamBars';
 import { DetailsDrawer } from '@/components/brief/DetailsDrawer';
-import { addDays, compactMoney, minutesLabel, weekLabel } from '@/components/brief/format';
+import { addDays, compactMoney, weekLabel } from '@/components/brief/format';
+
+/*
+ * The scoreboard's five tiles: three across, then two wide — and on a phone
+ * two by two, the last one full width — so no tile sits alone beside a gap.
+ */
+const SCOREBOARD_GRID = 'grid grid-cols-2 gap-3 lg:grid-cols-6';
+const SCOREBOARD_SPANS = ['lg:col-span-2', 'lg:col-span-2', 'lg:col-span-2', 'lg:col-span-3', 'col-span-2 lg:col-span-3'];
 
 const GROUP_ICON: Record<string, LucideIcon> = {
   'Money to collect': Wallet,
   'Sales follow-ups': MessagesSquare,
   'Billing to do': Receipt,
-  'Stuck approvals': Hourglass,
   Delivery: Gauge,
   Clients: Building2,
 };
@@ -101,9 +106,11 @@ function BriefSkeleton() {
         {block('h-7 w-64')}
       </div>
       {block('h-28')}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i}>{block('h-36')}</div>
+      <div className={SCOREBOARD_GRID}>
+        {SCOREBOARD_SPANS.map((span, i) => (
+          <div key={i} className={span}>
+            {block('h-36')}
+          </div>
         ))}
       </div>
       <div className="grid gap-3 md:grid-cols-2">
@@ -329,8 +336,9 @@ export default function MondayBriefPage() {
           <Heading>
             <span id="numbers">{current ? 'Last week' : 'That week'}</span>
           </Heading>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+          <div className={SCOREBOARD_GRID}>
             <TrendTile
+              className={SCOREBOARD_SPANS[0]}
               label="Cash collected"
               value={s.cashCollected.last}
               previous={s.cashCollected.before}
@@ -342,6 +350,7 @@ export default function MondayBriefPage() {
               openLabel="Cash collected: see the payments"
             />
             <TrendTile
+              className={SCOREBOARD_SPANS[1]}
               label="Invoiced"
               value={s.invoiced.last.amount}
               previous={s.invoiced.before.amount}
@@ -353,6 +362,7 @@ export default function MondayBriefPage() {
               openLabel="Invoiced: see the invoices"
             />
             <TrendTile
+              className={SCOREBOARD_SPANS[2]}
               label="Deals won"
               value={s.dealsWon.last.value}
               previous={s.dealsWon.before.value}
@@ -364,6 +374,7 @@ export default function MondayBriefPage() {
               openLabel="Deals won: see the proposals"
             />
             <TrendTile
+              className={SCOREBOARD_SPANS[3]}
               label="Proposals sent"
               value={s.proposalsSent.last}
               previous={s.proposalsSent.before}
@@ -375,6 +386,7 @@ export default function MondayBriefPage() {
               openLabel="Proposals sent: see the versions"
             />
             <TrendTile
+              className={SCOREBOARD_SPANS[4]}
               label="Tasks done"
               value={s.tasksDone.last.count}
               previous={s.tasksDone.before.count}
@@ -387,22 +399,6 @@ export default function MondayBriefPage() {
               onOpen={() => setDetail('tasks')}
               openLabel="Tasks done: see by department"
             />
-            {s.approvals.map((a) => (
-              <TrendTile
-                key={a.group}
-                label={`Approvals · ${a.group}`}
-                value={a.last.medianDecisionMinutes}
-                previous={a.before?.medianDecisionMinutes ?? null}
-                format={minutesLabel}
-                // Longer is worse.
-                upIsGood={false}
-                points={t.approvals.find((g) => g.group === a.group)?.points ?? []}
-                pointFormat={minutesLabel}
-                note={`Typical time · ${a.last.decided} decided · ${a.last.escalated} escalated`}
-                onOpen={() => router.push('/members?tab=approvals')}
-                openLabel={`Approvals, ${a.group}: open the approvals report`}
-              />
-            ))}
           </div>
         </motion.section>
 

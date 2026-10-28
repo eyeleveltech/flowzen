@@ -36,7 +36,7 @@ describe('Sparkline', () => {
   });
 
   it('leaves a gap for a week with no value instead of drawing a zero', () => {
-    render(<Sparkline points={points([90, 95, null, null, 120, 100, 95, 80])} format={(n) => `${n} min`} label="Approval time" />);
+    render(<Sparkline points={points([90, 95, null, null, 120, 100, 95, 80])} format={(n) => `${n} min`} label="Reply time" />);
     const line = screen.getByTestId('sparkline').querySelectorAll('path')[1].getAttribute('d')!;
     expect(line.match(/M/g)).toHaveLength(2);
     expect(screen.getAllByRole('button')[2]).toHaveAccessibleName('Week of 24 Aug: none');

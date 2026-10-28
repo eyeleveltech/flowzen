@@ -165,7 +165,6 @@ async function repeatOne(
       assignedById: source.assignedBy?.active ? source.assignedById : null,
       reviewerId: source.reviewer?.active ? source.reviewerId : null,
       taskType: source.taskType,
-      needsApproval: source.needsApproval,
       dueDate: new Date(`${nextDue}T00:00:00Z`),
       dueTime: source.dueTime,
       priority: source.priority,

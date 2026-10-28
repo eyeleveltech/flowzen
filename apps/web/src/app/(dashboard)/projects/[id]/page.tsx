@@ -48,7 +48,6 @@ import { NewWorkCostModal } from '@/components/work/NewWorkCostModal';
 import { EditCostModal } from '@/components/work/EditCostModal';
 import { GstAmountFields } from '@/components/work/GstAmountFields';
 import { MilestoneInvoiceModal, type MilestoneForBilling } from '@/components/work/MilestoneInvoiceModal';
-import { statusChoices } from '@/components/retainers/task-shared';
 import { PRIORITY_CONFIG, getPriorityDot, getPriorityBadge, getPriorityLabel } from '@/lib/priority';
 import { personOptions } from '@/lib/people';
 import { withDueTime } from '@/lib/due-time';
@@ -63,7 +62,7 @@ const PRIORITY_OPTIONS = Object.entries(PRIORITY_CONFIG).map(([value, cfg]) => (
 
 type Status = 'LIVE' | 'DELIVERED' | 'CANCELLED';
 type MStatus = 'PENDING' | 'PROFORMA_RAISED' | 'INVOICED' | 'PAID';
-type TStatus = 'TODO' | 'IN_PROGRESS' | 'IN_REVIEW' | 'ON_HOLD' | 'DONE' | 'CANCELLED';
+type TStatus = 'TODO' | 'IN_PROGRESS' | 'ON_HOLD' | 'DONE' | 'CANCELLED';
 
 const TASK_STATUS_OPTIONS = [
   { value: 'TODO', label: 'To do' },
@@ -1026,7 +1025,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                             <Select
                               value={t.status}
                               onChange={(v) => void changeTaskStatus(t, v as TStatus)}
-                              options={statusChoices(TASK_STATUS_OPTIONS, t)}
+                              options={TASK_STATUS_OPTIONS}
                               ariaLabel={`Status for ${t.title}`}
                               buttonClassName="px-2.5 py-1.5 text-xs w-32"
                               disabled={busyId === t.id}

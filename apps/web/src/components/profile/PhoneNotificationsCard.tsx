@@ -5,8 +5,8 @@
  *
  * Opt-in per person and per device: "Turn on" asks this browser's permission
  * and registers it; the list shows every device this person turned on, each
- * removable; four switches pick what is sent. Approvals, bookings and task
- * changes arrive on the phone even with Flowzen closed — in working hours only,
+ * removable; three switches pick what is sent. Bookings and task changes
+ * arrive on the phone even with Flowzen closed — in working hours only,
  * anything outside them waits for the next working morning.
  *
  * Absent entirely when the organisation has it switched off, or the server has
@@ -26,7 +26,6 @@ import { formatDate, formatRelativeDate } from '@/lib/utils';
 import { currentSubscription, pushSupport, subscribeThisBrowser, type PushSupport } from '@/lib/pushDevice';
 
 const KINDS: { key: keyof PushPreferences; label: string; hint: string }[] = [
-  { key: 'pushApprovals', label: 'Approvals', hint: 'Work waiting for you to approve, and the answer on work you sent.' },
   {
     key: 'pushCalendar',
     label: 'Calendar',
@@ -154,7 +153,7 @@ export function PhoneNotificationsCard() {
         {problem && <ErrorNote onDismiss={() => setProblem(null)}>{problem}</ErrorNote>}
 
         <p className="text-sm text-body">
-          Approvals, bookings and task changes on your phone, even when Flowzen is closed. Only in working hours —
+          Bookings and task changes on your phone, even when Flowzen is closed. Only in working hours —
           anything outside them waits for the next working morning.
         </p>
 

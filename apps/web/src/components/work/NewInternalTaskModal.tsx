@@ -22,7 +22,6 @@ import { ErrorNote } from '@/components/ui/empty-state';
 import { AssigneeField, AssignedByField } from '@/components/work/AssigneeField';
 import { PRIORITY_CONFIG } from '@/lib/priority';
 import { TASK_TYPE_OPTIONS } from '@/lib/task-type';
-import { NeedsApprovalField } from '@/components/work/NeedsApprovalField';
 import { useTeamMembers } from '@/hooks/queries';
 import { DueTimeField } from '@/components/work/DueTimeField';
 import { repeatOptions, REPEAT_HINT } from '@/lib/repeat';
@@ -45,7 +44,6 @@ export function NewInternalTaskModal({
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [assignedById, setAssignedById] = useState('');
   const [taskType, setTaskType] = useState('');
-  const [needsApproval, setNeedsApproval] = useState(false);
   const [priority, setPriority] = useState('MEDIUM');
   const [dueDate, setDueDate] = useState('');
   // Optional; empty means any time that day.
@@ -72,7 +70,6 @@ export function NewInternalTaskModal({
         assigneeId: assigneeIds[0],
         assignedById: assignedById || undefined,
         taskType: taskType || undefined,
-        needsApproval,
         dueDate,
         dueTime: dueTime || undefined,
         repeat: repeat || undefined,
@@ -117,7 +114,6 @@ export function NewInternalTaskModal({
             options={TASK_TYPE_OPTIONS}
             disabled={saving}
           />
-          <NeedsApprovalField taskType={taskType} value={needsApproval} onChange={setNeedsApproval} disabled={saving} />
 
           <div className="grid grid-cols-2 gap-4">
             <Field label="Due date" type="date" value={dueDate} onChange={setDueDate} required disabled={saving} />

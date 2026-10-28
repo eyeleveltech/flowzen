@@ -21,7 +21,7 @@ The permissions behind the screens:
 
 A person who types the address of a screen they cannot open is sent away from it.
 
-**Department heads see their own departments.** A Head sees the people of the departments they lead (set in Settings → Departments) and the tasks any of those people are on, plus tasks the Head created or asked for. Management sees everyone. A Head who leads no department still sees everyone until given one. This applies to Team, All tasks, the calendar's Team tasks, editing other people's tasks and events, team alerts and confirming the time split. It does not apply to assigning (a Head can give work to anyone), to client work (projects, retainers, Live work), to the Approvals report, events or assets.
+**Department heads see their own departments.** A Head sees the people of the departments they lead (set in Settings → Departments) and the tasks any of those people are on, plus tasks the Head created or asked for. Management sees everyone. A Head who leads no department still sees everyone until given one. This applies to Team, All tasks, the calendar's Team tasks, editing other people's tasks and events, team alerts and confirming the time split. It does not apply to assigning (a Head can give work to anyone), to client work (projects, retainers, Live work), events or assets.
 
 **Salaries** (a person's monthly cost) are visible only to Setup access. An admin sets it on Team → the person's menu → Edit → "Monthly cost to the company". Heads and Accounts see time-split percentages; Accounts also see combined "People cost" figures on Money.
 
@@ -69,17 +69,15 @@ Everybody's own list: every task they are on, as lead or helper. Cancelled and d
 
 - **Tiles:** "Due Today" (with how many are on hold), "Overdue" (with how long the oldest has been open), "Rest of the week" (the next 7 days, today excluded), "Your average close".
 - **Groups, in order:**
-  1. **Overdue:** due before today, not Done, not In review.
+  1. **Overdue:** due before today, not Done.
   2. **Due today**.
   3. **Later this week:** includes anything due later.
-  4. **Waiting for approval:** In review, longest waiting first.
-  5. **Done this week**.
+  4. **Done this week**.
 - **Arranging:** a person can drag tasks into their own order within the first three groups. New tasks land at the top.
 - **Group by:** "When" (the groups above, the default) or "Project or retainer" (the work still to do, under the retainer, project or internal project it belongs to, with "Internal — no project" for one-off studio jobs). Groups fold open and shut and show a count. The choice is remembered in that browser. Dragging works in "When" only.
-- **On each row:** change the due date (click the date) and the status (To do, In progress, On hold, Done, Cancelled). Clicking the task opens its drawer: details, the approval block, Edit and Delete.
-- **Approver panels:** approvers also see "Waiting for your approval" (with Approve and Request changes) and "Sent back — add your changes".
+- **On each row:** change the due date (click the date) and the status (To do, In progress, On hold, Done, Cancelled). Clicking the task opens its drawer: details, Edit and Delete.
 - **"Task for myself"** creates a task.
-- **Opening one task:** /my-work?task={id} opens that task. If it is not on the person's own list, it opens as an approval view.
+- **Opening one task:** /my-work?task={id} opens that task when it is on the person's own list.
 
 ## Calendar (/calendar)
 
@@ -104,12 +102,12 @@ Everybody. What is on when, as layers that can be switched on and off.
 
 ## Team (/members)
 
-Team work (Heads and Management). The Team tab is the delivery view; the Approvals tab is at /members?tab=approvals.
+Team work (Heads and Management): the delivery view.
 
 - **Scope line:** a Head sees a line such as "Showing Video (12 people). Management sees everyone."
 - **Tiles:**
   - "People".
-  - "Open Tasks": all open tasks — not Done, Cancelled or In review — whatever the note under it says.
+  - "Open Tasks": all open tasks — not Done or Cancelled — whatever the note under it says.
   - "Overdue".
   - "Waiting on Clients": every On hold task.
 - **"Delivery" table:** each person's Open, Overdue, Waiting and "Avg close". "List" or "By department". Export CSV.
@@ -117,20 +115,16 @@ Team work (Heads and Management). The Team tab is the delivery view; the Approva
 - **Invite** (Setup access): name, email, department, access preset. The invite link is shown and emailed.
 - **Opening a person:** shows their tasks grouped by state, each linked to its project or retainer month.
 - **Board** is no longer a tab here: it became **My department** (/my-department), and an old /members?tab=board link goes there.
-- **Approvals tab:**
-  - For the last 7 or 30 days: what is waiting now, typical decision time, how many were decided on time, escalations, and each approver's record.
-  - It covers the whole studio.
 
 ## My department (/my-department)
 
 A department head's page for their department: their people and everything those people are working on. It is in the sidebar only for somebody who heads a department. A head of several departments switches between them at the top. Management is not given it in the sidebar; they open any department's page from Settings → Departments with "Open department page" (/my-department?department={id}). Nobody else can open it, and a head cannot open another department's page. A head sees only their own people.
 
-- **Header:** the department, how many people, its head, and **Needs attention**: overdue tasks, tasks on hold more than 3 working days, tasks stuck in review past the approval reminder time, urgent tasks not started, gear overdue back, and — from the 25th of the month — anybody whose time split for the month is not confirmed. Each item opens what it is about.
-- **People tab** (/my-department?tab=people): one card per person — name, designation, phone and email (tap to call or mail); **Working on now** (the task they said they are on: each person sets it themselves with "Working on this now" on one of their own open tasks on My Work or in the task, which moves a To do task to In progress; one at a time; it clears itself when the task is done, cancelled, sent for approval or put on hold, or when they press Clear; a head cannot set it for them; no time is kept or shown) and **Next up** (the top of their own My Work order); counts of Open, Overdue, Waiting, In review and Done this week; today's meetings and shoots; and the gear they hold. **Assign** on a card opens the new-task form with that person filled in.
-  - **Clicking a card** opens the person panel: their tasks grouped Overdue, Today, This week, Later, Waiting and In review; the clients and projects they are on; their week (task deadlines, meetings and shoots, Google busy time); the gear they hold and what is reserved for them; and this month's time split as percentages. Opening a task there lets the head reassign it or move its due date.
+- **Header:** the department, how many people, its head, and **Needs attention**: overdue tasks, tasks on hold more than 3 working days, urgent tasks not started, gear overdue back, and — from the 25th of the month — anybody whose time split for the month is not confirmed. Each item opens what it is about.
+- **People tab** (/my-department?tab=people): one card per person — name, designation, phone and email (tap to call or mail); **Working on now** (the task they said they are on: each person sets it themselves with "Working on this now" on one of their own open tasks on My Work or in the task, which moves a To do task to In progress; one at a time; it clears itself when the task is done, cancelled or put on hold, or when they press Clear; a head cannot set it for them; no time is kept or shown) and **Next up** (the top of their own My Work order); counts of Open, Overdue, Waiting and Done this week; today's meetings and shoots; and the gear they hold. **Assign** on a card opens the new-task form with that person filled in.
+  - **Clicking a card** opens the person panel: their tasks grouped Overdue, Today, This week, Later and Waiting; the clients and projects they are on; their week (task deadlines, meetings and shoots, Google busy time); the gear they hold and what is reserved for them; and this month's time split as percentages. Opening a task there lets the head reassign it or move its due date.
 - **Work tab** (/my-department?tab=work): the client work the department's people are on, by client and then each retainer or project — who from the department is on it, open and overdue tasks, and the next deadline — and the department's own internal projects with owner, people, % done, target date or days left, and open and overdue tasks. Every row opens its page.
 - **Calendar tab** (/my-department?tab=calendar): a week view with only the department's people — their meetings and shoots, task deadlines, holidays, and Google busy time (shown as "Busy" with the person's name, never the title). Narrow it to one person.
-- **Approvals tab** (/my-department?tab=approvals): the team's tasks in review (how long they have waited, the round, the link) and changes requested on the team's work in the last two weeks. If the head approves that task type — or is its escalation contact and the round has escalated — Approve and Request changes are on the row. Nobody can approve a task they are on.
 - **Equipment tab** (/my-department?tab=equipment): gear out on booking with the team and its due-back date (red once overdue), gear they hold long-term, and gear reserved for the team's coming meetings and shoots, with clash warnings.
 - **Time split tab** (/my-department?tab=time-split): this month's split per person as percentages (never money, even for an admin), confirmed or not, with Edit and Confirm for each person and "Confirm all". A closed month cannot be changed.
 - **Not here:** rankings, scores, timers, "overloaded" labels and salaries.
@@ -139,7 +133,7 @@ A department head's page for their department: their people and everything those
 
 All work (Heads and Management; a Head sees their departments' work).
 
-- **Filters:** search, Person, Department, Client (including "Internal", and "Internal — no project" for internal tasks filed under no project), Project, Type of work (including "Not set"), Status and "Overdue only". Status starts on "Unfinished" (To do, In progress, In review, On hold). /all-work?noProject=1 opens on "Internal — no project".
+- **Filters:** search, Person, Department, Client (including "Internal", and "Internal — no project" for internal tasks filed under no project), Project, Type of work (including "Not set"), Status and "Overdue only". Status starts on "Unfinished" (To do, In progress, On hold). /all-work?noProject=1 opens on "Internal — no project".
 - **Group by:** None (the default), Project or retainer, Client, Person, Department, or Due (Overdue, Today, This week, Later, Earlier). Each group folds open and shut and shows a count; the filters still apply inside. A task with two people is under both in Person and Department. The choice is remembered in that browser. Grouping is of the tasks shown, so past the 500-task limit it says so.
 - **Tiles:** "Open" (To do + In progress), "Overdue", "On hold" and "Nobody on it".
 - **Sorting:** click a column header.
@@ -277,10 +271,9 @@ Reports access (Management). The week on one page.
   - Deals won
   - Proposals sent (revisions included)
   - Tasks done (% on time)
-  - One Approvals tile per approver group
   - Clicking a tile lists what is behind it.
 - **Current week only:**
-  - **"Needs your action":** open alerts grouped as Money to collect, Sales follow-ups, Billing to do, and Stuck approvals.
+  - **"Needs your action":** open alerts grouped as Money to collect, Sales follow-ups and Billing to do.
   - **"This week":** invoices due, projects ending, shoots and meetings, renewals.
   - **"Risks":** delivery and client risks.
   - **"Team by department":** counts only, nobody named.
@@ -376,7 +369,7 @@ Enter costs (Heads, Accounts, Management). How each person's month divides acros
 
 ## Setup (/settings)
 
-Setup access (Management). The sidebar calls it Setup; the page is Settings. A panel on the left lists the tabs in five groups: Agency (General, Working calendar), Sales & money (Pipeline, Services & pricing, Documents & billing, Tax & numbering), People & work (Team, Departments, Approvals, Onboarding, Assets), AI & connections (Zen assistant, Email, Integrations) and Records (Activity, Usage, Trash). A link opens a tab: /settings?tab=<key>, where the key is organisation, calendar, pipeline, pricing, proforma, documents, team, departments, approvals, onboarding, assets, zen, email, integrations, activity, usage or trash. Without one it opens on General.
+Setup access (Management). The sidebar calls it Setup; the page is Settings. A panel on the left lists the tabs in five groups: Agency (General, Working calendar), Sales & money (Pipeline, Services & pricing, Documents & billing, Tax & numbering), People & work (Team, Departments, Onboarding, Assets), AI & connections (Zen assistant, Email, Integrations) and Records (Activity, Usage, Trash). A link opens a tab: /settings?tab=<key>, where the key is organisation, calendar, pipeline, pricing, proforma, documents, team, departments, onboarding, assets, zen, email, integrations, activity, usage or trash. Without one it opens on General.
 
 ### Settings → General
 
@@ -421,7 +414,7 @@ Management only.
 
 ### Settings → Email
 
-The mail server (server, port, username, password), and the from name and address. Use "Send a test to me" to check it. Without it, Flowzen hands over links to pass on instead. The 08:00 digest, approval chasers and calendar emails need it.
+The mail server (server, port, username, password), and the from name and address. Use "Send a test to me" to check it. Without it, Flowzen hands over links to pass on instead. The 08:00 digest and calendar emails need it.
 
 ### Settings → Integrations
 
@@ -446,13 +439,6 @@ A read-only list of who is here. Inviting and access happen on Team.
   - anyone with no department;
   - departments with no head;
   - people with Department head access who lead no department, and so still see everyone.
-
-### Settings → Approvals
-
-- **Chasing a stuck approval:** "Remind after" (default 2 hours) and "Escalate after" (default 4 hours), in working time.
-- **Who approves:**
-  - "Approvers for all work" (any one is enough) and "Escalate to".
-  - With no approvers, no task can be ticked "Needs approval".
 
 ### Settings → Assets
 
@@ -499,8 +485,7 @@ Shown only when Settings → Integrations has it on. Per person and per device:
 - **Android:** works in Chrome.
 - **iPhone (iOS 16.4 or later):** works only when Flowzen is on the Home Screen. Tap Share → Add to Home Screen, open Flowzen from there, then turn this on. In a Safari tab the card shows these steps instead of the button.
 - **Blocked:** if the browser's permission was refused, allow notifications for Flowzen in the browser's site settings, then turn it on again.
-- **What is sent**, each its own switch: Approvals (on), Calendar (on), My tasks (on), Everything in my bell (off — it can be a lot).
-  - Approvals: work waiting for you to approve, its 2-hour reminder and escalation, and approved / changes requested on work you sent.
+- **What is sent**, each its own switch: Calendar (on), My tasks (on), Everything in my bell (off — it can be a lot).
   - Calendar: you were booked, moved, removed or cancelled, and the morning of a meeting or shoot.
   - My tasks: a task someone else gave you, or whose due date they changed.
 - **Never** about something you did yourself. One event is one notification.
@@ -581,7 +566,7 @@ For a Prospect, use "Add sample" instead. Sample work has no billing, but its co
   - Everyone listed is on the task; the first is the lead. Only Team work holders can assign other people.
   - A due date is required; a time is optional.
   - Priority: Low, Medium, High or Urgent.
-  - Optional: Repeat, Type of work, Needs approval.
+  - Optional: Repeat, Type of work.
 - **"Assigned by" vs "Added by":** "Assigned by" is who asked for the work; "Added by" is who typed it in.
 - **On hold:** set the status to On hold. It records "waiting on the client", and that time is taken out of the task's elapsed time. Any other status resumes it.
 - **Done and reopening:** "Done" finishes a task. Moving a Done or Cancelled task back to To do or In progress counts as a reopen.
@@ -590,12 +575,7 @@ For a Prospect, use "Add sample" instead. Sample work has no billing, but its co
   - A finished task cannot be deleted; cancel it instead.
 
 ## Approvals
-1. With "Needs approval" ticked, the person doing the work opens the task → "Send for approval", with a link to the work and a note. The task goes to In review. They can share it with "Send on WhatsApp" or "Copy message".
-2. Any one approver presses "Approve" (the task becomes Done) or "Request changes" (with what needs changing; the task goes back to In progress).
-3. Other approvers can use "Add my changes" while it is back with the editor.
-4. Nobody approves a task they are on.
-5. While a task is In review, its type and approval tick are locked.
-6. **Chasing:** after "Remind after" of working time (default 2 hours), approvers get a bell alert and an email. After "Escalate after" (default 4 hours), it escalates to the approvers and the escalation people. A new round restarts the clock.
+Flowzen has no task approval step any more (removed 28 Oct 2026). A task is finished by marking it Done. There is no "Needs approval" tick, no "Send for approval", no approvers to set, and no In review status; tasks that were waiting on an approver went back to In progress.
 
 ## Assets: hand over and get back
 1. [Assets](/assets) → the item → "Check out" (who, condition, due back, what for, project) or "Assign" (long-term).
@@ -652,7 +632,7 @@ A retainer month's fee and a project's whole contract value are different kinds 
   - Cash Kept % = net ÷ Cash in: green at 20% or more, red below 0.
 
 ## Alerts (the bell)
-The scanner checks hourly and clears an alert once its condition stops. An alert's message and severity are fixed when it is first raised. Each person sees the alerts their permissions open, their own tasks' alerts, and approval and calendar alerts meant for them. A Head sees team alerts only about their own people.
+The scanner checks hourly and clears an alert once its condition stops. An alert's message and severity are fixed when it is first raised. Each person sees the alerts their permissions open, their own tasks' alerts, and calendar alerts meant for them. A Head sees team alerts only about their own people.
 
 - **Sales** (pipeline access):
   - **Proposal stalled:** Proposal Sent or In Negotiation with no contact for more than 5 days, counted from the last touch (a logged call or message counts). It is high after 10 days, and creates a "Follow up — {client} proposal" task for the owner.
@@ -663,7 +643,7 @@ The scanner checks hourly and clears an alert once its condition stops. An alert
   - **Retainer expiring:** renewal within 45 days, including dates already passed. It is high within 15 days.
   - **Retainer has no contract:** an active retainer with no term.
 - **Team** (team work, plus your own tasks):
-  - **Task overdue:** past due, and not Done, Cancelled or In review.
+  - **Task overdue:** past due, and not Done or Cancelled.
   - **Task on hold:** waiting on the client more than 5 days.
   - **Task aging:** open longer (in working time, less waiting) than twice the usual time for tasks with the same title. It needs 3 finished examples.
   - **Over-allocated:** a person's time split for this month is over 100%.
@@ -682,9 +662,6 @@ The scanner checks hourly and clears an alert once its condition stops. An alert
   - **Asset held by someone switched off.**
   - **Repair:** open more than 14 days.
   - **Warranty:** ending within 30 days.
-- **Approvals:**
-  - **Reminder:** to the approvers.
-  - **Escalated:** to the approvers and the escalation people.
 - **Calendar:** booked, moved or cancelled, and today's events, to the people on them.
 
 An email digest of each person's open alerts goes at 08:00 IST, only when something is open and email is set up.
@@ -692,10 +669,10 @@ An email digest of each person's open alerts goes at 08:00 IST, only when someth
 ## Working hours, elapsed time and "overdue"
 - **Working time** uses the working calendar in Settings (default 10:00–19:00, Monday–Saturday, minus holidays), in IST. A working day is 9 hours.
 - **A task's elapsed time:**
-  - It runs from when the task was assigned to when it was finished. While it is In review, it runs only up to when it was sent for approval.
-  - Time on hold or waiting for approval is taken off.
+  - It runs from when the task was assigned to when it was finished.
+  - Time on hold is taken off.
   - Shown as hours and minutes. "usually ~X" is the typical time for tasks with the same title.
-- **Overdue:** past the due date and not finished. My Work, All tasks, Team and alerts do not count In review tasks as overdue, because those are with the approver. The calendar does.
+- **Overdue:** past the due date and not finished.
 - **Open:** on All tasks and project lists, "Open" is To do + In progress. Team's "Open Tasks" also includes On hold.
 
 ## Repeating tasks
@@ -704,7 +681,7 @@ An email digest of each person's open alerts goes at 08:00 IST, only when someth
   - A daily repeat makes the next copy once the current one is done.
   - Weekly and monthly repeats make it 3 days before it is due.
   - A copy that would fall on a day off moves to the next working day.
-- **What a copy carries:** the title, people, type, approval tick, priority and notes.
+- **What a copy carries:** the title, people, type, priority and notes.
 - **It stops by itself when:**
   - every copy is deleted;
   - the retainer stops;
@@ -733,7 +710,6 @@ Management only. Zen can look up:
 - team load by department;
 - assets;
 - open alerts, by rule;
-- approvals waiting now, and the last 7 or 30 days;
 - outreach leads and when they were last touched;
 - the cost register;
 - the forecast;

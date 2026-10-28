@@ -7,7 +7,6 @@ import { prisma } from '../lib/prisma.js';
 import { signJwt } from '../utils/jwt.js';
 import { briefDetails, composeMondayBrief, forgetTrends, resolveWeek, trendsFor, weeksFor } from './brief.js';
 import { generateBriefSummary } from '../services/briefSummary.js';
-import { composeApprovalsReport } from '../services/approvalsReport.js';
 import { sendMondayBriefs } from '../workers/brief.cron.js';
 import { sendMail } from '../utils/mailer.js';
 import { gemini } from '../services/ai/gemini.js';
@@ -22,22 +21,6 @@ import { gemini } from '../services/ai/gemini.js';
  * server's zone instead of the studio's gets them wrong.
  */
 
-vi.mock('../services/approvalsReport.js', () => ({
-  composeApprovalsReport: vi.fn(async (_org: string, range: { from: Date }) => ({
-    byType: [
-      {
-        taskType: 'VIDEO',
-        taskTypes: ['DESIGN', 'VIDEO'],
-        allWork: true,
-        // Last week decided 5, the week before 3.
-        decided: range.from.toISOString() === '2026-09-27T18:30:00.000Z' ? 5 : 3,
-        medianDecisionMinutes: 95,
-        onTime: 4,
-        escalated: 1,
-      },
-    ],
-  })),
-}));
 vi.mock('../services/usageSummary.js', async (orig) => ({
   ...(await orig<object>()),
   notUsingLastWeek: vi.fn(async () => ({
@@ -115,8 +98,6 @@ const DONE = [
 const OPEN = [
   // Overdue, two Video people on it — counted once for Video.
   { status: 'TODO', dueDate: day('2026-10-01'), waitingOn: null, assignees: [person('Video', 'Ravi'), person('Video', 'Shyam')], assignee: placed('Video') },
-  // Past due but waiting on an approver: in review, NOT overdue.
-  { status: 'IN_REVIEW', dueDate: day('2026-09-30'), waitingOn: null, assignees: [person('Video', 'Ravi')], assignee: placed('Video') },
   { status: 'ON_HOLD', dueDate: day('2026-10-20'), waitingOn: 'CLIENT', monthCardId: 'mc-1', assignees: [person('Design', 'Janani')], assignee: placed('Design') },
   { status: 'IN_PROGRESS', dueDate: day('2026-10-09'), waitingOn: null, assignees: [person('Design', 'Janani')], assignee: placed('Design') },
   // No assignee rows: falls back to the task's own assignee.
@@ -127,7 +108,6 @@ const ALERTS = [
   { id: 'a1', rule: 'INVOICE_OVERDUE', severity: 'MED', entityType: 'Invoice', entityId: 'inv-10', message: 'Invoice INV-10 for Acme is overdue (due date passed).', raisedAt: hoursAgo(4 * 24 + 2) },
   { id: 'a2', rule: 'INVOICE_AGING_60', severity: 'HIGH', entityType: 'Invoice', entityId: 'inv-70', message: 'Invoice INV-70 for Beta is overdue (>60 days).', raisedAt: hoursAgo(30 * 24) },
   { id: 'a3', rule: 'PROPOSAL_STALLED', severity: 'MED', entityType: 'Proposal', entityId: 'p-1', message: 'Proposal for Gamma has had no new version for 8 days.', raisedAt: hoursAgo(3 * 24) },
-  { id: 'a4', rule: 'APPROVAL_ESCALATED', severity: 'HIGH', entityType: 'Task', entityId: 't-rev', message: '"Reel cut" has waited 2 days for approval with no answer — Round 1, by Ravi.', raisedAt: hoursAgo(10) },
   { id: 'a5', rule: 'PROJECT_BEHIND_SCHEDULE', severity: 'MED', entityType: 'Project', entityId: 'pr-1', message: 'Site for Acme is 60% through its timeline but only 20% of tasks are done.', raisedAt: hoursAgo(24) },
   { id: 'a6', rule: 'RETAINER_EXPIRING', severity: 'MED', entityType: 'Retainer', entityId: 'r-1', message: 'Retainer for Delta renewing in 20 days.', raisedAt: hoursAgo(24) },
   { id: 'a7', rule: 'CLIENT_QUIET', severity: 'LOW', entityType: 'Company', entityId: 'c-q', message: 'Quiet Co has had no task activity, contact logged, or invoice in 21 days.', raisedAt: hoursAgo(48) },
@@ -166,18 +146,6 @@ function seed() {
   p.proposalVersion.count.mockImplementation(async ({ where }: any) => SENT.filter((x) => within(x.sentAt, where.sentAt)).length);
   p.task.findMany.mockImplementation(async ({ where }: any) => {
     if (where.status === 'DONE') return DONE.filter((x) => within(x.completedAt, where.completedAt));
-    if (where.id) {
-      return [
-        {
-          id: 't-rev',
-          title: 'Reel cut',
-          company: null,
-          project: null,
-          monthCard: { retainer: { company: { name: 'Acme' } } },
-          reviews: [{ submittedAt: hoursAgo(50) }],
-        },
-      ];
-    }
     return OPEN.filter((x) => where.status.in.includes(x.status));
   });
   p.peopleAllocation.groupBy.mockResolvedValue([
@@ -273,23 +241,12 @@ describe('composeMondayBrief', () => {
     expect(s.proposalsSent).toEqual({ last: 2, before: 1 });
     // Three done, two on time — the 00:30 IST finish is a day late.
     expect(s.tasksDone.last).toEqual({ count: 3, onTime: 2 });
-
-    // Approvals from the approvals report, for exactly last week in IST.
-    expect(s.approvals).toEqual([
-      {
-        group: 'All work',
-        last: { decided: 5, medianDecisionMinutes: 95, onTime: 4, escalated: 1 },
-        before: { decided: 3, medianDecisionMinutes: 95, onTime: 4, escalated: 1 },
-      },
-    ]);
-    const ranges = vi.mocked(composeApprovalsReport).mock.calls.map((c) => [c[1].from.toISOString(), c[1].to.toISOString()]);
-    expect(ranges).toContainEqual(['2026-09-27T18:30:00.000Z', '2026-10-04T18:29:59.999Z']);
   });
 
   it('groups the open alerts the way the bell has them, enriched in batches', async () => {
     const brief = await composeMondayBrief('org-1', { now: NOW });
     const groups = Object.fromEntries(brief.needsAction.map((g) => [g.group, g.items]));
-    expect(Object.keys(groups)).toEqual(['Money to collect', 'Sales follow-ups', 'Stuck approvals']);
+    expect(Object.keys(groups)).toEqual(['Money to collect', 'Sales follow-ups']);
 
     // The invoice ten days late is there — the old brief only showed 30+.
     expect(groups['Money to collect']).toEqual([
@@ -306,12 +263,6 @@ describe('composeMondayBrief', () => {
       }),
     ]);
     expect(groups['Sales follow-ups'][0]).toMatchObject({ clientName: 'Gamma', amount: 120000, ownerName: 'Tanuja', link: '/quotations' });
-
-    // A stuck approval: the video, its client, how long — and never the editor.
-    const stuck = groups['Stuck approvals'][0];
-    expect(stuck).toMatchObject({ title: 'Reel cut — waiting 2 days', clientName: 'Acme', link: '/my-work?task=t-rev' });
-    expect(stuck.ownerName).toBeUndefined();
-    expect(JSON.stringify(brief.needsAction)).not.toContain('Ravi');
 
     expect(brief.risks).toEqual([
       { group: 'Delivery', items: [expect.objectContaining({ clientName: 'Acme', title: 'Site is 60% through its timeline but only 20% of tasks are done.', ownerName: 'Charles', link: '/projects/pr-1' })] },
@@ -345,21 +296,20 @@ describe('composeMondayBrief', () => {
     ]);
   });
 
-  it('counts the team by department, with no names, and an approval wait is not overdue', async () => {
+  it('counts the team by department, with no names', async () => {
     const { team } = await composeMondayBrief('org-1', { now: NOW });
     expect(team).toEqual([
       {
-        departmentId: 'd-design', dept: 'Design', active: 1, overdue: 0, dueThisWeek: 1, doneLastWeek: 1, waitingOnClient: 1, inReview: 0, overAllocatedPeople: 0,
-        segments: { overdue: 0, onTrack: 1, inReview: 0, waitingOnClient: 1 },
-      },
-      // Overdue 1, not 2: the IN_REVIEW task past its date is in review, not overdue.
-      {
-        departmentId: 'd-video', dept: 'Video', active: 1, overdue: 1, dueThisWeek: 0, doneLastWeek: 2, waitingOnClient: 0, inReview: 1, overAllocatedPeople: 1,
-        segments: { overdue: 1, onTrack: 0, inReview: 1, waitingOnClient: 0 },
+        departmentId: 'd-design', dept: 'Design', active: 1, overdue: 0, dueThisWeek: 1, doneLastWeek: 1, waitingOnClient: 1, overAllocatedPeople: 0,
+        segments: { overdue: 0, onTrack: 1, waitingOnClient: 1 },
       },
       {
-        departmentId: 'd-dev', dept: 'Development', active: 1, overdue: 0, dueThisWeek: 1, doneLastWeek: 0, waitingOnClient: 0, inReview: 0, overAllocatedPeople: 0,
-        segments: { overdue: 0, onTrack: 1, inReview: 0, waitingOnClient: 0 },
+        departmentId: 'd-video', dept: 'Video', active: 1, overdue: 1, dueThisWeek: 0, doneLastWeek: 2, waitingOnClient: 0, overAllocatedPeople: 1,
+        segments: { overdue: 1, onTrack: 0, waitingOnClient: 0 },
+      },
+      {
+        departmentId: 'd-dev', dept: 'Development', active: 1, overdue: 0, dueThisWeek: 1, doneLastWeek: 0, waitingOnClient: 0, overAllocatedPeople: 0,
+        segments: { overdue: 0, onTrack: 1, waitingOnClient: 0 },
       },
       // Accounts has nothing, so it is left out.
     ]);
@@ -442,7 +392,6 @@ describe('the Monday mail', () => {
     expect(html['boss@x']).toContain('Sneha (never)');
     expect(html['head@x']).not.toContain('Not using Flowzen');
     expect(html['head@x']).toContain('Needs your action');
-    expect(html['head@x']).toContain('/my-work?task=t-rev');
 
     // And an hour later, nothing more.
     expect(await sendMondayBriefs(ist('2026-10-05T08:00'))).toEqual({ sent: 0 });
@@ -464,7 +413,6 @@ describe('trends', () => {
     // Sunday 23:30 and Monday 00:15 IST both in the week of the 28th; Monday 5 Oct 00:30 IST in none of these.
     expect(values(t.proposalsSent)).toEqual([0, 0, 0, 0, 0, 0, 1, 2]);
     expect(values(t.tasksDone)).toEqual([0, 0, 0, 0, 0, 0, 0, 3]);
-    expect(t.approvals).toEqual([{ group: 'All work', points: weeks.map((w) => ({ weekStart: w, value: 95 })) }]);
 
     // The last point is the scoreboard's own number.
     const brief = await composeMondayBrief('org-1', { now: NOW });

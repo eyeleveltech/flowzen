@@ -31,9 +31,6 @@ function change(last: number, before: number): string {
   return `<span style="color:${up ? '#2f7a56' : '#a8402e'}">${up ? '▲' : '▼'}${pct}</span>`;
 }
 
-const minutesLabel = (m: number | null) =>
-  m === null ? '—' : m < 60 ? `${m} min` : m < 60 * 8 ? `${Math.round((m / 60) * 10) / 10} h` : `${Math.round((m / 480) * 10) / 10} working days`;
-
 /** The email: the same sections as the screen, every row a link into the app. */
 export function renderBriefHtml(orgName: string, brief: MondayBrief, appUrl: string): string {
   const money = (n: number) =>
@@ -54,16 +51,6 @@ export function renderBriefHtml(orgName: string, brief: MondayBrief, appUrl: str
     ${tile('Deals won', `${s.dealsWon.last.count} · ${money(s.dealsWon.last.value)}`, change(s.dealsWon.last.value, s.dealsWon.before.value))}
     ${tile('Proposals sent (incl. revisions)', String(s.proposalsSent.last), change(s.proposalsSent.last, s.proposalsSent.before))}
     ${tile('Tasks done', String(s.tasksDone.last.count), change(s.tasksDone.last.count, s.tasksDone.before.count), onTimePct(s.tasksDone.last))}
-    ${s.approvals
-      .map((a) =>
-        tile(
-          `Approvals · ${a.group}`,
-          `typical ${minutesLabel(a.last.medianDecisionMinutes)} · ${a.last.escalated} escalated`,
-          a.before ? change(a.last.decided, a.before.decided) : '',
-          ` <span style="color:#666">(${a.last.decided} decided)</span>`,
-        ),
-      )
-      .join('')}
   </table>`;
 
   const rowLine = (r: AlertRow) =>
@@ -135,7 +122,6 @@ export function renderBriefHtml(orgName: string, brief: MondayBrief, appUrl: str
               `${t.active} active`,
               `${t.dueThisWeek} due this week`,
               `${t.doneLastWeek} done last week`,
-              t.inReview ? `${t.inReview} in review` : '',
               t.waitingOnClient ? `${t.waitingOnClient} waiting on client` : '',
               t.overAllocatedPeople ? `${t.overAllocatedPeople} over-allocated` : '',
             ]

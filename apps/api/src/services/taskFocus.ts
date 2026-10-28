@@ -9,7 +9,7 @@ import { prisma } from '../lib/prisma.js';
  * no time is kept with it, nothing is logged about it, and it is not ranked.
  *
  * It ends itself when the task stops being something to work on — finished,
- * cancelled, sent for approval, put on hold, deleted — or when the person is
+ * cancelled, put on hold, deleted — or when the person is
  * taken off it. The routes that do those things call `clearFocusOn` /
  * `clearFocusOff`; every read also checks `isLiveFocus`, so a path that forgets
  * (a status changed some other way) shows nothing rather than a stale "Now".
@@ -19,7 +19,7 @@ import { prisma } from '../lib/prisma.js';
 export const FOCUS_STATUSES: TaskStatus[] = [TaskStatus.TODO, TaskStatus.IN_PROGRESS];
 
 /** The statuses that end it. */
-export const ENDS_FOCUS: TaskStatus[] = [TaskStatus.DONE, TaskStatus.CANCELLED, TaskStatus.IN_REVIEW, TaskStatus.ON_HOLD];
+export const ENDS_FOCUS: TaskStatus[] = [TaskStatus.DONE, TaskStatus.CANCELLED, TaskStatus.ON_HOLD];
 
 /** Whoever is on this task now isn't any more — it has moved out of reach. */
 export function clearFocusOn(taskId: string) {
@@ -54,8 +54,6 @@ export function focusRefusal(task: { status: TaskStatus | string }): string | nu
       return 'This task is already done.';
     case TaskStatus.CANCELLED:
       return 'This task was cancelled.';
-    case TaskStatus.IN_REVIEW:
-      return "This task is waiting for approval, so it isn't yours to work on right now.";
     case TaskStatus.ON_HOLD:
       return 'This task is on hold. Take it off hold first.';
     default:

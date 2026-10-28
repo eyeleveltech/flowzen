@@ -4,7 +4,7 @@
  * My Department — a department head's one place for their people and
  * everything those people are working on (Department head page plan).
  *
- * People · Work · Calendar · Approvals · Equipment · Time split, under a header
+ * People · Work · Calendar · Equipment · Time split, under a header
  * with the department, how many people, and what needs attention. It replaced
  * Team → Board, which showed task counts and nothing else.
  *
@@ -39,18 +39,16 @@ import { PeopleTab } from '@/components/department/PeopleTab';
 import { PersonPanel } from '@/components/department/PersonPanel';
 import { WorkTab } from '@/components/department/WorkTab';
 import { CalendarTab } from '@/components/department/CalendarTab';
-import { ApprovalsTab } from '@/components/department/ApprovalsTab';
 import { EquipmentTab } from '@/components/department/EquipmentTab';
 import { TimeSplitTab, useDepartmentAllocations } from '@/components/department/TimeSplitTab';
 import { TASK_STATUS_OPTIONS, statusLabel, toDrawerTask } from '@/components/department/boardBits';
 
-type Tab = 'people' | 'work' | 'calendar' | 'approvals' | 'equipment' | 'time-split';
+type Tab = 'people' | 'work' | 'calendar' | 'equipment' | 'time-split';
 
 const TABS: TabDef<Tab>[] = [
   { key: 'people', label: 'People' },
   { key: 'work', label: 'Work' },
   { key: 'calendar', label: 'Calendar' },
-  { key: 'approvals', label: 'Approvals' },
   { key: 'equipment', label: 'Equipment' },
   { key: 'time-split', label: 'Time split' },
 ];
@@ -193,7 +191,6 @@ function MyDepartment() {
           )}
           {tab === 'work' && <WorkTab departmentId={departmentId} />}
           {tab === 'calendar' && <CalendarTab overview={overview} timezone={config?.organization.timezone ?? 'Asia/Kolkata'} />}
-          {tab === 'approvals' && <ApprovalsTab departmentId={departmentId} onOpenTask={setOpenTaskId} />}
           {tab === 'equipment' && <EquipmentTab overview={overview} />}
           {tab === 'time-split' && (
             <TimeSplitTab departmentId={departmentId} departmentName={overview.department.name} month={overview.month} />

@@ -2,7 +2,7 @@ import { googleConfigured } from '../services/googleCalendar.js';
 import { pushConfigured } from '../services/push.js';
 import { Router, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
-import { TaskType, type Prisma } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { forgetWorkCalendar } from '../utils/workCalendar.js';
 import { buildSellerSnapshot, resolveState, sellerBlockGaps } from '../services/documentModel.js';
@@ -12,7 +12,6 @@ import { resolveMailConfig, sendMail } from '../utils/mailer.js';
 import { escapeHtml } from '../utils/html.js';
 import { AI_PROVIDER_IDS } from '../services/ai/index.js';
 import { AREAS, areaWhere, dayStartIn, describe, resolveSubjects } from '../services/activityLog.js';
-import { approverFor, escalateFor, minutesLabel, TASK_TYPE_LABEL } from '../services/taskApprovals.js';
 import { departmentsHeadedBy } from '../services/departmentPage.js';
 
 export const configRouter = Router();
@@ -199,13 +198,6 @@ configRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction
         // What the client gates on. `role`/`roles` used to ride along here as
         // well, for a ladder nothing scores against any more.
         permissions: req.user!.permissions,
-        // The task types this person approves — what puts "Waiting for your
-        // approval" on their My Work and a count on its nav item. Empty for
-        // almost everybody.
-        approverFor: await approverFor(orgId, req.user!.userId),
-        // The types whose stuck approvals escalate to them — once a round
-        // escalates it shows in their queue too.
-        escalateFor: await escalateFor(orgId, req.user!.userId),
         // The departments they head, for My Department's switcher.
         headOf: await departmentsHeadedBy(orgId, req.user!.userId),
       },
@@ -619,202 +611,6 @@ configRouter.patch(
           bankAccountNumber: updated.bankAccountNumber,
           bankIfscCode: updated.bankIfscCode,
         },
-      });
-    } catch (e) {
-      next(e);
-    }
-  },
-);
-
-// ── Who approves what ───────────────────────────────────────────────────────
-//
-// Settings → Approvals. For each task type, the people who can sign it off;
-// any one of them is enough. A task can only be marked "Needs approval" when
-// its type has at least one.
-//
-// Read by everybody — every task form needs it to decide whether the "Needs
-// approval" tick is available — and written by admins only.
-//
-// The same screen holds the chaser's settings: how long a task waits before
-// the approvers are reminded and before it escalates (working minutes, one
-// pair for the org), and who each type escalates to.
-
-configRouter.get('/approvers', async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const orgId = req.user!.organizationId;
-    const [rows, escalationRows, org] = await Promise.all([
-      prisma.taskApprover.findMany({
-        where: { organizationId: orgId, user: { active: true } },
-        orderBy: { user: { name: 'asc' } },
-        select: { taskType: true, user: { select: { id: true, name: true } } },
-      }),
-      prisma.approvalEscalationContact.findMany({
-        where: { organizationId: orgId, user: { active: true } },
-        orderBy: { user: { name: 'asc' } },
-        select: { taskType: true, user: { select: { id: true, name: true } } },
-      }),
-      prisma.organization.findUnique({
-        where: { id: orgId },
-        select: { approvalRemindMinutes: true, approvalEscalateMinutes: true },
-      }),
-    ]);
-    // Every type, empty ones included, so the screen can draw one row each.
-    const empty = () => Object.fromEntries(Object.values(TaskType).map((t) => [t, [] as { id: string; name: string }[]]));
-    const byType = empty();
-    for (const r of rows) byType[r.taskType].push(r.user);
-    const escalation = empty();
-    for (const r of escalationRows) escalation[r.taskType].push(r.user);
-    res.json({
-      success: true,
-      approvers: byType,
-      escalation,
-      remindMinutes: org?.approvalRemindMinutes ?? 120,
-      escalateMinutes: org?.approvalEscalateMinutes ?? 240,
-    });
-  } catch (e) {
-    next(e);
-  }
-});
-
-/**
- * One type's lists, or the org's two timings — whichever the screen saved.
- * Remind: 15 minutes to a working day. Escalate: after the reminder, within
- * two days.
- */
-const approversSchema = z
-  .object({
-    taskType: z.nativeEnum(TaskType).optional(),
-    /**
-     * One list for all work: the same approvers (and escalation people) on
-     * every task type at once — what Settings → Approvals saves. `taskType`
-     * still saves a single type.
-     */
-    allTypes: z.boolean().optional(),
-    userIds: z.array(z.string().min(1)).max(50).optional(),
-    escalationUserIds: z.array(z.string().min(1)).max(50).optional(),
-    remindMinutes: z.number().int().optional(),
-    escalateMinutes: z.number().int().optional(),
-  })
-  .superRefine((v, ctx) => {
-    const timings = v.remindMinutes !== undefined || v.escalateMinutes !== undefined;
-    const lists = Boolean(v.taskType || v.allTypes);
-    if (!lists && !timings) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Nothing to save.' });
-      return;
-    }
-    if (lists && !v.userIds && !v.escalationUserIds) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Pick the approvers or the escalation people.' });
-    }
-    if (!timings) return;
-    if (v.remindMinutes === undefined || v.escalateMinutes === undefined) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Set both the reminder and the escalation time.' });
-      return;
-    }
-    if (v.remindMinutes < 15 || v.remindMinutes > 1440) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Remind after has to be between 15 minutes and 1 day.' });
-    } else if (v.escalateMinutes <= v.remindMinutes) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Escalate after has to be later than the reminder.' });
-    } else if (v.escalateMinutes > 2880) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Escalate after can be at most 2 days.' });
-    }
-  });
-
-configRouter.put(
-  '/approvers',
-  requirePermission('setup.admin'),
-  async (req: AuthRequest, res: Response, next: NextFunction) => {
-    try {
-      const parsed = approversSchema.safeParse(req.body);
-      if (!parsed.success) {
-        res.status(400).json({ success: false, error: parsed.error.issues[0].message });
-        return;
-      }
-      const orgId = req.user!.organizationId;
-      const { taskType, allTypes, remindMinutes, escalateMinutes } = parsed.data;
-      const activity = (verb: string, payload: Record<string, unknown>) =>
-        prisma.activity.create({
-          data: { organizationId: orgId, entityType: 'Organization', entityId: orgId, actorId: req.user!.userId, verb, payload },
-        });
-
-      // The org's two timings.
-      if (remindMinutes !== undefined && escalateMinutes !== undefined) {
-        await prisma.organization.update({
-          where: { id: orgId },
-          data: { approvalRemindMinutes: remindMinutes, approvalEscalateMinutes: escalateMinutes },
-        });
-        await activity('approval_timings_updated', {
-          remind: minutesLabel(remindMinutes),
-          escalate: minutesLabel(escalateMinutes),
-        });
-      }
-
-      if (!taskType && !allTypes) {
-        res.json({ success: true, remindMinutes, escalateMinutes });
-        return;
-      }
-      // Every type at once, or the one asked for.
-      const types: TaskType[] = allTypes ? Object.values(TaskType) : [taskType!];
-      const scopeLabel = allTypes ? 'All work' : TASK_TYPE_LABEL[taskType!];
-
-      const approverIds = parsed.data.userIds ? [...new Set(parsed.data.userIds)] : null;
-      const escalationIds = parsed.data.escalationUserIds ? [...new Set(parsed.data.escalationUserIds)] : null;
-
-      // Everybody named has to be on this team and still here.
-      const named = [...new Set([...(approverIds ?? []), ...(escalationIds ?? [])])];
-      const people = await prisma.user.findMany({
-        where: { id: { in: named }, organizationId: orgId, active: true },
-        select: { id: true, name: true },
-      });
-      if (people.length !== named.length) {
-        res.status(400).json({ success: false, error: 'One of those people is not on the team, or has left.' });
-        return;
-      }
-      const nameOf = new Map(people.map((p) => [p.id, p.name]));
-      const listOf = (ids: string[]) =>
-        ids.map((id) => ({ id, name: nameOf.get(id)! })).sort((a, b) => a.name.localeCompare(b.name));
-
-      // Replace the lists: whoever is not named goes, whoever is stays — on
-      // every type in scope, together.
-      await prisma.$transaction([
-        ...(approverIds
-          ? [
-              prisma.taskApprover.deleteMany({
-                where: { organizationId: orgId, taskType: { in: types }, userId: { notIn: approverIds } },
-              }),
-              prisma.taskApprover.createMany({
-                data: types.flatMap((t) => approverIds.map((userId) => ({ organizationId: orgId, taskType: t, userId }))),
-                skipDuplicates: true,
-              }),
-            ]
-          : []),
-        ...(escalationIds
-          ? [
-              prisma.approvalEscalationContact.deleteMany({
-                where: { organizationId: orgId, taskType: { in: types }, userId: { notIn: escalationIds } },
-              }),
-              prisma.approvalEscalationContact.createMany({
-                data: types.flatMap((t) => escalationIds.map((userId) => ({ organizationId: orgId, taskType: t, userId }))),
-                skipDuplicates: true,
-              }),
-            ]
-          : []),
-      ]);
-
-      if (approverIds) {
-        await activity('approvers_updated', { taskType: scopeLabel, names: listOf(approverIds).map((p) => p.name) });
-      }
-      if (escalationIds) {
-        await activity('approval_escalation_updated', {
-          taskType: scopeLabel,
-          names: listOf(escalationIds).map((p) => p.name),
-        });
-      }
-
-      res.json({
-        success: true,
-        taskType: allTypes ? 'ALL' : taskType,
-        ...(approverIds ? { approvers: listOf(approverIds) } : {}),
-        ...(escalationIds ? { escalation: listOf(escalationIds) } : {}),
       });
     } catch (e) {
       next(e);

@@ -110,7 +110,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: 'Team', href: '/members', icon: Columns, needs: 'work.team', isPrimaryMobile: true },
       /*
        * A head's own page for their department — people, work, calendar,
-       * approvals, gear and the time split. `work.team` is what every head
+       * gear and the time split. `work.team` is what every head
        * holds (Department head and Management are the only presets a head can
        * have), and `headsOnly` keeps it to the people who actually head one.
        */

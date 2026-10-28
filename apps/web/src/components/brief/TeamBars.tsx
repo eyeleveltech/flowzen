@@ -3,11 +3,10 @@
 import type { BriefTeamRow } from '@/lib/api-v2';
 import { cn } from '@/lib/utils';
 
-/** The four pieces of open work, in the order the bar draws them. */
+/** The three pieces of open work, in the order the bar draws them. */
 const PIECES = [
   { key: 'overdue', label: 'Overdue', cls: 'bg-warning' },
   { key: 'onTrack', label: 'On track', cls: 'bg-primary/70' },
-  { key: 'inReview', label: 'In review', cls: 'bg-review' },
   { key: 'waitingOnClient', label: 'Waiting on client', cls: 'bg-info' },
 ] as const;
 
@@ -39,7 +38,7 @@ export function TeamBars({ rows }: { rows: BriefTeamRow[] }) {
             <div
               className="flex h-2.5 overflow-hidden rounded-full bg-subtle"
               role="img"
-              aria-label={`${r.dept}: ${r.segments.overdue} overdue, ${r.segments.onTrack} on track, ${r.segments.inReview} in review, ${r.segments.waitingOnClient} waiting on the client`}
+              aria-label={`${r.dept}: ${r.segments.overdue} overdue, ${r.segments.onTrack} on track, ${r.segments.waitingOnClient} waiting on the client`}
             >
               {PIECES.map((p) =>
                 r.segments[p.key] > 0 ? (
@@ -54,7 +53,6 @@ export function TeamBars({ rows }: { rows: BriefTeamRow[] }) {
             <span className="flex flex-wrap gap-x-3 text-xs tabular-nums text-secondary sm:justify-end">
               <span className={r.overdue > 0 ? 'font-medium text-warning-ink' : undefined}>{r.overdue} overdue</span>
               <span>{r.active} active</span>
-              {r.inReview > 0 && <span>{r.inReview} in review</span>}
               {r.waitingOnClient > 0 && <span>{r.waitingOnClient} waiting</span>}
               {r.overAllocatedPeople > 0 && (
                 <span className="text-warning-ink">

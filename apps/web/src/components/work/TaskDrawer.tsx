@@ -44,10 +44,6 @@ import { getPriorityBadge, getPriorityLabel } from '@/lib/priority';
 import { plural } from '@/lib/utils';
 import { personLine } from '@/lib/people';
 import { useTeamMembers } from '@/hooks/queries';
-import { NeedsApprovalField } from '@/components/work/NeedsApprovalField';
-import { ApprovalSection } from '@/components/work/Approval';
-import { statusChoices } from '@/components/retainers/task-shared';
-import type { LastReview } from '@/lib/api-v2';
 import { withDueTime } from '@/lib/due-time';
 import { DueTimeField } from '@/components/work/DueTimeField';
 import { Repeat as RepeatIcon } from 'lucide-react';
@@ -86,10 +82,6 @@ export type DrawerTask = {
   /** Who checks it before it counts as done. */
   reviewer?: { id: string; name: string; designation?: string | null } | null;
   taskType?: string | null;
-  /** Needs an approver's sign-off before it is done. */
-  needsApproval?: boolean;
-  /** The last round of approval, when there has been one. */
-  lastReview?: LastReview | null;
   /** Everything below is context the caller knows and the task row does not carry. */
   clientName?: string | null;
   clientHref?: string | null;
@@ -155,7 +147,6 @@ export function TaskDrawer({
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [assignedById, setAssignedById] = useState('');
   const [taskType, setTaskType] = useState('');
-  const [needsApproval, setNeedsApproval] = useState(false);
   const [dueDate, setDueDate] = useState('');
   const [dueTime, setDueTime] = useState('');
   const [repeat, setRepeat] = useState('');
@@ -195,7 +186,6 @@ export function TaskDrawer({
     setAssigneeIds(taskProp?.assignees?.map((a) => a.id) ?? (taskProp?.assignee ? [taskProp.assignee.id] : []));
     setAssignedById(taskProp?.assignedBy?.id ?? taskProp?.creator?.id ?? '');
     setTaskType(taskProp?.taskType ?? '');
-    setNeedsApproval(Boolean(taskProp?.needsApproval));
     setDueDate(dateValue(taskProp?.dueDate));
     setDueTime(taskProp?.dueTime ?? '');
     setRepeat(isRepeating(taskProp?.repeat) ? taskProp!.repeat!.frequency : '');
@@ -237,10 +227,9 @@ export function TaskDrawer({
         priority,
         notes: notes.trim() || null,
         ...(assignedById ? { assignedById } : {}),
-        // The Reviewer picker is gone — approval replaced it — so the field is
-        // left as it is rather than cleared by every save.
+        // The Reviewer picker is gone, so the field is left as it is rather
+        // than cleared by every save.
         taskType: taskType || null,
-        ...(needsApproval !== Boolean(task.needsApproval) ? { needsApproval } : {}),
         ...(task.workType === 'INTERNAL' ? { internalProjectId: internalProjectId || null } : {}),
         // Sent whenever there is a set. The server refuses a reassignment from
         // somebody who may not make one, which is the check that counts.
@@ -260,7 +249,6 @@ export function TaskDrawer({
         priority,
         notes: notes.trim() || null,
         taskType: row?.taskType ?? (taskType || null),
-        needsApproval: row?.needsApproval ?? needsApproval,
         ...(task.workType === 'INTERNAL' ? { internalProjectId: internalProjectId || null } : {}),
         ...(team.length > 0 ? { assignees: team, assignee: team[0] } : {}),
         ...(assignedById && person(assignedById) ? { assignedBy: person(assignedById) } : {}),
@@ -361,17 +349,6 @@ export function TaskDrawer({
                 onChange={setTaskType}
                 placeholder="Not set"
                 options={TASK_TYPE_OPTIONS}
-                disabled={task.status === 'IN_REVIEW'}
-              />
-              <NeedsApprovalField
-                taskType={taskType}
-                value={needsApproval}
-                onChange={setNeedsApproval}
-                lockedReason={
-                  task.status === 'IN_REVIEW'
-                    ? "It's waiting for approval — its type and approval can't change until it's decided."
-                    : undefined
-                }
               />
               {/* The same choice as the New task form: an internal project, or No project. */}
               {task.workType === 'INTERNAL' && internalProjects.length > 0 && (
@@ -428,12 +405,10 @@ export function TaskDrawer({
             <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
               <div>
                 <Eyebrow>Status</Eyebrow>
-                {/* In review offers only where it is and Cancel; a task that
-                    needs approval never offers Done — Approve does that. */}
                 <Select
                   value={task.status}
                   onChange={(v) => onStatusChange(task, v)}
-                  options={statusChoices(statusOptions, task)}
+                  options={statusOptions}
                   ariaLabel="Status"
                   disabled={busy}
                   className="mt-1.5 w-full"
@@ -448,10 +423,6 @@ export function TaskDrawer({
                   }}
                 />
               </div>
-
-              {(task.needsApproval || task.status === 'IN_REVIEW' || task.lastReview) && (
-                <ApprovalSection taskId={task.id} onChanged={onChanged} />
-              )}
 
               <Card padding="none" className="overflow-hidden">
                 <dl className="divide-y divide-border text-sm">

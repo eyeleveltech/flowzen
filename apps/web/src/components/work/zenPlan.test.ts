@@ -67,7 +67,7 @@ describe('a grouped step’s result', () => {
   });
 
   it('is the server’s own words for a single refusal', () => {
-    expect(summarise([{ ok: false, error: 'This task needs approval.' }])).toEqual({ ok: false, text: 'This task needs approval.' });
+    expect(summarise([{ ok: false, error: 'September 2026 is closed.' }])).toEqual({ ok: false, text: 'September 2026 is closed.' });
   });
 
   it('fails only when nothing went through', () => {
@@ -90,7 +90,8 @@ describe('what a card may send', () => {
     // A new task, from a card of several.
     expect(zenRequestAllowed({ method: 'POST', path: '/tasks' })).toBe(true);
     expect(zenRequestAllowed({ method: 'POST', path: '/tasks/bulk' })).toBe(false);
-    expect(zenRequestAllowed({ method: 'POST', path: '/tasks/t1/approve' })).toBe(true);
+    // Task approval is gone, and so are its routes.
+    expect(zenRequestAllowed({ method: 'POST', path: '/tasks/t1/approve' })).toBe(false);
     expect(zenRequestAllowed({ method: 'POST', path: '/calendar/events' })).toBe(true);
     expect(zenRequestAllowed({ method: 'POST', path: '/proposals/p1/win' })).toBe(true);
   });

@@ -3,7 +3,6 @@ import { logger } from '../utils/logger.js';
 import { resolvePermissions, type UserSession } from '../middleware/auth.js';
 import { alertClausesFor } from '../routes/notifications.js';
 import { EXTERNAL_RULES } from './alertRules.js';
-import { approvalType, approverIds } from './taskApprovals.js';
 import { linkForUser, taskLink } from '../utils/recordLink.js';
 import { addDays, isWorkingDay, loadWorkCalendar, nextWorkingDay, type WorkCalendar } from '../utils/workCalendar.js';
 import { localDayAndTime, zonedToUtc } from '../utils/zonedTime.js';
@@ -17,8 +16,7 @@ import { localDayAndTime, zonedToUtc } from '../utils/zonedTime.js';
  * push is about.
  *
  * Every helper below is called from the place the thing already happens (the
- * approval routes, the chaser, the calendar's booking mails, the task routes,
- * the scanner), as one line. Each one swallows its own errors: telling people
+ * calendar's booking mails, the task routes, the scanner), as one line. Each one swallows its own errors: telling people
  * is best effort, and the save it follows has already committed.
  *
  * The rules, in the order `queuePushFor` applies them:
@@ -31,21 +29,19 @@ import { localDayAndTime, zonedToUtc } from '../utils/zonedTime.js';
  *     times, or by however many paths, it is queued.
  */
 
-export type PushKind = 'APPROVALS' | 'CALENDAR' | 'TASKS' | 'BELL' | 'SUMMARY' | 'TEST';
+export type PushKind = 'CALENDAR' | 'TASKS' | 'BELL' | 'SUMMARY' | 'TEST';
 
 /** Which preference switch each kind answers to. A summary or a test answers to none. */
 const PREF_FIELD = {
-  APPROVALS: 'pushApprovals',
   CALENDAR: 'pushCalendar',
   TASKS: 'pushTasks',
   BELL: 'pushBell',
 } as const;
 
-export type PushPreferences = { pushApprovals: boolean; pushCalendar: boolean; pushTasks: boolean; pushBell: boolean };
+export type PushPreferences = { pushCalendar: boolean; pushTasks: boolean; pushBell: boolean };
 
 /** The schema's own defaults, for a person who has never changed them (no row). */
 export const DEFAULT_PREFERENCES: PushPreferences = {
-  pushApprovals: true,
   pushCalendar: true,
   pushTasks: true,
   pushBell: false,
@@ -219,70 +215,6 @@ export const queuePush = (
 
 type Actor = Pick<UserSession, 'userId' | 'organizationId' | 'name'>;
 
-/** Sent for approval: the type's approvers, never the people on the task. */
-export async function pushReviewSubmitted(
-  actor: Actor,
-  task: { id: string; title: string; taskType: Parameters<typeof approvalType>[0]; assignees: { userId: string }[] },
-  reviewId: string,
-): Promise<void> {
-  try {
-    const onIt = new Set(task.assignees.map((a) => a.userId));
-    const approvers = (await approverIds(actor.organizationId, approvalType(task.taskType))).filter((id) => !onIt.has(id));
-    await queuePushFor(
-      actor.organizationId,
-      approvers,
-      actor.userId,
-      'APPROVALS',
-      `review:${reviewId}:submitted`,
-      'Waiting for your approval',
-      `${task.title} · from ${actor.name}`,
-      taskLink(task.id),
-    );
-  } catch (e) {
-    logger.warn(`Approval push not queued for ${task.id}: ${e instanceof Error ? e.message : e}`);
-  }
-}
-
-/** Approved, or changes requested: whoever sent it for approval. */
-export function pushReviewDecided(
-  actor: Actor,
-  task: { id: string; title: string },
-  review: { id: string; submittedById: string },
-  approved: boolean,
-  feedback: string | null,
-): Promise<number> {
-  return queuePushFor(
-    actor.organizationId,
-    [review.submittedById],
-    actor.userId,
-    'APPROVALS',
-    `review:${review.id}:decided`,
-    `${approved ? 'Approved' : 'Changes requested'}: ${task.title}`,
-    feedback ? `${actor.name}: ${feedback}` : `by ${actor.name}`,
-    taskLink(task.id),
-  );
-}
-
-/** The chaser's reminder and escalation, to the people it mails. */
-export function pushApprovalChase(
-  organizationId: string,
-  people: string[],
-  round: { id: string; task: { id: string; title: string } },
-  what: 'REMINDER' | 'ESCALATED',
-  waited: string,
-): Promise<number> {
-  return queuePushFor(
-    organizationId,
-    people,
-    null,
-    'APPROVALS',
-    `review:${round.id}:${what === 'ESCALATED' ? 'escalated' : 'reminded'}`,
-    what === 'ESCALATED' ? 'Approval escalated' : 'Still waiting for your approval',
-    `${round.task.title} · waited ${waited}`,
-    taskLink(round.task.id),
-  );
-}
-
 /**
  * The calendar's booking mails — booked, removed, moved, cancelled — as a
  * push. The mail's subject is the title; the rest of its sentence, the line.
@@ -429,7 +361,7 @@ export const RULE_TITLE: Record<string, string> = {
 /**
  * New bell alerts, for each person with "Everything in my bell" on — exactly
  * the alerts their bell would show them (`alertClausesFor`), less the
- * approval and calendar ones, which have kinds of their own.
+ * calendar ones, which have a kind of their own.
  */
 export async function pushNewAlerts(organizationId: string, alertIds: string[]): Promise<void> {
   try {

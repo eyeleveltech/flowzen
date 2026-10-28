@@ -16,7 +16,7 @@ import { Fragment, useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { DragDropContext, Droppable, Draggable, type BeforeCapture, type DropResult } from '@hello-pangea/dnd';
 import { plural } from '@/lib/utils';
-import { api, formatDate, ApiError } from '@/lib/api-v2';
+import { api, ApiError } from '@/lib/api-v2';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select } from '@/components/ui/select';
@@ -24,14 +24,8 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { usePageHeader } from '@/hooks/usePageHeader';
 import { useCreateFlag } from '@/hooks/useCreateFlag';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ApprovalQueue } from '@/components/work/ApprovalQueue';
-import { ApprovalDrawer } from '@/components/work/ApprovalDrawer';
-import { StuckApproval } from '@/components/work/Approval';
 import { InlineDueDate } from '@/components/work/InlineDueDate';
 import { changeTaskStatus, waitingWords } from '@/lib/task-status';
-import { statusChoices } from '@/components/retainers/task-shared';
-import { Badge } from '@/components/ui/badge';
-import type { LastReview } from '@/lib/api-v2';
 import { getPriorityDot, getPriorityLabel } from '@/lib/priority';
 import { StatTile, StatRow } from '@/components/ui/stat-tile';
 import { TaskDrawer, type DrawerTask } from '@/components/work/TaskDrawer';
@@ -49,7 +43,7 @@ import { ColumnFilter, ColumnTextFilter } from '@/components/ui/column-filter';
 import { NO_FILTERS, filterOptions, isFiltering, matchesFilters, type MyWorkFilters } from '@/lib/myWorkFilters';
 
 
-type TStatus = 'TODO' | 'IN_PROGRESS' | 'IN_REVIEW' | 'ON_HOLD' | 'DONE' | 'CANCELLED';
+type TStatus = 'TODO' | 'IN_PROGRESS' | 'ON_HOLD' | 'DONE' | 'CANCELLED';
 
 type Person = { id: string; name: string; designation: string | null };
 
@@ -84,12 +78,6 @@ interface TaskItem {
   workingMinutes: number;
   typeMedianMinutes: number | null;
   typeMedianText: string | null;
-  /** Needs an approver's sign-off before it is done. */
-  needsApproval?: boolean;
-  /** The last round of approval — what "Changes requested" and its feedback come from. */
-  lastReview?: LastReview | null;
-  /** How long the waiting round has waited, in working time. */
-  reviewWaitingText?: string | null;
   /** The repeat, if it is a copy in one — the small mark beside the title. */
   repeat?: TaskRepeatInfo | null;
 }
@@ -138,11 +126,9 @@ type Buckets = {
   today: TaskItem[];
   thisWeek: TaskItem[];
   later: TaskItem[];
-  /** Sent for approval, waiting on an approver — out of this person's hands. */
-  inReview: TaskItem[];
   completed: TaskItem[];
 };
-const EMPTY_BUCKETS: Buckets = { overdue: [], today: [], thisWeek: [], later: [], inReview: [], completed: [] };
+const EMPTY_BUCKETS: Buckets = { overdue: [], today: [], thisWeek: [], later: [], completed: [] };
 
 /** Today on this computer's calendar, as "2026-10-26" — the date the due filter reads from. */
 const localDayKey = () => {
@@ -273,7 +259,7 @@ export default function MyWorkPage() {
     },
     [buckets, queryClient, refetch],
   );
-  const counts = { today: 0, overdue: 0, thisWeek: 0, later: 0, inReview: 0, completed: 0, ...(data?.counts ?? {}) };
+  const counts = { today: 0, overdue: 0, thisWeek: 0, later: 0, completed: 0, ...(data?.counts ?? {}) };
   const [busyId, setBusyId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [selected, setSelected] = useState<TaskItem | null>(null);
@@ -293,39 +279,46 @@ export default function MyWorkPage() {
   const [folded, setFolded] = useState<Set<string>>(() => new Set());
 
   /*
-   * /my-work?task=… — the WhatsApp approval link.
+   * /my-work?task=… — the link the bell, the brief and Zen give a task.
    *
-   * A task on this person's own list opens in the usual drawer. Anything else
-   * — which is every approval, since approvers are not on the work — opens
-   * the approval drawer, drawn from the task's review history. Closing either
+   * A task on this person's own list opens from the list. Anything else — a
+   * Head following somebody else's overdue task — is fetched on its own and
+   * opens in the same drawer (`linkedId`), if they may read it. Closing it
    * takes the id back out of the address, so a refresh does not reopen it.
    */
   const router = useRouter();
   const searchParams = useSearchParams();
   const taskParam = searchParams.get('task');
-  const [approvalTaskId, setApprovalTaskId] = useState<string | null>(null);
+  const [linkedId, setLinkedId] = useState<string | null>(null);
   const everyTask = useMemo(
-    () => [
-      ...buckets.overdue,
-      ...buckets.today,
-      ...buckets.thisWeek,
-      ...buckets.later,
-      ...buckets.inReview,
-      ...buckets.completed,
-    ],
+    () => [...buckets.overdue, ...buckets.today, ...buckets.thisWeek, ...buckets.later, ...buckets.completed],
     [buckets],
   );
+  const forgetTaskParam = () => {
+    if (taskParam) router.replace('/my-work');
+  };
+  const openLinked = async (id: string) => {
+    try {
+      const { task } = await api.tasks.one(id);
+      setLinkedId(id);
+      setSelected(task as unknown as TaskItem);
+    } catch (e) {
+      toast.error(
+        e instanceof ApiError && e.status === 404
+          ? "That task isn't here — it may have been deleted, or it isn't one you can open."
+          : 'Could not open that task.',
+      );
+      forgetTaskParam();
+    }
+  };
   useEffect(() => {
     if (!taskParam || isPending) return;
     const mine = everyTask.find((t) => t.id === taskParam);
     if (mine) setSelected(mine);
-    else setApprovalTaskId(taskParam);
+    else void openLinked(taskParam);
     // Only when the link or the list arrives, not on every re-render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [taskParam, isPending]);
-  const forgetTaskParam = () => {
-    if (taskParam) router.replace('/my-work');
-  };
 
   /*
    * The column filters. Nothing ticked is everything; every column's filter
@@ -350,16 +343,15 @@ export default function MyWorkPage() {
       today: keep(buckets.today),
       thisWeek: keep(buckets.thisWeek),
       later: keep(buckets.later),
-      inReview: keep(buckets.inReview),
       completed: keep(buckets.completed),
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [everyTask, filters, filtering, filterCtx]);
   const shownTotal =
-    shown.overdue.length + shown.today.length + shown.thisWeek.length + shown.later.length + shown.inReview.length + shown.completed.length;
+    shown.overdue.length + shown.today.length + shown.thisWeek.length + shown.later.length + shown.completed.length;
 
-  // The open task follows the list: after an edit, an approval sent or a
-  // decision, the drawer shows the task as it is now, not as it was clicked.
+  // The open task follows the list: after an edit, the drawer shows the task
+  // as it is now, not as it was clicked.
   useEffect(() => {
     if (!selected) return;
     const fresh = everyTask.find((t) => t.id === selected.id);
@@ -414,7 +406,7 @@ export default function MyWorkPage() {
   /** What the mutation handlers call after they change something. */
   const load = useCallback(async () => {
     await refetch();
-    // A task finished, held or sent for approval stops being "now" on the server.
+    // A task finished or held stops being "now" on the server.
     void queryClient.invalidateQueries({ queryKey: qk.myFocus });
   }, [refetch, queryClient]);
 
@@ -444,7 +436,7 @@ export default function MyWorkPage() {
   const now = new Date();
   const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   usePageHeader('My Work', todayStr);
-  const total = counts.today + counts.overdue + counts.thisWeek + counts.later + counts.inReview + counts.completed;
+  const total = counts.today + counts.overdue + counts.thisWeek + counts.later + counts.completed;
 
   if (isPending) return null;
 
@@ -470,12 +462,8 @@ export default function MyWorkPage() {
    */
   const cells = (t: TaskItem, grip: React.ReactNode) => {
     const finished = t.status === 'DONE' || t.status === 'CANCELLED';
-    // Waiting on an approver is not this person's lateness.
-    const late = !finished && t.status !== 'IN_REVIEW' && t.dueDate.slice(0, 10) < todayKey;
+    const late = !finished && t.dueDate.slice(0, 10) < todayKey;
     const job = jobLabel(t);
-    // Sent back, and not yet sent again: the feedback is the work.
-    const sentBack =
-      t.lastReview?.decision === 'CHANGES_REQUESTED' && (t.status === 'TODO' || t.status === 'IN_PROGRESS');
     return (
       <>
         <td className="w-8 pr-0 text-secondary">{grip}</td>
@@ -515,45 +503,6 @@ export default function MyWorkPage() {
               {waitingWords(t.waitingOn)}
             </p>
           )}
-          {t.status === 'IN_REVIEW' && t.lastReview && (
-            <p className="mt-0.5 text-micro text-secondary">
-              round {t.lastReview.round} · sent {formatDate(t.lastReview.submittedAt)}
-            </p>
-          )}
-          {/* Past the reminder time with no answer: say so, and offer the nudge. */}
-          {t.status === 'IN_REVIEW' && t.lastReview && !t.lastReview.decision && t.lastReview.remindedAt && (
-            <StuckApproval
-              taskId={t.id}
-              title={t.title}
-              clientName={t.clientName}
-              projectName={t.projectName ?? null}
-              waited={t.reviewWaitingText ?? null}
-              escalatedTo={t.lastReview.escalatedAt ? (t.lastReview.escalatedTo ?? []) : null}
-            />
-          )}
-          {sentBack && (() => {
-            // Everybody's changes, not only the first approver's — the others
-            // can add theirs while it is with you.
-            const changes = [
-              ...(t.lastReview?.feedback ? [{ who: t.lastReview.decidedBy?.name, text: t.lastReview.feedback }] : []),
-              ...(t.lastReview?.notes ?? []).map((n) => ({ who: n.author.name, text: n.feedback })),
-            ];
-            return (
-              <div className="mt-1 max-w-md">
-                <Badge tone="warn">
-                  Changes requested{changes.length > 1 ? ` · ${changes.length}` : ''}
-                </Badge>
-                {changes.slice(0, 2).map((c, i) => (
-                  <p key={i} className="mt-0.5 line-clamp-2 text-micro text-body">
-                    “{c.text}”{c.who && <span className="text-secondary"> — {c.who}</span>}
-                  </p>
-                ))}
-                {changes.length > 2 && (
-                  <p className="mt-0.5 text-micro text-secondary">+{changes.length - 2} more — open the task to see them all</p>
-                )}
-              </div>
-            );
-          })()}
         </td>
         <td className="whitespace-nowrap text-secondary">{taskTypeLabel(t.taskType) ?? '—'}</td>
         {/* Who it is for, over which job of theirs it belongs to — the second
@@ -590,7 +539,7 @@ export default function MyWorkPage() {
           <Select
             value={t.status}
             onChange={(v) => void changeStatus(t, v as TStatus)}
-            options={statusChoices(STATUS_OPTIONS, t)}
+            options={STATUS_OPTIONS}
             ariaLabel={`Status for ${t.title}`}
             buttonClassName="px-2.5 py-1.5 text-xs w-32"
             disabled={busyId === t.id}
@@ -690,9 +639,6 @@ export default function MyWorkPage() {
 
   return (
     <div className="page-shell">
-      {/* Only for approvers, and only when something is waiting. */}
-      <ApprovalQueue onOpen={(id) => setApprovalTaskId(id)} />
-
       <StatRow className="mb-8">
         <StatTile label="Due Today" value={counts.today} note={`${onHoldCount} on hold`} />
         {/*
@@ -911,7 +857,6 @@ export default function MyWorkPage() {
                       </tbody>
                     );
                   })}
-                  {section('Waiting for approval', shown.inReview)}
                   {section('Done this week', shown.completed)}
                 </>
               ) : (
@@ -919,8 +864,6 @@ export default function MyWorkPage() {
                   {section('Overdue', shown.overdue, 'overdue')}
                   {section('Due today', shown.today, 'today')}
                   {section('Later this week', [...shown.thisWeek, ...shown.later], 'week')}
-                  {/* Below the active work: open, but the approver's move. */}
-                  {section('Waiting for approval', shown.inReview)}
                   {section('Done this week', shown.completed)}
                 </DragDropContext>
               )}
@@ -936,18 +879,15 @@ export default function MyWorkPage() {
         busy={busyId === selected?.id}
         onClose={() => {
           setSelected(null);
+          setLinkedId(null);
           forgetTaskParam();
         }}
         onStatusChange={(t, next) => void changeStatus(t as unknown as TaskItem, next as TStatus)}
-        onChanged={load}
-      />
-      <ApprovalDrawer
-        taskId={approvalTaskId}
-        onClose={() => {
-          setApprovalTaskId(null);
-          forgetTaskParam();
+        onChanged={async () => {
+          await load();
+          // Not on this list, so the list cannot refresh it: ask for it again.
+          if (linkedId) void openLinked(linkedId);
         }}
-        onChanged={load}
       />
     </div>
   );

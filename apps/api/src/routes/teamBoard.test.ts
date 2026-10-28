@@ -12,7 +12,7 @@ import { inMyWorkOrder, nextUpOf } from '../services/teamBoard.js';
  *
  *   · A person says which of their own open tasks they are on. One at a time;
  *     only they can set it; To do moves to In progress; it clears itself when
- *     the task is done, cancelled, sent for approval, put on hold or deleted,
+ *     the task is done, cancelled, put on hold or deleted,
  *     or when they are taken off it. No time goes with it.
  *   · The board: one row per person — Now, Next up (their own My Work order),
  *     plain counts — and "Needs attention". Heads see their departments,
@@ -78,7 +78,6 @@ const task = (id: string, assigneeIds: string[], over: Record<string, unknown> =
   deletedAt: null,
   waitingOn: null,
   waitingSince: null,
-  reviews: [] as unknown[],
   repeat: null,
   monthCard: null,
   project: null,
@@ -101,12 +100,6 @@ const TASKS = [
   task('t-r3', ['usr-ravi'], { dueDate: day('2026-10-16') }),
   // On hold since last Thursday 10:00 — over three working days.
   task('t-r4', ['usr-ravi'], { status: 'ON_HOLD', dueDate: day('2026-10-15'), waitingOn: 'CLIENT', waitingSince: at('2026-10-08T04:30:00Z') }),
-  // Sent for approval yesterday 10:00 — well past the two-hour reminder.
-  task('t-r5', ['usr-ravi'], {
-    status: 'IN_REVIEW',
-    dueDate: day('2026-10-12'),
-    reviews: [{ round: 1, decision: null, submittedAt: at('2026-10-13T04:30:00Z') }],
-  }),
   task('t-r6', ['usr-ravi'], { status: 'DONE', completedAt: at('2026-10-13T10:00:00Z') }),
   // Done last week: not this week's.
   task('t-r8', ['usr-ravi'], { status: 'DONE', completedAt: at('2026-10-10T10:00:00Z') }),
@@ -114,11 +107,6 @@ const TASKS = [
   task('t-r9', ['usr-ravi'], { status: 'CANCELLED', dueDate: day('2026-10-01') }),
   // Sneha: nothing arranged, so next up is simply the next due.
   task('t-s1', ['usr-sneha'], { status: 'ON_HOLD', dueDate: day('2026-10-14'), waitingSince: at('2026-10-13T04:30:00Z') }),
-  task('t-s2', ['usr-sneha'], {
-    status: 'IN_REVIEW',
-    dueDate: day('2026-10-14'),
-    reviews: [{ round: 1, decision: null, submittedAt: at('2026-10-14T05:00:00Z') }],
-  }),
   task('t-s3', ['usr-sneha'], { status: 'IN_PROGRESS', priority: 'URGENT', dueDate: day('2026-10-21') }),
   task('t-s4', ['usr-sneha'], { dueDate: day('2026-10-20') }),
   task('t-s5', ['usr-sneha'], { dueDate: day('2026-10-15') }),
@@ -167,7 +155,7 @@ beforeEach(() => {
   p.user.update.mockResolvedValue({});
   p.user.updateMany.mockResolvedValue({ count: 1 });
   p.department.findMany.mockImplementation(async ({ where }: any) => DEPARTMENTS.filter((d) => matches(d, where)));
-  p.organization.findUnique.mockResolvedValue({ timezone: 'Asia/Kolkata', approvalRemindMinutes: 120 });
+  p.organization.findUnique.mockResolvedValue({ timezone: 'Asia/Kolkata' });
   p.task.findMany.mockImplementation(async ({ where }: any) => TASKS.filter((t) => matches(t, where)));
   p.taskAssignee.findMany.mockImplementation(async ({ where }: any) => PLACES.filter((x) => matches(x, where)));
   p.activity.create.mockResolvedValue({});
@@ -218,8 +206,8 @@ describe('working on now', () => {
     expect(p.task.updateMany).not.toHaveBeenCalled();
   });
 
-  it('cannot be a task that is on hold, waiting for approval or finished', async () => {
-    for (const status of ['ON_HOLD', 'IN_REVIEW', 'DONE', 'CANCELLED']) {
+  it('cannot be a task that is on hold or finished', async () => {
+    for (const status of ['ON_HOLD', 'DONE', 'CANCELLED']) {
       p.task.findFirst.mockResolvedValue({ ...RAVIS, status });
       const res = await request(app).post('/api/tasks/t-r3/focus').set(...as('usr-ravi'));
       expect(res.status).toBe(400);
@@ -311,7 +299,6 @@ describe('Team → Board', () => {
       dueThisWeek: ['t-r2', 't-r3', 't-r4'],
       overdue: ['t-r1', 't-r0'],
       waiting: ['t-r4'],
-      inReview: ['t-r5'],
       doneThisWeek: ['t-r6'],
     });
     // Every id a count lists is in the payload, ready to open.
@@ -344,16 +331,15 @@ describe('Team → Board', () => {
     }
   });
 
-  it('lists what needs attention: late, long on hold, long in review, urgent and not started', async () => {
+  it('lists what needs attention: late, long on hold, urgent and not started', async () => {
     const res = await request(app).get('/api/team/board').set(...as('usr-boss'));
     expect(res.body.attention).toEqual([
       { taskId: 't-r1', reasons: ['OVERDUE'] },
       { taskId: 't-r0', reasons: ['OVERDUE'] },
       { taskId: 't-r4', reasons: ['WAITING_LONG'] },
-      { taskId: 't-r5', reasons: ['REVIEW_LONG'] },
       { taskId: 't-r7', reasons: ['URGENT_NOT_STARTED'] },
     ]);
-    // Not: Sneha's hold since yesterday, her round sent an hour ago, her urgent task already under way.
+    // Not: Sneha's hold since yesterday, her urgent task already under way.
   });
 
   it('keeps the people in the order they were read — departments, then names — whatever the counts', async () => {
@@ -404,7 +390,6 @@ describe('My Work order', () => {
         t('week-new', '2026-10-17', null),
         t('today', '2026-10-14', null),
         t('late', '2026-10-10', null),
-        t('in-review', '2026-10-09', null, 'IN_REVIEW'),
         t('done', '2026-10-09', null, 'DONE'),
       ],
       '2026-10-14',

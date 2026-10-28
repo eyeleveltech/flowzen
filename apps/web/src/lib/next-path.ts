@@ -1,8 +1,8 @@
 /**
  * Coming back to where you were after signing in.
  *
- * An approver taps a WhatsApp link to /my-work?task=…, is signed out, and was
- * sent to /login — which then always landed on /my-work, and the task they
+ * Somebody taps a link to /my-work?task=…, is signed out, and was sent to
+ * /login — which then always landed on /my-work, and the task they
  * came for was gone. So the trip to /login carries the address as `next`, and
  * the login page goes back to it.
  */

@@ -2,8 +2,8 @@
 
 /**
  * "Needs you" — what in the department wants a look, grouped by why: overdue
- * work, work on hold more than 3 working days, work stuck in review, urgent
- * work not started, gear late back, and from the 25th a time split nobody has
+ * work, work on hold more than 3 working days, urgent work not started, gear
+ * late back, and from the 25th a time split nobody has
  * confirmed. Each item opens what it is about.
  *
  * Grouped, because a flat list of eight rows that all say "Overdue" reads as
@@ -24,7 +24,6 @@ type GroupKey = TeamBoardReason | 'GEAR_OVERDUE' | 'TIME_SPLIT';
 const GROUPS: { key: GroupKey; label: string; dot: string }[] = [
   { key: 'OVERDUE', label: 'Overdue', dot: 'bg-danger' },
   { key: 'GEAR_OVERDUE', label: 'Gear late back', dot: 'bg-danger' },
-  { key: 'REVIEW_LONG', label: 'Stuck in review', dot: 'bg-review' },
   { key: 'URGENT_NOT_STARTED', label: 'Urgent, not started', dot: 'bg-warning' },
   { key: 'WAITING_LONG', label: 'On hold 3+ working days', dot: 'bg-warning' },
   { key: 'TIME_SPLIT', label: 'Time split not confirmed', dot: 'bg-warning' },

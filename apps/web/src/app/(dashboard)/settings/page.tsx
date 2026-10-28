@@ -48,7 +48,6 @@ import { ActivityTab } from './components/ActivityTab';
 import { DepartmentsTab } from './components/DepartmentsTab';
 import { UsageTab } from './components/UsageTab';
 import { IntegrationsTab } from './components/IntegrationsTab';
-import { ApprovalsTab } from './components/ApprovalsTab';
 import { AssetsTab } from './components/AssetsTab';
 import { SETTINGS_GROUPS } from '@/config/settingsTabs';
 
@@ -922,7 +921,6 @@ export default function SettingsPage() {
 
         {tab === 'trash' && <TrashTab />}
 
-        {tab === 'approvals' && <ApprovalsTab canEdit={canEdit} />}
 
         {tab === 'departments' && <DepartmentsTab canEdit={canEdit} />}
 

@@ -27,8 +27,6 @@ import { KeyRound, Package, Pencil, Plus, ShieldCheck, UserMinus } from 'lucide-
 import { EditMemberModal } from '@/components/work/EditMemberModal';
 import { useDepartments, useTeamScope } from '@/hooks/queries';
 import { TeamScopeLine } from '@/components/work/TeamScopeLine';
-import { Tabs, useTabState, type TabDef } from '@/components/ui/tabs';
-import { ApprovalsReport } from '@/components/work/ApprovalsReport';
 
 interface TeamMember {
   id: string;
@@ -83,21 +81,14 @@ export default function MembersPage() {
   const [openMemberId, setOpenMemberId] = useState<string | null>(null);
 
   /*
-   * Two views of the team. Team is the delivery table below, unchanged;
-   * Approvals is where approvals get stuck (Plan 3). `?tab=approvals` links
-   * straight to it. The whole screen already needs `work.team`, which is the
-   * tab's own gate, so there is nothing further to hide.
+   * One view of the team: the delivery table below.
    *
-   * Board was the third. It showed task counts and nothing else, and a head
-   * needs their people, work, calendar, approvals, gear and time split — so it
-   * became My Department (Department head page plan). An old `?tab=board`
-   * link goes there.
+   * It had tabs. Approvals (where approvals got stuck) went with task approval
+   * on 28 Oct 2026; an old `?tab=approvals` link just shows the team. Board
+   * showed task counts and nothing else, and a head needs their people, work,
+   * calendar, gear and time split — so it became My Department (Department
+   * head page plan). An old `?tab=board` link goes there.
    */
-  const tabs: TabDef<'team' | 'approvals'>[] = [
-    { key: 'team', label: 'Team' },
-    { key: 'approvals', label: 'Approvals' },
-  ];
-  const [tab, setTab] = useTabState(tabs);
   const router = useRouter();
   const wantedTab = useSearchParams().get('tab');
   const redirectTo = teamTabRedirect(wantedTab);
@@ -182,7 +173,7 @@ export default function MembersPage() {
    * while showing all fourteen people from seven departments — Priya simply
    * sorts first.
    */
-  usePageHeader('Team', tab === 'approvals' ? 'Approvals' : filterName);
+  usePageHeader('Team', filterName);
 
   /** By department. */
   const deptSelect = filterOptions.length > 1 && (
@@ -199,12 +190,6 @@ export default function MembersPage() {
 
   return (
     <div className="page-shell">
-      <Tabs className="mb-6" tabs={tabs} active={tab} onChange={setTab} />
-
-      {tab === 'approvals' && <ApprovalsReport />}
-
-      {tab === 'team' && (
-      <>
       {loadError && (
         <div className="mb-6">
           {/*
@@ -478,8 +463,6 @@ export default function MembersPage() {
       </div>
 
       <MemberDrawer memberId={openMemberId} onClose={() => setOpenMemberId(null)} />
-      </>
-      )}
 
       {assigningTo && (
         <AssignTaskModal

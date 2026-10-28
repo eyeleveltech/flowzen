@@ -156,14 +156,14 @@ describe('internal project progress', () => {
         t('done', 'DONE', '2026-10-01'),
         t('late', 'TODO', '2026-10-10', ['usr-des', 'usr-ravi']),
         t('soon', 'IN_PROGRESS', '2026-10-16'),
-        t('review', 'IN_REVIEW', '2026-10-09'),
+        t('held', 'ON_HOLD', '2026-10-15'),
         t('dropped', 'CANCELLED', '2026-10-02'),
       ],
       '2026-10-14',
     );
     expect(progress).toMatchObject({ percentDone: 25, total: 4, done: 1, open: 3, overdue: 1, daysLeft: 5, pastTarget: false });
-    // In review is not its people's overdue; the next due is the earliest open task.
-    expect(progress.nextDue).toEqual({ id: 'review', title: 'review', dueDate: '2026-10-09' });
+    // The next due is the earliest open task.
+    expect(progress.nextDue).toEqual({ id: 'late', title: 'late', dueDate: '2026-10-10' });
     expect(progress.people).toEqual([
       { id: 'usr-ravi', name: 'Ravi', open: 1 },
       { id: 'usr-des', name: 'Sneha', open: 3 },
@@ -194,7 +194,7 @@ describe('internal project progress', () => {
     ]);
     p.task.findMany.mockResolvedValue([
       { status: 'TODO', dueDate: day('2026-10-10') },
-      { status: 'IN_REVIEW', dueDate: day('2026-10-10') },
+      { status: 'IN_PROGRESS', dueDate: day('2026-10-20') },
       { status: 'ON_HOLD', dueDate: day('2026-10-20') },
     ]);
     const res = await request(app).get('/api/internal-projects').set(...auth('boss'));
@@ -279,8 +279,6 @@ describe('an internal project past its target date', () => {
     const session = (id: string, preset: RolePreset, permissions: string[]) =>
       ({ userId: id, organizationId: 'org-1', email: 'x', name: id, preset, permissions, active: true }) as any;
     p.internalProject.findMany.mockImplementation(async ({ where }: any) => (where.ownerId === 'usr-head' ? [{ id: 'ip-site' }] : []));
-    p.taskApprover.findMany.mockResolvedValue([]);
-    p.approvalEscalationContact.findMany.mockResolvedValue([]);
     p.alert.findMany.mockResolvedValue([]);
 
     const owner = await alertClausesFor(session('usr-head', RolePreset.HEAD, ['work.own', 'work.team', 'work.all']));

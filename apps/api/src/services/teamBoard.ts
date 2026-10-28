@@ -44,11 +44,11 @@ export type BoardPerson = {
 };
 
 /** The counts on each row; each is a list of task ids, so a count opens the tasks behind it. */
-export const BOARD_LISTS = ['open', 'dueThisWeek', 'overdue', 'waiting', 'inReview', 'doneThisWeek'] as const;
+export const BOARD_LISTS = ['open', 'dueThisWeek', 'overdue', 'waiting', 'doneThisWeek'] as const;
 export type BoardList = (typeof BOARD_LISTS)[number];
 
 /** Why a task is in "Needs attention", in the order the list is read. */
-export const ATTENTION_REASONS = ['OVERDUE', 'WAITING_LONG', 'REVIEW_LONG', 'URGENT_NOT_STARTED'] as const;
+export const ATTENTION_REASONS = ['OVERDUE', 'WAITING_LONG', 'URGENT_NOT_STARTED'] as const;
 export type AttentionReason = (typeof ATTENTION_REASONS)[number];
 
 /** On hold longer than this many working days needs a look. */
@@ -74,7 +74,7 @@ type Orderable = { id: string; status: TaskStatus | string; dueDate: Date; creat
  * The same rules as GET /tasks/my: Overdue, then Due today, then the rest of
  * the week, then later — each group in the order they arranged it by dragging,
  * anything not yet arranged first, and otherwise by due date (newest first
- * among equals). Sent for approval, done and cancelled are not on the list.
+ * among equals). Done and cancelled are not on the list.
  */
 export function inMyWorkOrder<T extends Orderable>(tasks: T[], today: string, now: Date): T[] {
   const endOfWeek = now.getTime() + 7 * 24 * 3600 * 1000;
@@ -112,13 +112,10 @@ export function nextUpOf<T extends Orderable>(tasks: T[], nowId: string | null, 
 
 export async function composeTeamBoard(orgId: string, people: BoardPerson[], now: Date = new Date()) {
   const [org, calendar] = await Promise.all([
-    prisma.organization.findUnique({ where: { id: orgId }, select: { timezone: true, approvalRemindMinutes: true } }),
+    prisma.organization.findUnique({ where: { id: orgId }, select: { timezone: true } }),
     loadWorkCalendar(orgId),
   ]);
   const tz = org?.timezone || 'Asia/Kolkata';
-  // The approval chaser's own reminder time, so "too long in review" here is
-  // the moment the approvers were reminded there.
-  const remindAfter = org?.approvalRemindMinutes ?? 120;
   const today = todayIn(tz, now);
   // Monday to Sunday, as the Monday brief counts a week.
   const weekStart = addDays(today, -((weekdayOf(today) + 6) % 7));
@@ -135,7 +132,7 @@ export async function composeTeamBoard(orgId: string, people: BoardPerson[], now
             deletedAt: null,
             assignees: { some: { userId: { in: ids } } },
             OR: [
-              { status: { in: [TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.ON_HOLD, TaskStatus.IN_REVIEW] } },
+              { status: { in: [TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.ON_HOLD] } },
               // Finished since Monday, at the studio's midnight.
               { status: TaskStatus.DONE, completedAt: { gte: dayStartUtc(weekStart, tz) } },
             ],
@@ -176,7 +173,6 @@ export async function composeTeamBoard(orgId: string, people: BoardPerson[], now
       dueThisWeek: idsOf(open.filter((t) => dayOf(t.dueDate) >= today && dayOf(t.dueDate) <= weekEnd)),
       overdue: idsOf(open.filter(isOverdue)),
       waiting: idsOf(mine.filter((t) => t.status === TaskStatus.ON_HOLD)),
-      inReview: idsOf(mine.filter((t) => t.status === TaskStatus.IN_REVIEW)),
       doneThisWeek: idsOf(mine.filter((t) => t.status === TaskStatus.DONE)),
     };
     return {
@@ -201,15 +197,6 @@ export async function composeTeamBoard(orgId: string, people: BoardPerson[], now
         workingMinutesOn(calendar, t.waitingSince, now).totalMinutes > WAITING_TOO_LONG_DAYS * dayMinutes
       ) {
         reasons.push('WAITING_LONG');
-      }
-      const round = t.reviews[0];
-      if (
-        t.status === TaskStatus.IN_REVIEW &&
-        round &&
-        !round.decision &&
-        workingMinutesOn(calendar, round.submittedAt, now).totalMinutes > remindAfter
-      ) {
-        reasons.push('REVIEW_LONG');
       }
       if (t.priority === Priority.URGENT && t.status === TaskStatus.TODO) reasons.push('URGENT_NOT_STARTED');
       return { taskId: t.id, reasons, dueDate: t.dueDate };
@@ -241,9 +228,7 @@ export async function composeTeamBoard(orgId: string, people: BoardPerson[], now
     waitingOn: waitingOnShown(t),
     hasClient: taskHasClient(t),
     waitingSince: t.waitingSince,
-    needsApproval: t.needsApproval,
     repeat: t.repeat,
-    lastReview: t.reviews[0] ?? null,
     assignee: t.assignee,
     assignees: t.assignees.map((a) => a.user),
     assignedBy: t.assignedBy,

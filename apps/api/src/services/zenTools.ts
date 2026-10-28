@@ -45,7 +45,7 @@ import { allDepartmentPeople, composeDepartmentOverview, composeDepartmentWork }
  *      utils/recordLink.ts like every other link — so an answer can link what
  *      it names without Zen ever making a link up.
  *
- * The lookups added later (alerts, approvals, outreach, proformas, a retainer
+ * The lookups added later (alerts, outreach, proformas, a retainer
  * month, costs, the forecast, history, the brief) are in `zenLookups.ts`.
  */
 
@@ -107,7 +107,7 @@ export const ZEN_TOOLS = [
         client: { type: 'string' },
         person: { type: 'string', description: 'A team member\'s name.' },
         month: { type: 'string', description: 'As 2026-09.' },
-        status: { type: 'string', enum: ['OPEN', 'LATE', 'DONE', 'ON_HOLD', 'IN_REVIEW', 'CANCELLED'] },
+        status: { type: 'string', enum: ['OPEN', 'LATE', 'DONE', 'ON_HOLD', 'CANCELLED'] },
         limit: { type: 'number' },
       },
     },
@@ -391,11 +391,9 @@ export async function runZenTool(
           ...(status === 'OPEN' ? { status: { in: ['TODO', 'IN_PROGRESS'] as never } } : {}),
           ...(status === 'DONE' ? { status: 'DONE' as never } : {}),
           ...(status === 'ON_HOLD' ? { status: 'ON_HOLD' as never } : {}),
-          // Sent for approval, waiting on an approver.
-          ...(status === 'IN_REVIEW' ? { status: 'IN_REVIEW' as never } : {}),
           ...(status === 'CANCELLED' ? { status: 'CANCELLED' as never } : {}),
           ...(status === 'LATE'
-            ? { status: { notIn: ['DONE', 'CANCELLED', 'IN_REVIEW'] as never }, dueDate: { lt: new Date(today) } }
+            ? { status: { notIn: ['DONE', 'CANCELLED'] as never }, dueDate: { lt: new Date(today) } }
             : {}),
         },
         select: {
@@ -592,8 +590,8 @@ export async function runZenTool(
       // however many of its people are on a task.
       const by = new Map<string, { open: number; late: number; done: number }>();
       for (const t of rows) {
-        // The app's "late": past due and not finished, and not waiting on an approver.
-        const late = !['DONE', 'CANCELLED', 'IN_REVIEW'].includes(t.status) && day(t.dueDate)! < today;
+        // The app's "late": past due and not finished.
+        const late = !['DONE', 'CANCELLED'].includes(t.status) && day(t.dueDate)! < today;
         for (const id of new Set(t.assignees.map((a) => a.user.departmentId ?? ''))) {
           const d = by.get(id) ?? { open: 0, late: 0, done: 0 };
           if (t.status === 'DONE') d.done += 1;
@@ -661,7 +659,6 @@ export async function runZenTool(
           open: p.lists.open.length,
           overdue: p.lists.overdue.length,
           waiting: p.lists.waiting.length,
-          inReview: p.lists.inReview.length,
           doneThisWeek: p.lists.doneThisWeek.length,
           todayEvents: p.todayEvents.map((e) => (e.allDay ? e.title : `${e.title} ${e.time}`)),
           gearHeld: p.gear.length,

@@ -1,20 +1,19 @@
-import { ReviewDecision, RolePreset, TaskStatus, type Prisma } from '@prisma/client';
+import { RolePreset, TaskStatus } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import type { UserSession } from '../middleware/auth.js';
 import { peopleInScope } from './teamScope.js';
 import { BOARD_PERSON_SELECT, composeTeamBoard, type AttentionReason } from './teamBoard.js';
-import { approverFor, escalateFor } from './taskApprovals.js';
 import { findClashes, type Clash } from './calendarEvents.js';
 import { isLate, projectProgress } from './internalWork.js';
 import { daysLate } from '../utils/assetDue.js';
 import { dayStartUtc, localDayAndTime } from '../utils/zonedTime.js';
-import { addDays, dayMinutesOf, formatWorkingMinutes, loadWorkCalendar, todayIn, workingMinutesOn } from '../utils/workCalendar.js';
+import { addDays, todayIn } from '../utils/workCalendar.js';
 
 /**
  * My Department — one page for a department's head (Department head page plan).
  *
- * The people, everything they are working on, the calendar, approvals, gear
- * and the time split, for ONE department. It replaced Team → Board, which
+ * The people, everything they are working on, the calendar, gear and the
+ * time split, for ONE department. It replaced Team → Board, which
  * showed task counts and nothing else.
  *
  * Who may open it: the department's head, or Management (who reach it from
@@ -279,7 +278,7 @@ export async function composeDepartmentOverview(
   };
 }
 
-const OPEN_STATUSES: TaskStatus[] = [TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.ON_HOLD, TaskStatus.IN_REVIEW];
+const OPEN_STATUSES: TaskStatus[] = [TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.ON_HOLD];
 
 /**
  * The Work tab: the client work the department's people are on — by client,
@@ -287,8 +286,7 @@ const OPEN_STATUSES: TaskStatus[] = [TaskStatus.TODO, TaskStatus.IN_PROGRESS, Ta
  *
  * Counted from the team's open tasks only: "the people on it" are this
  * department's people, and open and overdue are the tasks at least one of them
- * is on. Overdue is the app's one rule (`isLate`): a task waiting on an
- * approver is not its people's overdue.
+ * is on. Overdue is the app's one rule (`isLate`).
  */
 export async function composeDepartmentWork(orgId: string, department: PageDepartment, people: DepartmentPerson[], now: Date = new Date()) {
   const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { timezone: true } });
@@ -404,112 +402,4 @@ export async function composeDepartmentWork(orgId: string, department: PageDepar
       };
     }),
   };
-}
-
-/** How long a sent-back task stays on the Approvals tab's "Changes requested" list. */
-export const CHANGES_REQUESTED_DAYS = 14;
-
-/**
- * The Approvals tab: the team's work waiting in review, and what was sent back
- * to them lately.
- *
- * `canDecide` says whether the CALLER may approve it here — they approve that
- * type, or are its escalation contact once the round has escalated — and is
- * false on anything they are on themselves. Only a hint for the buttons: the
- * approve and request-changes routes check the same rules again.
- */
-export async function composeDepartmentApprovals(
-  user: Session,
-  department: PageDepartment,
-  people: DepartmentPerson[],
-  now: Date = new Date(),
-) {
-  const orgId = user.organizationId;
-  const ids = people.map((p) => p.id);
-  const onTeam: Prisma.TaskWhereInput = { organizationId: orgId, deletedAt: null, assignees: { some: { userId: { in: ids } } } };
-  const since = new Date(now.getTime() - CHANGES_REQUESTED_DAYS * 86_400_000);
-
-  const [calendar, types, escalation, waiting, sentBack] = await Promise.all([
-    loadWorkCalendar(orgId),
-    approverFor(orgId, user.userId),
-    escalateFor(orgId, user.userId),
-    ids.length
-      ? prisma.task.findMany({
-          where: { ...onTeam, status: TaskStatus.IN_REVIEW },
-          select: {
-            id: true,
-            title: true,
-            taskType: true,
-            dueDate: true,
-            assignees: { select: { user: { select: { id: true, name: true } } } },
-            reviews: {
-              where: { decision: null },
-              orderBy: { round: 'desc' },
-              take: 1,
-              select: { id: true, round: true, link: true, submittedAt: true, escalatedAt: true, submittedBy: { select: { id: true, name: true } } },
-            },
-          },
-        })
-      : [],
-    ids.length
-      ? prisma.task.findMany({
-          where: {
-            ...onTeam,
-            status: { in: [TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.ON_HOLD] },
-            reviews: { some: { decision: ReviewDecision.CHANGES_REQUESTED, decidedAt: { gte: since } } },
-          },
-          select: {
-            id: true,
-            title: true,
-            assignees: { select: { user: { select: { id: true, name: true } } } },
-            reviews: {
-              orderBy: { round: 'desc' },
-              take: 1,
-              select: { round: true, decision: true, feedback: true, decidedAt: true, decidedBy: { select: { id: true, name: true } } },
-            },
-          },
-        })
-      : [],
-  ]);
-
-  const inReview = waiting
-    .filter((t) => t.reviews.length > 0)
-    .map((t) => {
-      const r = t.reviews[0];
-      const minutes = workingMinutesOn(calendar, r.submittedAt, now).totalMinutes;
-      const onIt = t.assignees.some((a) => a.user.id === user.userId);
-      const approves = Boolean(t.taskType && types.includes(t.taskType));
-      const escalated = Boolean(t.taskType && escalation.includes(t.taskType) && r.escalatedAt);
-      return {
-        taskId: t.id,
-        title: t.title,
-        assignees: t.assignees.map((a) => a.user),
-        round: r.round,
-        link: r.link,
-        submittedAt: r.submittedAt,
-        submittedBy: r.submittedBy,
-        escalated: Boolean(r.escalatedAt),
-        waitingMinutes: minutes,
-        waitingText: formatWorkingMinutes(minutes, dayMinutesOf(calendar)),
-        canDecide: !onIt && (approves || escalated),
-        /** Why the buttons are not offered, when the caller approves this type. */
-        notYours: onIt && approves ? "You're on this task, so another approver has to decide it." : null,
-      };
-    })
-    .sort((a, b) => a.submittedAt.getTime() - b.submittedAt.getTime());
-
-  const changesRequested = sentBack
-    .filter((t) => t.reviews[0]?.decision === ReviewDecision.CHANGES_REQUESTED)
-    .map((t) => ({
-      taskId: t.id,
-      title: t.title,
-      assignees: t.assignees.map((a) => a.user),
-      round: t.reviews[0].round,
-      feedback: t.reviews[0].feedback,
-      decidedAt: t.reviews[0].decidedAt,
-      decidedBy: t.reviews[0].decidedBy,
-    }))
-    .sort((a, b) => (b.decidedAt?.getTime() ?? 0) - (a.decidedAt?.getTime() ?? 0));
-
-  return { department: { ...department, peopleCount: people.length }, inReview, changesRequested };
 }

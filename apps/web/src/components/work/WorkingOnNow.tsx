@@ -5,8 +5,8 @@
  *
  * A person says which of their own open tasks they are on. One at a time —
  * choosing another replaces it — and only they can set it. A To do task moves
- * to In progress. It clears itself when the task is done, cancelled, sent for
- * approval or put on hold, or when they press Clear.
+ * to In progress. It clears itself when the task is done, cancelled or put
+ * on hold, or when they press Clear.
  *
  * It is what they SAID, not something watched: no time goes with it, here or
  * anywhere else.
@@ -96,7 +96,7 @@ export function WorkingOnNowControl({
   const me = useAuthStore((s) => s.user?.id);
   const { focus, busy, start, clear } = useWorkingOnNow();
 
-  // The server clears it when a task is finished, held or sent for approval,
+  // The server clears it when a task is finished or held,
   // wherever that happened — so ask again whenever the status in front of us moves.
   useEffect(() => {
     void queryClient.invalidateQueries({ queryKey: qk.myFocus });

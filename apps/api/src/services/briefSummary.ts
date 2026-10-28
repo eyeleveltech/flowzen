@@ -57,7 +57,6 @@ export function summaryInputFrom(brief: MondayBrief) {
       dealsWon: { lastWeek: s.dealsWon.last, weekBefore: s.dealsWon.before },
       proposalVersionsSent: { lastWeek: s.proposalsSent.last, weekBefore: s.proposalsSent.before },
       tasksDone: { lastWeek: s.tasksDone.last, weekBefore: s.tasksDone.before },
-      approvals: s.approvals.map((a) => ({ group: a.group, lastWeek: a.last, weekBefore: a.before })),
     },
     needsAction: top(brief.needsAction),
     risks: top(brief.risks),

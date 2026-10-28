@@ -126,7 +126,7 @@ function PushSwitch({ enabled, canEdit, onChanged }: { enabled: boolean; canEdit
       title="Phone notifications"
       description={
         <>
-          Lets each person turn on notifications on their phone from their Profile — approvals, bookings and task
+          Lets each person turn on notifications on their phone from their Profile — bookings and task
           changes, in working hours only. Android works in Chrome; an iPhone needs Flowzen added to its Home Screen.
           Lock-screen text never shows money figures.
         </>

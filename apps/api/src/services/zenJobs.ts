@@ -1,7 +1,6 @@
 import { LOST_REASONS, LOST_REASON_OTHER } from '@flowzen/shared';
 import { prisma } from '../lib/prisma.js';
 import type { AiTool } from './ai/types.js';
-import { approveRefusal } from './taskApprovals.js';
 import { eventLink, findClashes, UNPICKABLE, windowFrom } from './calendarEvents.js';
 import { resolveMailConfig } from '../utils/mailer.js';
 import { whenLabel } from '../utils/zonedTime.js';
@@ -19,8 +18,8 @@ import { ACTIVE_DEAL_WHERE, isActiveDeal } from './activeDeal.js';
  * an endpoint that already exists (method, path, body). The browser sends that
  * request, on the person's own session, when they press the step's button.
  *
- *   - **The guard is the real endpoint.** Approval, closed-month, permission
- *     and stage rules all stay where they live; the checks below are a courtesy
+ *   - **The guard is the real endpoint.** Closed-month, permission and stage
+ *     rules all stay where they live; the checks below are a courtesy
  *     so a card does not offer what the endpoint would only refuse.
  *   - **Money documents are never posted from a card.** A proforma, invoice,
  *     retainer or project opens the screen's own form with Zen's values filled
@@ -224,8 +223,7 @@ export const ZEN_JOB_TOOLS = [
     name: 'prepareTaskChanges',
     description:
       'Prepare changes to existing tasks for the asker to carry out: move the due date, reassign, set status (done, cancelled, in progress, to do), set priority, or start/stop a repeat. ' +
-      'Pick ONE task with `task`, or a set with person / client / dueOn / status. Nothing changes until they press the card\'s button. ' +
-      'A task that needs approval cannot be marked done; one waiting for approval cannot be edited.',
+      'Pick ONE task with `task`, or a set with person / client / dueOn / status. Nothing changes until they press the card\'s button.',
     parameters: {
       type: 'object',
       properties: {
@@ -240,21 +238,6 @@ export const ZEN_JOB_TOOLS = [
         setPriority: { type: 'string', enum: ['LOW', 'MEDIUM', 'HIGH', 'URGENT'] },
         repeat: { type: 'string', enum: ['DAILY', 'WEEKLY', 'MONTHLY', 'STOP'], description: 'Start a repeat from the due date, or STOP it.' },
       },
-    },
-  },
-  {
-    name: 'prepareApproval',
-    description:
-      'Prepare an approval decision on a task waiting for approval: APPROVE, or REQUEST_CHANGES with written feedback (ask for the feedback if they have not said what to fix).',
-    parameters: {
-      type: 'object',
-      properties: {
-        task: { type: 'string', description: 'Part of the task\'s title, or its id.' },
-        client: { type: 'string' },
-        decision: { type: 'string', enum: ['APPROVE', 'REQUEST_CHANGES'] },
-        feedback: { type: 'string', description: 'What needs changing — required to send it back.' },
-      },
-      required: ['decision'],
     },
   },
   {
@@ -353,8 +336,6 @@ export async function runZenJob(
       return prepareTasks(args, organizationId, askerId, now);
     case 'prepareTaskChanges':
       return prepareTaskChanges(args, organizationId, askerId, now);
-    case 'prepareApproval':
-      return prepareApproval(args, organizationId, askerId);
     case 'prepareFollowUp':
       return prepareFollowUp(args, organizationId, askerId, now);
     case 'prepareSalesStep':
@@ -508,8 +489,6 @@ const TASK_SELECT = {
   title: true,
   status: true,
   dueDate: true,
-  needsApproval: true,
-  createdById: true,
   repeat: { select: { stoppedAt: true, frequency: true } },
   assignees: { select: { user: { select: { id: true, name: true } } } },
   monthCard: { select: { month: true, retainer: { select: { company: { select: { name: true } } } } } },
@@ -571,7 +550,7 @@ async function prepareTaskChanges(args: Record<string, unknown>, orgId: string, 
   }
   // One task named outright may be finished; a set is the work still owed.
   const status = args.status ? String(args.status) : args.task ? null : 'OPEN';
-  if (status === 'OPEN') where.push({ status: { in: ['TODO', 'IN_PROGRESS', 'ON_HOLD', 'IN_REVIEW'] } });
+  if (status === 'OPEN') where.push({ status: { in: ['TODO', 'IN_PROGRESS', 'ON_HOLD'] } });
   else if (status === 'LATE') where.push({ status: { in: ['TODO', 'IN_PROGRESS', 'ON_HOLD'] }, dueDate: { lt: new Date(`${today}T00:00:00Z`) } });
   else if (status) where.push({ status });
 
@@ -592,13 +571,6 @@ async function prepareTaskChanges(args: Record<string, unknown>, orgId: string, 
 
   /* What each one can take, said before the button rather than after it. */
   const left: { task: (typeof tasks)[number]; why: string }[] = [];
-  const editable = tasks.filter((t) => {
-    if (t.status === 'IN_REVIEW' && !(wants.status === 'CANCELLED' && !wants.due && !wants.people && !wants.priority && !wants.repeat)) {
-      left.push({ task: t, why: 'waiting for approval — an approver approves it or sends it back' });
-      return false;
-    }
-    return true;
-  });
 
   const patch: Record<string, unknown> = {};
   if (wants.due) patch.dueDate = wants.due;
@@ -611,7 +583,7 @@ async function prepareTaskChanges(args: Record<string, unknown>, orgId: string, 
 
   if (Object.keys(patch).length > 0) {
     const items: ZenItem[] = [];
-    for (const t of editable) {
+    for (const t of tasks) {
       const liveRepeat = t.repeat && !t.repeat.stoppedAt ? t.repeat : null;
       if (wants.repeat === 'STOP' && !liveRepeat && Object.keys(patch).length === 1) {
         left.push({ task: t, why: "doesn't repeat" });
@@ -658,15 +630,9 @@ async function prepareTaskChanges(args: Record<string, unknown>, orgId: string, 
 
   if (wants.status) {
     const items: ZenItem[] = [];
-    const forApproval: (typeof tasks)[number][] = [];
-    for (const t of editable) {
+    for (const t of tasks) {
       if (t.status === wants.status) {
         left.push({ task: t, why: `already ${wants.status.toLowerCase().replace('_', ' ')}` });
-        continue;
-      }
-      if (wants.status === 'DONE' && t.needsApproval) {
-        left.push({ task: t, why: 'needs approval, so it is finished by sending it for approval, not by marking it done' });
-        forApproval.push(t);
         continue;
       }
       items.push({ label: taskLabel(t), request: { method: 'PATCH', path: `/tasks/${t.id}/status`, body: { status: wants.status } } });
@@ -674,22 +640,6 @@ async function prepareTaskChanges(args: Record<string, unknown>, orgId: string, 
     if (items.length) {
       const word = { DONE: 'done', CANCELLED: 'cancelled', IN_PROGRESS: 'in progress', TODO: 'to do' }[wants.status] ?? wants.status;
       steps.push({ kind: 'post', label: `Mark ${plural(items.length, 'task')} ${word}`, items, doneText: word });
-    }
-    // Sending for approval is for somebody on the task, or who made it.
-    const canSend = forApproval.filter(
-      (t) => ['TODO', 'IN_PROGRESS'].includes(t.status) && (t.createdById === askerId || t.assignees.some((a) => a.user.id === askerId)),
-    );
-    if (canSend.length) {
-      steps.push({
-        kind: 'post',
-        label: `Send ${plural(canSend.length, 'task')} for approval instead`,
-        detail: 'An approver then approves it, which marks it done.',
-        items: canSend.map((t) => ({ label: taskLabel(t), request: { method: 'POST', path: `/tasks/${t.id}/submit-review`, body: {} } })),
-        doneText: 'sent for approval',
-      });
-    }
-    if (forApproval.length > canSend.length) {
-      notes.push('A task that needs approval is finished by somebody on it pressing "Send for approval", and an approver approving it.');
     }
   }
 
@@ -700,7 +650,7 @@ async function prepareTaskChanges(args: Record<string, unknown>, orgId: string, 
   return card(
     {
       type: 'plan',
-      title: steps.length === 1 ? steps[0].label : `Change ${plural(editable.length, 'task')}`,
+      title: steps.length === 1 ? steps[0].label : `Change ${plural(tasks.length, 'task')}`,
       ...(leftOut.length ? { warnings: leftOut.map((l) => `Left out — ${l}`) } : {}),
       ...(notes.length ? { notes } : {}),
       steps,
@@ -709,83 +659,7 @@ async function prepareTaskChanges(args: Record<string, unknown>, orgId: string, 
   );
 }
 
-/* ─── 2. Approvals ───────────────────────────────────────────────────────── */
-
-async function prepareApproval(args: Record<string, unknown>, orgId: string, askerId: string): Promise<JobOutcome> {
-  const decision = String(args.decision ?? '');
-  if (decision !== 'APPROVE' && decision !== 'REQUEST_CHANGES') {
-    return asks({ needs: ['decision'], because: 'Approve it, or send it back with changes?', candidates: {} });
-  }
-  const filters: Record<string, unknown>[] = [{ organizationId: orgId, deletedAt: null }];
-  if (args.task) filters.push({ OR: [{ id: String(args.task) }, { title: looksLike(args.task) }] });
-  if (args.client) {
-    const company = await resolveCompany(orgId, args.client);
-    if (isNeeds(company)) return asks(company);
-    filters.push({ OR: [{ monthCard: { retainer: { companyId: company.id } } }, { project: { companyId: company.id } }, { companyId: company.id }] });
-  }
-  const waiting = await prisma.task.findMany({
-    where: { AND: [...filters, { status: 'IN_REVIEW' }] } as never,
-    select: { ...TASK_SELECT, taskType: true },
-    take: 20,
-  });
-  if (waiting.length !== 1) {
-    if (waiting.length === 0) {
-      const any = args.task
-        ? await prisma.task.findFirst({ where: { AND: filters } as never, select: { title: true, status: true } })
-        : null;
-      const queue = await prisma.task.findMany({
-        where: { organizationId: orgId, deletedAt: null, status: 'IN_REVIEW' },
-        select: TASK_SELECT,
-        take: 15,
-      });
-      return asks({
-        needs: ['task'],
-        because: any ? `"${any.title}" is not waiting for approval — it is ${any.status.toLowerCase().replace('_', ' ')}.` : 'No task matching that is waiting for approval.',
-        candidates: { waitingForApproval: queue.map(taskLabel) },
-      });
-    }
-    return asks({ needs: ['task'], because: 'More than one task waiting for approval matches.', candidates: { tasks: waiting.map(taskLabel) } });
-  }
-  const task = waiting[0];
-  const feedback = String(args.feedback ?? '').trim();
-  if (decision === 'REQUEST_CHANGES' && !feedback) {
-    return asks({ needs: ['feedback'], because: 'Say what needs changing — the editor works from this.', candidates: { task: task.title } });
-  }
-
-  const round = await prisma.taskReview.findFirst({
-    where: { taskId: task.id, decision: null },
-    orderBy: { round: 'desc' },
-    select: { round: true, submittedAt: true, escalatedAt: true, link: true, note: true, submittedBy: { select: { name: true } } },
-  });
-  // Said before the button: whether this person may decide it at all.
-  const refusal = await approveRefusal(orgId, askerId, { taskType: task.taskType, assigneeIds: task.assignees.map((a) => a.user.id) }, round);
-  if (refusal) return says({ cannot: refusal, link: taskLink(task.id) });
-
-  const approve = decision === 'APPROVE';
-  return card({
-    type: 'plan',
-    title: `${approve ? 'Approve' : 'Send back'}: ${task.title}`,
-    link: taskLink(task.id),
-    summary: [
-      round ? `Round ${round.round}, sent by ${round.submittedBy.name} on ${dayLabel(utcDay(round.submittedAt))}${round.escalatedAt ? ' · escalated' : ''}.` : 'Waiting for approval.',
-      ...(round?.link ? [`The work: ${round.link}`] : []),
-      ...(round?.note ? [`Their note: "${round.note}"`] : []),
-    ],
-    steps: [
-      approve
-        ? { kind: 'post', label: 'Approve it', detail: 'It becomes Done.', items: [{ label: task.title, request: { method: 'POST', path: `/tasks/${task.id}/approve`, body: {} } }], doneText: 'approved' }
-        : {
-            kind: 'post',
-            label: 'Send it back for changes',
-            detail: `"${feedback}"`,
-            items: [{ label: task.title, request: { method: 'POST', path: `/tasks/${task.id}/request-changes`, body: { feedback } } }],
-            doneText: 'sent back',
-          },
-    ],
-  });
-}
-
-/* ─── 3. Follow-up messages ──────────────────────────────────────────────── */
+/* ─── 2. Follow-up messages ──────────────────────────────────────────────── */
 
 /** WhatsApp wants the number with its country code and nothing else. */
 const whatsappDigits = (phone: string | null) => {
@@ -929,7 +803,7 @@ async function prepareFollowUp(args: Record<string, unknown>, orgId: string, ask
   );
 }
 
-/* ─── 4. Sales steps ─────────────────────────────────────────────────────── */
+/* ─── 3. Sales steps ─────────────────────────────────────────────────────── */
 
 async function prepareSalesStep(args: Record<string, unknown>, orgId: string): Promise<JobOutcome> {
   const action = String(args.action ?? '');
@@ -1090,7 +964,7 @@ async function prepareSalesStep(args: Record<string, unknown>, orgId: string): P
   });
 }
 
-/* ─── 5. Closing a retainer month ────────────────────────────────────────── */
+/* ─── 4. Closing a retainer month ────────────────────────────────────────── */
 
 async function prepareMonthClose(args: Record<string, unknown>, orgId: string, now: Date): Promise<JobOutcome> {
   const company = await resolveCompany(orgId, args.client);
@@ -1108,7 +982,7 @@ async function prepareMonthClose(args: Record<string, unknown>, orgId: string, n
       retainer: { select: { billing: true } },
       invoice: { select: { number: true, status: true, amount: true } },
       costs: { where: { deletedAt: null }, select: { amount: true } },
-      tasks: { where: { deletedAt: null, status: { in: ['TODO', 'IN_PROGRESS', 'ON_HOLD', 'IN_REVIEW'] } }, orderBy: { dueDate: 'asc' }, select: TASK_SELECT },
+      tasks: { where: { deletedAt: null, status: { in: ['TODO', 'IN_PROGRESS', 'ON_HOLD'] } }, orderBy: { dueDate: 'asc' }, select: TASK_SELECT },
     },
   });
   if (!monthCard) {
@@ -1132,8 +1006,7 @@ async function prepareMonthClose(args: Record<string, unknown>, orgId: string, n
   const notes: string[] = [];
 
   /* 1. The open tasks — one choice each. */
-  const inReview = monthCard.tasks.filter((t) => t.status === 'IN_REVIEW');
-  const open = monthCard.tasks.filter((t) => t.status !== 'IN_REVIEW');
+  const open = monthCard.tasks;
   if (open.length) {
     steps.push({
       kind: 'post',
@@ -1142,19 +1015,16 @@ async function prepareMonthClose(args: Record<string, unknown>, orgId: string, n
       items: open.map((t) => {
         const options: { label: string; request: ZenRequest | null }[] = [
           { label: `Move to ${dayLabel(moveTo)}`, request: { method: 'PATCH', path: `/tasks/${t.id}`, body: { dueDate: moveTo } } },
-          ...(t.needsApproval ? [] : [{ label: 'Mark done', request: { method: 'PATCH' as const, path: `/tasks/${t.id}/status`, body: { status: 'DONE' } } }]),
+          { label: 'Mark done', request: { method: 'PATCH', path: `/tasks/${t.id}/status`, body: { status: 'DONE' } } },
           { label: 'Cancel', request: { method: 'PATCH', path: `/tasks/${t.id}/status`, body: { status: 'CANCELLED' } } },
           { label: 'Leave it', request: null },
         ];
-        return { label: taskLabel(t), ...(t.needsApproval ? { detail: 'Needs approval, so it is not marked done from here.' } : {}), options, choice: 0 };
+        return { label: taskLabel(t), options, choice: 0 };
       }),
       doneText: 'settled',
     });
   } else {
     steps.push({ kind: 'note', label: `No open tasks on ${label}.` });
-  }
-  if (inReview.length) {
-    notes.push(`${plural(inReview.length, 'task')} waiting for approval: ${andList(inReview.map((t) => t.title))}. An approver decides those.`);
   }
 
   /* 2. Costs — never entered by Zen. */
@@ -1226,7 +1096,7 @@ async function prepareMonthClose(args: Record<string, unknown>, orgId: string, n
   });
 }
 
-/* ─── 6. Meetings and shoots ─────────────────────────────────────────────── */
+/* ─── 5. Meetings and shoots ─────────────────────────────────────────────── */
 
 /** "10:00" plus minutes, on the wall clock; the day moves if it passes midnight. */
 function wallPlus(day: string, time: string, minutes: number) {

@@ -211,9 +211,8 @@ model Organization {
   /// rather than a constant, but changing it does not renumber what exists.
   assetTagPrefix String @default("EL")
 
-  /// Working minutes a task can wait on an approver before the approvers are
-  /// reminded (bell + email), and before it escalates to the type's escalation
-  /// people. One pair for the whole organisation; Settings → Approvals.
+  /// Unused: Task approval was removed on 28 Oct 2026. Kept, like the
+  /// approval tables, so nothing is dropped.
   approvalRemindMinutes   Int @default(120)
   approvalEscalateMinutes Int @default(240)
 
@@ -262,7 +261,7 @@ model User {
   sessionsValidFrom    DateTime?
   /// "Working on now" (Team plan 1): the one task this person says they are
   /// on. Only they set it; it clears itself when the task is finished,
-  /// cancelled, sent for approval, put on hold or deleted. No time is kept.
+  /// cancelled, put on hold or deleted. No time is kept.
   ///
   /// Not unique: three people sharing a task can all be on it now.
   focusTaskId          String?
@@ -1253,18 +1252,16 @@ enum TaskType {
   BUSINESS_DEVELOPMENT
   ACCOUNTS
   MANAGEMENT
-  /// Work that is none of the above. Also what a task needing approval is
-  /// filed under when nobody picked a type — approval no longer asks for one.
+  /// Work that is none of the above.
   OTHER
 }
 
 enum TaskStatus {
   TODO
   IN_PROGRESS
-  /// Sent for approval and waiting on an approver. Open work, but not the
-  /// assignee's active work: not counted in their load, their aging or their
-  /// overdue. Only "Send for approval" puts a task here, and only Approve,
-  /// Request changes or Cancel take it out.
+  /// Unused: Task approval was removed on 28 Oct 2026 and the tasks waiting in
+  /// it went back to In progress. Nothing puts a task here any more; the value
+  /// stays because removing an enum value is a destructive migration.
   IN_REVIEW
   ON_HOLD
   DONE
@@ -1276,6 +1273,10 @@ enum ReviewDecision {
   CHANGES_REQUESTED
 }
 
+/// History only: Task approval was removed on 28 Oct 2026. Nothing writes
+/// these four tables (TaskReview, TaskReviewNote, TaskApprover,
+/// ApprovalEscalationContact) any more; they are kept so nothing is dropped.
+///
 /// One row per "Send for approval": round 1, 2, 3… A null decision means it
 /// is still waiting.
 ///
@@ -1527,11 +1528,8 @@ model Task {
   waitingTotalMinutes Int        @default(0)
   reopenCount         Int        @default(0)
   notes               String?    @db.Text
-  /// Whether this task needs an approver's sign-off before it is done.
-  ///
-  /// Ticked by whoever creates it, off by default. When set, the task can only
-  /// reach DONE through Approve — PATCH /status refuses it — and approval goes
-  /// to the approvers set for its `taskType` in Settings → Approvals.
+  /// Unused: Task approval was removed on 28 Oct 2026. Nothing reads or
+  /// writes it; kept so nothing is dropped.
   needsApproval       Boolean    @default(false)
   // §16: soft delete only, nothing hard deleted by a user. A task entered by
   // mistake leaves; a task somebody worked stays and gets Cancelled instead,
@@ -2529,7 +2527,7 @@ model PushOutbox {
   id             String    @id @default(cuid())
   organizationId String
   userId         String
-  /// APPROVALS | CALENDAR | TASKS | BELL | SUMMARY | TEST
+  /// CALENDAR | TASKS | BELL | SUMMARY | TEST (APPROVALS on rows from before 28 Oct 2026)
   kind           String
   /// De-duplication: one event is one push, e.g. "review:<id>:submitted".
   sourceKey      String

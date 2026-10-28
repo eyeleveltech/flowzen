@@ -49,7 +49,7 @@ const addDays = (day: string, n: number) => {
 /** Which "when" a task's due date falls in. A finished task is never overdue — it is "Earlier". */
 export function dueWhen(t: FilterableTask, today: string): string {
   const due = t.dueDate.slice(0, 10);
-  if (due < today) return FINISHED.includes(t.status) || t.status === 'IN_REVIEW' ? 'EARLIER' : 'OVERDUE';
+  if (due < today) return FINISHED.includes(t.status) ? 'EARLIER' : 'OVERDUE';
   if (due === today) return 'TODAY';
   if (due <= addDays(today, 7)) return 'WEEK';
   return 'LATER';
@@ -68,7 +68,7 @@ const DUE: [string, string][] = [
   ['TODAY', 'Today'],
   ['WEEK', 'Next 7 days'],
   ['LATER', 'Later'],
-  ['EARLIER', 'Earlier (done or in review)'],
+  ['EARLIER', 'Earlier (done)'],
 ];
 const PRIORITY = ['URGENT', 'HIGH', 'MEDIUM', 'LOW'];
 const ELAPSED: [string, string][] = [
@@ -80,7 +80,6 @@ const STATUS: [string, string][] = [
   ['TODO', 'To do'],
   ['IN_PROGRESS', 'In progress'],
   ['ON_HOLD', 'On hold'],
-  ['IN_REVIEW', 'In review'],
   ['DONE', 'Done'],
 ];
 

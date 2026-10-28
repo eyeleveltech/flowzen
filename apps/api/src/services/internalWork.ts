@@ -26,7 +26,7 @@ export const NO_PROJECT_WHERE = {
 } as const;
 
 /** Still owed: what All work's default "Unfinished" means. */
-export const UNFINISHED = ['TODO', 'IN_PROGRESS', 'IN_REVIEW', 'ON_HOLD'] as const;
+export const UNFINISHED = ['TODO', 'IN_PROGRESS', 'ON_HOLD'] as const;
 
 const dayOf = (d: Date) => d.toISOString().slice(0, 10);
 
@@ -35,13 +35,9 @@ export function daysBetween(today: string, day: string): number {
   return Math.round((Date.parse(`${day}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000);
 }
 
-/**
- * Late, the way the rest of the app means it: past its due date, not finished,
- * and not waiting on an approver — a task late only because nobody has
- * approved it is not its people's overdue.
- */
+/** Late, the way the rest of the app means it: past its due date and not finished. */
 export const isLate = (t: { status: string; dueDate: Date }, today: string) =>
-  t.status !== 'DONE' && t.status !== 'CANCELLED' && t.status !== 'IN_REVIEW' && dayOf(t.dueDate) < today;
+  t.status !== 'DONE' && t.status !== 'CANCELLED' && dayOf(t.dueDate) < today;
 
 export type ProgressTask = {
   id: string;

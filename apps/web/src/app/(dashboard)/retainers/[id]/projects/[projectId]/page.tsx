@@ -46,7 +46,6 @@ import { getPriorityDot, getPriorityLabel } from '@/lib/priority';
 import { formatDate } from '@/lib/api-v2';
 import {
   TASK_STATUS_OPTIONS,
-  statusChoices,
   TASK_FILTER_OPTIONS,
   matchesStatusFilter,
   isTaskLate,
@@ -468,7 +467,7 @@ export default function RetainerProjectPage() {
                             value={t.status}
                             disabled={busyId === t.id}
                             onChange={(v) => void changeStatus(t, v as TaskStatusValue)}
-                            options={statusChoices(TASK_STATUS_OPTIONS, t)}
+                            options={TASK_STATUS_OPTIONS}
                           />
                         </td>
                       </tr>

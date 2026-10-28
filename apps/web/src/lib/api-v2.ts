@@ -87,8 +87,8 @@ async function request<T>(
       } catch {
         // Private mode, or storage disabled. The redirect below still stands.
       }
-      // With the page it came from, so signing in goes back there — an
-      // approver's WhatsApp link survives an expired session.
+      // With the page it came from, so signing in goes back there — a link
+      // somebody was sent survives an expired session.
       window.location.href = loginHref();
       // Never settle. The page is navigating away, so resolving would render a
       // half-loaded screen and rejecting would surface "Authentication required"
@@ -118,7 +118,7 @@ async function request<T>(
 }
 
 /**
- * The requests a Zen card may send: task changes and approvals, proposal
+ * The requests a Zen card may send: task changes, proposal
  * flags, won and lost, and booking or moving an event. Nothing else — not a
  * delete, not a cost, not a document.
  */
@@ -127,7 +127,6 @@ const ZEN_ALLOWED: [ZenRequest['method'], RegExp][] = [
   ['POST', /^\/tasks$/],
   ['PATCH', /^\/tasks\/[\w-]+$/],
   ['PATCH', /^\/tasks\/[\w-]+\/status$/],
-  ['POST', /^\/tasks\/[\w-]+\/(approve|request-changes|submit-review)$/],
   ['PATCH', /^\/proposals\/[\w-]+\/stage$/],
   ['POST', /^\/proposals\/[\w-]+\/(win|lose)$/],
   ['POST', /^\/calendar\/events$/],
@@ -378,208 +377,10 @@ export interface OrgConfig {
     userId: string;
     preset?: string;
     permissions?: string[];
-    /** The task types this person approves. Empty for almost everybody. */
-    approverFor?: string[];
-    /** The task types whose stuck approvals escalate to this person. */
-    escalateFor?: string[];
     /** The departments they head — My Department's switcher. */
     headOf?: { id: string; name: string }[];
   };
   documentSettings?: DocumentSettings;
-}
-
-// ── Task approvals ──────────────────────────────────────────────────────────
-
-export type ReviewDecision = 'APPROVED' | 'CHANGES_REQUESTED';
-
-/** The last round of a task's approval, as task lists carry it. */
-export interface LastReview {
-  round: number;
-  decision: ReviewDecision | null;
-  feedback: string | null;
-  decidedAt: string | null;
-  submittedAt: string;
-  /** The approvers were reminded — the reminder time passed with no answer. */
-  remindedAt?: string | null;
-  /** It escalated; `escalatedTo` names who to. */
-  escalatedAt?: string | null;
-  escalatedTo?: PersonRef[];
-  /** Who decided it. */
-  decidedBy?: PersonRef | null;
-  /** Changes other approvers added after it was sent back. */
-  notes?: ReviewNote[];
-}
-
-/** A change another approver added to a round somebody sent back. */
-export interface ReviewNote {
-  id?: string;
-  feedback: string;
-  createdAt: string;
-  author: PersonRef;
-}
-
-export type PersonRef = { id: string; name: string };
-
-/** One round: who sent it and what with, and how it was decided. */
-export interface TaskReviewRound {
-  id: string;
-  round: number;
-  submittedBy: PersonRef;
-  submittedAt: string;
-  link: string | null;
-  note: string | null;
-  decision: ReviewDecision | null;
-  decidedBy: PersonRef | null;
-  decidedAt: string | null;
-  feedback: string | null;
-  /** The other approvers' changes, when it was sent back. */
-  notes?: ReviewNote[];
-  remindedAt: string | null;
-  escalatedAt: string | null;
-}
-
-/** GET /tasks/:id/reviews — a task's rounds, and what the viewer can do. */
-export interface TaskReviewsResponse {
-  success: boolean;
-  task: {
-    id: string;
-    title: string;
-    status: string;
-    taskType: string | null;
-    taskTypeLabel: string | null;
-    needsApproval: boolean;
-    priority: string;
-    dueDate: string;
-    dueTime?: string | null;
-    clientName: string;
-    projectName: string | null;
-    assignees: PersonRef[];
-    creator: PersonRef | null;
-  };
-  reviews: TaskReviewRound[];
-  /** Who the waiting round escalated to — empty until it has. */
-  escalatedTo: PersonRef[];
-  viewer: {
-    isApprover: boolean;
-    /** An escalation person for this type — can decide once it has escalated. */
-    isEscalation: boolean;
-    canApprove: boolean;
-    approveRefusal: string | null;
-    canSubmit: boolean;
-    /** Sent back, and this approver can add their own changes to it. */
-    canAddChanges?: boolean;
-  };
-  waitingMinutes: number | null;
-  waitingText: string | null;
-}
-
-/** One task waiting for the caller's approval. */
-export interface ApprovalItem {
-  id: string;
-  title: string;
-  taskType: string | null;
-  taskTypeLabel: string | null;
-  priority: string;
-  dueDate: string;
-  clientName: string;
-  projectName: string | null;
-  assignees: PersonRef[];
-  creator: PersonRef | null;
-  review: {
-    id: string;
-    round: number;
-    link: string | null;
-    note: string | null;
-    submittedAt: string;
-    submittedBy: PersonRef;
-    remindedAt: string | null;
-    escalatedAt: string | null;
-  };
-  /** In the queue because it escalated to them, not because they approve the type. */
-  asEscalation: boolean;
-  waitingMinutes: number;
-  waitingText: string;
-}
-
-/** A task somebody sent back, still with the editor — where the other approvers add theirs. */
-export interface SentBackItem {
-  id: string;
-  title: string;
-  taskType: string | null;
-  taskTypeLabel: string | null;
-  clientName: string;
-  projectName: string | null;
-  assignees: PersonRef[];
-  review: {
-    id: string;
-    round: number;
-    link: string | null;
-    decidedBy: PersonRef | null;
-    decidedAt: string | null;
-    feedback: string | null;
-    notes: ReviewNote[];
-  };
-}
-
-/** Settings → Approvals: who approves each task type. */
-export type ApproversByType = Record<string, PersonRef[]>;
-
-/** Team → Approvals: where approvals get stuck. Minutes are working minutes. */
-export interface ApprovalsReport {
-  success: boolean;
-  period: { from: string; to: string; days: 7 | 30 };
-  /** Decided within this is on time — the org's reminder time. */
-  onTimeMinutes: number;
-  byType: {
-    /** The first of `taskTypes` — types sharing one approver list are one card. */
-    taskType: string;
-    taskTypes: string[];
-    /** Every task type shares this list — the card is "All work". */
-    allWork: boolean;
-    approvers: PersonRef[];
-    submitted: number;
-    decided: number;
-    approved: number;
-    changesRequested: number;
-    medianDecisionMinutes: number | null;
-    onTime: number;
-    escalated: number;
-    waitingNow: number;
-    oldestWaitingMinutes: number | null;
-    anyEscalated: boolean;
-  }[];
-  byPerson: {
-    user: PersonRef;
-    taskTypes: string[];
-    approved: number;
-    changesRequested: number;
-    medianDecisionMinutes: number | null;
-    afterEscalation: number;
-    /** Changes added to rounds somebody else sent back. */
-    changesAdded?: number;
-  }[];
-  waitingNow: {
-    taskId: string;
-    title: string;
-    clientName: string;
-    taskType: string;
-    round: number;
-    /** Which video it is — context, never counted. */
-    editorName: string;
-    submittedAt: string;
-    waitingMinutes: number;
-    remindedAt: string | null;
-    escalatedAt: string | null;
-  }[];
-}
-
-/** Settings → Approvals, whole: the lists per type, and the org's two timings (working minutes). */
-export interface ApprovalSettings {
-  success: boolean;
-  approvers: ApproversByType;
-  escalation: ApproversByType;
-  remindMinutes: number;
-  escalateMinutes: number;
 }
 
 /** What a proforma or invoice PDF puts on itself — the letterhead a business actually has, not fixed values baked into a template. */
@@ -1690,24 +1491,6 @@ export const api = {
      * and "something arrived" become the same claim.
      */
     testMail: (to?: string) => postFull<{ data: { to: string }; message?: string }>('/config/mail/test', { to }),
-    /** Turning a module off hides its screens AND refuses its endpoints (§7.5). */
-    /** Who approves each task type. Every signed-in person can read it. */
-    approvers: () => get<ApprovalSettings>('/config/approvers'),
-    /** Replace one type's approvers. Admins only. */
-    /** One type's lists — the approvers, and who it escalates to when that is given too. */
-    saveApprovers: (taskType: string, userIds: string[], escalationUserIds?: string[]) =>
-      put<{ success: boolean; taskType: string; approvers: PersonRef[]; escalation?: PersonRef[] }>(
-        '/config/approvers',
-        { taskType, userIds, ...(escalationUserIds ? { escalationUserIds } : {}) },
-      ),
-    /** One list for all work: the same approvers and escalation people on every task type. */
-    saveAllApprovers: (userIds: string[], escalationUserIds: string[]) =>
-      put<{ success: boolean }>('/config/approvers', { allTypes: true, userIds, escalationUserIds }),
-    saveApprovalTimings: (remindMinutes: number, escalateMinutes: number) =>
-      put<{ success: boolean; remindMinutes: number; escalateMinutes: number }>('/config/approvers', {
-        remindMinutes,
-        escalateMinutes,
-      }),
     auditLog: (filters: AuditFilters = {}) => {
       const params = new URLSearchParams();
       for (const [k, v] of Object.entries(filters)) if (v !== undefined && v !== '') params.set(k, String(v));
@@ -2102,6 +1885,8 @@ export const api = {
       }>('/tasks/my'),
     list: (params: Record<string, string> = {}) =>
       get<{ success: boolean; tasks: any[] }>(`/tasks?${new URLSearchParams(params)}`),
+    /** One task, in a My Work row's shape — what a /my-work?task=… link opens when it is not on your list. */
+    one: (id: string) => get<{ success: boolean; task: Record<string, unknown> }>(`/tasks/${id}`),
     /**
      * Every task in the agency, for `work.all` — Head and Management.
      *
@@ -2170,25 +1955,6 @@ export const api = {
      * Clearing it is `me.clearFocus`.
      */
     focus: (id: string) => post<{ success: boolean; focus: MyFocus }>(`/tasks/${id}/focus`),
-    /** Send a task for approval: opens the next round and moves it to In review. */
-    submitReview: (id: string, body: { link?: string; note?: string }) =>
-      post<{ success: boolean; status: string; review: TaskReviewRound }>(`/tasks/${id}/submit-review`, body),
-    /** Approve the open round — the task is done. */
-    approve: (id: string) =>
-      post<{ success: boolean; decision: ReviewDecision; round: number; status: string }>(`/tasks/${id}/approve`, {}),
-    /** Send it back with feedback — the task returns to In progress. */
-    requestChanges: (id: string, feedback: string) =>
-      post<{ success: boolean; decision: ReviewDecision; round: number; status: string }>(
-        `/tasks/${id}/request-changes`,
-        { feedback },
-      ),
-    /** Everything waiting for the caller's approval, oldest first. Empty for non-approvers. */
-    approvals: () => get<{ success: boolean; items: ApprovalItem[]; sentBack?: SentBackItem[] }>('/tasks/approvals'),
-    /** Another approver's changes, on a round somebody already sent back. */
-    addChanges: (id: string, feedback: string) =>
-      post<{ success: boolean; note: ReviewNote }>(`/tasks/${id}/add-changes`, { feedback }),
-    /** One task's approval rounds, and what the caller can do about it. */
-    reviews: (id: string) => get<TaskReviewsResponse>(`/tasks/${id}/reviews`),
   },
 
   retainers: {
@@ -2387,8 +2153,6 @@ export const api = {
      * "Needs attention". A Head gets the departments they lead.
      */
     board: (params: Record<string, string> = {}) => get<TeamBoard>(`/team/board?${new URLSearchParams(params)}`),
-    /** The Approvals tab: the last 7 or 30 days, and what is waiting right now. */
-    approvalsReport: (days: 7 | 30) => get<ApprovalsReport>(`/team/approvals-report?days=${days}`),
     capacity: (params: Record<string, string> = {}) =>
       get<{ success: boolean; departments: Department[]; members: any[] }>(`/team/capacity?${new URLSearchParams(params)}`),
     /**
@@ -2696,8 +2460,6 @@ export const api = {
     overview: (id: string) => get<DepartmentOverview>(`/departments/${id}/overview`),
     /** My Department → Work: client work by client then retainer or project, and internal projects. */
     work: (id: string) => get<DepartmentWork>(`/departments/${id}/work`),
-    /** My Department → Approvals: the team's work in review, and what was sent back lately. */
-    approvals: (id: string) => get<DepartmentApprovals>(`/departments/${id}/approvals`),
   },
 
   /** The Monday brief: last week, what needs action, what is coming, the risks, the team. */
@@ -2809,10 +2571,9 @@ export type BriefTeamRow = {
   dueThisWeek: number;
   doneLastWeek: number;
   waitingOnClient: number;
-  inReview: number;
   overAllocatedPeople: number;
   /** The same open work split so no task is counted twice — what the stacked bar draws. */
-  segments: { overdue: number; onTrack: number; inReview: number; waitingOnClient: number };
+  segments: { overdue: number; onTrack: number; waitingOnClient: number };
 };
 
 export type BriefComingUp = {
@@ -2866,11 +2627,6 @@ export type MondayBrief = {
     dealsWon: WeekPair<{ count: number; value: number }>;
     proposalsSent: WeekPair<number>;
     tasksDone: WeekPair<{ count: number; onTime: number }>;
-    approvals: {
-      group: string;
-      last: { decided: number; medianDecisionMinutes: number | null; onTime: number; escalated: number };
-      before: { decided: number; medianDecisionMinutes: number | null; onTime: number; escalated: number } | null;
-    }[];
   };
   /** Each figure for the 8 weeks ending at the shown one. */
   trends: {
@@ -2879,7 +2635,6 @@ export type MondayBrief = {
     dealsWon: TrendPoint[];
     proposalsSent: TrendPoint[];
     tasksDone: TrendPoint[];
-    approvals: { group: string; points: TrendPoint[] }[];
   };
   needsAction: { group: string; items: BriefAlertRow[] }[] | null;
   risks: { group: string; items: BriefAlertRow[] }[] | null;
@@ -2942,9 +2697,9 @@ export type DepartmentPerson = { id: string; name: string; designation: string |
 export type MyFocus = { id: string; title: string; status: string };
 
 /** The counts on a Board row — each a list of task ids, so a count opens its tasks. */
-export type TeamBoardList = 'open' | 'dueThisWeek' | 'overdue' | 'waiting' | 'inReview' | 'doneThisWeek';
+export type TeamBoardList = 'open' | 'dueThisWeek' | 'overdue' | 'waiting' | 'doneThisWeek';
 
-export type TeamBoardReason = 'OVERDUE' | 'WAITING_LONG' | 'REVIEW_LONG' | 'URGENT_NOT_STARTED';
+export type TeamBoardReason = 'OVERDUE' | 'WAITING_LONG' | 'URGENT_NOT_STARTED';
 
 export type TeamBoard = {
   success: boolean;
@@ -2978,7 +2733,6 @@ export type TeamBoard = {
       projectName: string | null;
       monthCardMonth: string | null;
       assignees: { id: string; name: string; designation: string | null }[];
-      lastReview?: LastReview | null;
       overdue: boolean;
       [key: string]: unknown;
     }
@@ -3079,35 +2833,6 @@ export type DepartmentWork = {
     pastTarget: boolean;
     open: number;
     overdue: number;
-  }[];
-};
-
-export type DepartmentApprovals = {
-  success: boolean;
-  department: DepartmentOverview['department'];
-  inReview: {
-    taskId: string;
-    title: string;
-    assignees: { id: string; name: string }[];
-    round: number;
-    link: string | null;
-    submittedAt: string;
-    submittedBy: { id: string; name: string } | null;
-    escalated: boolean;
-    waitingMinutes: number;
-    waitingText: string;
-    /** The caller may approve it here: an approver for its type (or its escalation contact once escalated), and not on it. */
-    canDecide: boolean;
-    notYours: string | null;
-  }[];
-  changesRequested: {
-    taskId: string;
-    title: string;
-    assignees: { id: string; name: string }[];
-    round: number;
-    feedback: string | null;
-    decidedAt: string | null;
-    decidedBy: { id: string; name: string } | null;
   }[];
 };
 
@@ -3398,9 +3123,8 @@ export interface PushDevice {
   endpoint: string;
 }
 
-/** The four kinds of phone notification, each its own switch. */
+/** The three kinds of phone notification, each its own switch. */
 export interface PushPreferences {
-  pushApprovals: boolean;
   pushCalendar: boolean;
   pushTasks: boolean;
   pushBell: boolean;

@@ -3,8 +3,6 @@ import { prisma } from '../lib/prisma.js';
 import { authenticate, requirePermission, type AuthRequest, hasPermission } from '../middleware/auth.js';
 import { listDepartments } from './departments.js';
 import { loadWorkCalendar, workingMinutesOn } from '../utils/workCalendar.js';
-import { LAST_REVIEW } from '../services/taskApprovals.js';
-import { composeApprovalsReport } from '../services/approvalsReport.js';
 import { toCsv } from '../utils/csv.js';
 import { sendCsv } from '../utils/csvResponse.js';
 import { teamScope, peopleInScope } from '../services/teamScope.js';
@@ -116,9 +114,7 @@ teamRouter.get('/capacity', requirePermission('work.team'), async (req: AuthRequ
 
     const formatted = members.map((m) => {
       const mine = m.taskAssignments.map((a) => a.task);
-      // Waiting on an approver is open work, but not this person's to do — it
-      // is not their load, and not their overdue.
-      const openTasks = mine.filter((t) => t.status !== 'DONE' && t.status !== 'CANCELLED' && t.status !== 'IN_REVIEW');
+      const openTasks = mine.filter((t) => t.status !== 'DONE' && t.status !== 'CANCELLED');
       const overdueTasks = openTasks.filter((t) => new Date(t.dueDate).toISOString().slice(0, 10) < todayStr);
       const waitingTasks = mine.filter((t) => t.status === 'ON_HOLD');
       const completedTasks = mine.filter((t) => t.status === 'DONE');
@@ -207,30 +203,6 @@ teamRouter.get('/capacity', requirePermission('work.team'), async (req: AuthRequ
 // than in the browser keeps the two shapes from leaking into the UI as a pair
 // of optional fields nobody remembers to handle.
 
-// ── Approvals report ────────────────────────────────────────────────────────
-//
-// The Team screen's Approvals tab: where approvals get stuck. Heads and
-// management — `work.team`, the screen's own gate. The last 7 days by default,
-// or 30; the "waiting now" list is live whatever the period. Declared before
-// `/:id` so the path is not read as somebody's id.
-
-teamRouter.get('/approvals-report', requirePermission('work.team'), async (req: AuthRequest, res: Response, next) => {
-  try {
-    const raw = req.query.days;
-    const days = raw === undefined ? 7 : Number(raw);
-    if (days !== 7 && days !== 30) {
-      res.status(400).json({ success: false, error: 'Choose the last 7 or the last 30 days.' });
-      return;
-    }
-    const to = new Date();
-    const from = new Date(to.getTime() - days * 24 * 60 * 60 * 1000);
-    const report = await composeApprovalsReport(req.user!.organizationId, { from, to }, to);
-    res.json({ success: true, ...report, period: { ...report.period, days } });
-  } catch (error) {
-    next(error);
-  }
-});
-
 // ── Board ───────────────────────────────────────────────────────────────────
 //
 // Team → Board (Team plan 1): one row per person — what they said they are on
@@ -304,8 +276,6 @@ teamRouter.get('/:id', requirePermission('work.team'), async (req: AuthRequest, 
                 projectId: true,
                 companyId: true,
                 waitingTotalMinutes: true,
-                needsApproval: true,
-                reviews: LAST_REVIEW,
                 assignedBy: { select: { id: true, name: true } },
                 creator: { select: { id: true, name: true } },
                 reviewer: { select: { id: true, name: true } },
@@ -339,8 +309,7 @@ teamRouter.get('/:id', requirePermission('work.team'), async (req: AuthRequest, 
     const todayStr = now.toISOString().slice(0, 10);
     const tasks = member.taskAssignments.map((a) => a.task);
 
-    // In review is open, but it is the approver's move, not this person's.
-    const open = tasks.filter((t) => t.status !== 'DONE' && t.status !== 'CANCELLED' && t.status !== 'IN_REVIEW');
+    const open = tasks.filter((t) => t.status !== 'DONE' && t.status !== 'CANCELLED');
     const overdue = open.filter((t) => t.dueDate.toISOString().slice(0, 10) < todayStr);
     const waiting = tasks.filter((t) => t.status === 'ON_HOLD');
     const done = tasks.filter((t) => t.status === 'DONE');
@@ -386,8 +355,6 @@ teamRouter.get('/:id', requirePermission('work.team'), async (req: AuthRequest, 
         repeat: t.repeat,
         waitingOn: waitingOnShown(t),
         hasClient: taskHasClient(t),
-        needsApproval: t.needsApproval,
-        lastReview: t.reviews[0] ?? null,
         // The person who asked for it, not the person who typed it in.
         // `creator` is the fallback for rows written before the two were
         // separate columns, which the backfill has already made equal.

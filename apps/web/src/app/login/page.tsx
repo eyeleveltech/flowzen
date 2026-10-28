@@ -41,7 +41,7 @@ export default function LoginPage() {
       const data = await api.auth.login(email, password);
       setAuth(data.user as never);
       /*
-       * Back to where they were headed — a WhatsApp approval link, usually —
+       * Back to where they were headed — a link to a task, usually —
        * or My Work, the one screen every role has. Read from the address at
        * the moment of signing in, and only ever a path on this site.
        */

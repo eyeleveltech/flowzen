@@ -19,7 +19,7 @@ const TONE: Record<Tone, string> = {
   warn: 'bg-warning-tint text-warning-ink border-warning/30',
   bad: 'bg-danger-tint text-danger border-danger/30',
   info: 'bg-info-tint text-info border-info/30',
-  // Waiting on an approver — see --color-review.
+  // A proposal in review — see --color-review.
   review: 'bg-review-tint text-review border-review/30',
 };
 

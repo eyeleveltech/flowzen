@@ -19,7 +19,7 @@ describe('the old Board tab', () => {
 describe("the person panel's task groups", () => {
   const t = (id: string, status: string, dueDate: string) => ({ id, status, dueDate: `${dueDate}T00:00:00.000Z` }) as unknown as BoardTask;
 
-  it('puts waiting and in-review work in their own groups, and the rest by due date', () => {
+  it('puts waiting work in its own group, and the rest by due date', () => {
     const g = groupTasks(
       [
         t('late', 'TODO', '2026-10-22'),
@@ -27,7 +27,6 @@ describe("the person panel's task groups", () => {
         t('week', 'TODO', '2026-10-30'),
         t('later', 'TODO', '2026-11-12'),
         t('hold', 'ON_HOLD', '2026-10-20'),
-        t('review', 'IN_REVIEW', '2026-10-21'),
         t('done', 'DONE', '2026-10-22'),
       ],
       '2026-10-26',
@@ -39,7 +38,6 @@ describe("the person panel's task groups", () => {
       'This week': ['week'],
       Later: ['later'],
       Waiting: ['hold'],
-      'In review': ['review'],
     });
   });
 });

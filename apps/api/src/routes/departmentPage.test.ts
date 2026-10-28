@@ -8,7 +8,7 @@ import { signJwt } from '../utils/jwt.js';
 
 /**
  * My Department (Department head page plan): who may open a department's
- * page, and what its overview, work and approvals say.
+ * page, and what its overview and work say.
  *
  * Ravi heads Development; Priya heads Video; Akmal is Management and heads
  * nothing; Janani and Vikram are in Development; Arun is in Video.
@@ -92,8 +92,6 @@ const task = (id: string, assigneeIds: string[], over: Record<string, unknown> =
   notes: null,
   waitingOn: null,
   waitingSince: null,
-  needsApproval: false,
-  reviews: [] as unknown[],
   repeat: null,
   monthCardId: null,
   projectId: null,
@@ -125,7 +123,6 @@ beforeEach(() => {
   );
   p.organization.findUnique.mockResolvedValue({
     timezone: 'Asia/Kolkata',
-    approvalRemindMinutes: 120,
     workingHoursStart: '09:30',
     workingHoursEnd: '18:30',
     workingDays: [1, 2, 3, 4, 5, 6],
@@ -139,8 +136,6 @@ beforeEach(() => {
     'assetReservation',
     'peopleAllocation',
     'internalProject',
-    'taskApprover',
-    'approvalEscalationContact',
   ] as const) {
     p[model].findMany.mockResolvedValue([]);
   }
@@ -156,7 +151,7 @@ describe("a department's page: its head, or Management — nobody else", () => {
     ['Janani, an employee in it', 'usr-janani', 403],
     ["Priya, another department's head", 'usr-priya', 403],
   ] as const)('%s → %i', async (_label, who, status) => {
-    for (const path of ['overview', 'work', 'approvals']) {
+    for (const path of ['overview', 'work']) {
       const res = await request(app).get(`/api/departments/d-dev/${path}`).set(...as(who));
       expect(res.status, path).toBe(status);
     }
@@ -181,11 +176,6 @@ describe('the overview: its people only, with their cards and what needs attenti
   beforeEach(() => {
     p.task.findMany.mockResolvedValue([
       task('t-late', ['usr-janani'], { dueDate: day('2026-10-20') }),
-      task('t-review', ['usr-vikram'], {
-        status: 'IN_REVIEW',
-        dueDate: day('2026-10-28'),
-        reviews: [{ round: 1, decision: null, submittedAt: new Date('2026-10-26T04:00:00Z') }],
-      }),
       task('t-hold', ['usr-vikram'], { status: 'ON_HOLD', dueDate: day('2026-10-30') }),
     ]);
     p.calendarEvent.findMany.mockResolvedValue([
@@ -232,7 +222,6 @@ describe('the overview: its people only, with their cards and what needs attenti
     const res = await request(app).get('/api/departments/d-dev/overview').set(...as('usr-ravi'));
     const vikram = res.body.people.find((x: any) => x.id === 'usr-vikram');
     expect(vikram).toMatchObject({ phone: '98765 43210', email: 'usr-vikram@studio.test' });
-    expect(vikram.lists.inReview).toEqual(['t-review']);
     expect(vikram.lists.waiting).toEqual(['t-hold']);
     expect(vikram.todayEvents).toEqual([
       { id: 'ev-1', kind: 'SHOOT', title: 'Acme shoot', location: 'Studio B', allDay: false, time: '14:00', endTime: '16:00' },
@@ -269,8 +258,7 @@ describe('the work: by client, then retainer or project; and the internal projec
       task('t-1', ['usr-janani'], { dueDate: day('2026-10-22'), monthCardId: 'mc-1', monthCard: { retainerId: 'r-1', retainer: { id: 'r-1', company: acme } } }),
       task('t-2', ['usr-janani', 'usr-arun'], { dueDate: day('2026-10-29'), monthCardId: 'mc-1', monthCard: { retainerId: 'r-1', retainer: { id: 'r-1', company: acme } } }),
       task('t-3', ['usr-vikram'], { dueDate: day('2026-11-02'), projectId: 'p-1', project: { id: 'p-1', name: 'Website build', company: acme } }),
-      // Waiting on an approver is not overdue.
-      task('t-4', ['usr-vikram'], { status: 'IN_REVIEW', dueDate: day('2026-10-21'), projectId: 'p-1', project: { id: 'p-1', name: 'Website build', company: acme } }),
+      task('t-4', ['usr-vikram'], { status: 'ON_HOLD', dueDate: day('2026-10-30'), projectId: 'p-1', project: { id: 'p-1', name: 'Website build', company: acme } }),
     ]);
     p.internalProject.findMany.mockResolvedValue([
       {
@@ -315,43 +303,6 @@ describe('the work: by client, then retainer or project; and the internal projec
       daysLeft: 10,
       targetDate: '2026-11-05',
     });
-  });
-});
-
-// ── Approvals ───────────────────────────────────────────────────────────────
-
-describe("approvals: the team's work in review, decided here only where the rules allow", () => {
-  it('offers Approve to an approver of the type — never on their own task', async () => {
-    p.taskApprover.findMany.mockResolvedValue([{ taskType: 'DESIGN' }]);
-    p.task.findMany.mockImplementation(async ({ where }: any) =>
-      where.status === 'IN_REVIEW'
-        ? [
-            task('t-janani', ['usr-janani'], {
-              taskType: 'DESIGN',
-              reviews: [{ id: 'rv-1', round: 2, link: 'https://example.com/v2', submittedAt: new Date('2026-10-26T04:00:00Z'), escalatedAt: null, submittedBy: { id: 'usr-janani', name: 'Janani' } }],
-            }),
-            task('t-ravi', ['usr-ravi'], {
-              taskType: 'DESIGN',
-              reviews: [{ id: 'rv-2', round: 1, link: null, submittedAt: new Date('2026-10-26T05:00:00Z'), escalatedAt: null, submittedBy: { id: 'usr-ravi', name: 'Ravi' } }],
-            }),
-          ]
-        : [
-            task('t-back', ['usr-vikram'], {
-              status: 'IN_PROGRESS',
-              reviews: [{ round: 1, decision: 'CHANGES_REQUESTED', feedback: 'Bigger logo', decidedAt: new Date('2026-10-23T10:00:00Z'), decidedBy: { id: 'usr-akmal', name: 'Akmal' } }],
-            }),
-          ],
-    );
-
-    const res = await request(app).get('/api/departments/d-dev/approvals').set(...as('usr-ravi'));
-    expect(res.status).toBe(200);
-    const by = Object.fromEntries(res.body.inReview.map((r: any) => [r.taskId, r]));
-    expect(by['t-janani']).toMatchObject({ round: 2, canDecide: true, notYours: null, link: 'https://example.com/v2' });
-    expect(by['t-ravi']).toMatchObject({ canDecide: false });
-    expect(by['t-ravi'].notYours).toMatch(/another approver/);
-    expect(res.body.changesRequested).toEqual([
-      expect.objectContaining({ taskId: 't-back', feedback: 'Bigger logo', decidedBy: { id: 'usr-akmal', name: 'Akmal' } }),
-    ]);
   });
 });
 

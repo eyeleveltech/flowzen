@@ -382,7 +382,7 @@ describe('the morning bell', () => {
   });
 
   it('is never closed by the hourly scanner', () => {
-    expect(EXTERNAL_RULES).toEqual(expect.arrayContaining(['EVENT_TODAY', 'EVENT_UPDATE', 'APPROVAL_REMINDER', 'APPROVAL_ESCALATED']));
+    expect(EXTERNAL_RULES).toEqual(expect.arrayContaining(['EVENT_TODAY', 'EVENT_UPDATE']));
     const scanner = fs.readFileSync(path.join(__dirname, '../workers/scanner.cron.ts'), 'utf8');
     expect(scanner).toMatch(/rule: \{ notIn: EXTERNAL_RULES \}/);
   });

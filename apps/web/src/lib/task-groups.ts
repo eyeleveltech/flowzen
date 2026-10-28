@@ -126,8 +126,8 @@ const addDays = (day: string, n: number) => {
 
 /**
  * By when it is due: Overdue, Today, This week (to Sunday), Later — and
- * Earlier, for a past date that is not overdue because the task is finished
- * or with an approver. "No date" for a task without one.
+ * Earlier, for a past date that is not overdue because the task is finished.
+ * "No date" for a task without one.
  */
 export function byDue<T extends GroupableTask>(tasks: T[], today: string) {
   const weekday = new Date(`${today}T00:00:00Z`).getUTCDay();
@@ -139,6 +139,6 @@ export function byDue<T extends GroupableTask>(tasks: T[], today: string) {
     if (due === today) return [{ key: 'today', label: 'Today', rank: 1 }];
     if (due > today && due <= sunday) return [{ key: 'week', label: 'This week', rank: 2 }];
     if (due > sunday) return [{ key: 'later', label: 'Later', rank: 3 }];
-    return [{ key: 'earlier', label: 'Earlier — finished or with an approver', rank: 4 }];
+    return [{ key: 'earlier', label: 'Earlier — finished', rank: 4 }];
   });
 }

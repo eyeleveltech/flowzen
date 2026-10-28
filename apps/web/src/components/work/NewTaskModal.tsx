@@ -17,7 +17,6 @@ import { Field, FieldSelect } from '@/components/ui/field';
 import { AssigneeField, AssignedByField, useMayAssignOthers } from '@/components/work/AssigneeField';
 import { ErrorNote } from '@/components/ui/empty-state';
 import { PRIORITY_CONFIG } from '@/lib/priority';
-import { NeedsApprovalField } from '@/components/work/NeedsApprovalField';
 import { useAuthStore } from '@/stores';
 import { TASK_TYPE_OPTIONS } from '@/lib/task-type';
 import { DueTimeField } from '@/components/work/DueTimeField';
@@ -84,7 +83,6 @@ export function NewTaskModal({
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [assignedById, setAssignedById] = useState('');
   const [taskType, setTaskType] = useState('');
-  const [needsApproval, setNeedsApproval] = useState(false);
   const team = useTeamMembers();
   /** Decides the dialog's own name: a head opening it is not writing a task for themselves. */
   const { may: mayAssignOthers } = useMayAssignOthers();
@@ -110,7 +108,7 @@ export function NewTaskModal({
       setTitle(''); setDueDate(initialDueDate ?? '');
     setDueTime(initialDueTime ?? ''); setRepeat(''); setPriority('MEDIUM'); setDescription('');
       setScope('INTERNAL'); setCompanyId(''); setTargetKey(''); setInternalProjectId(''); setError(null);
-      setTaskType(''); setNeedsApproval(false);
+      setTaskType('');
       // Nobody, until somebody says otherwise — see tasks.ts on why this
     // field means nothing when it is filled in by default.
     setAssignedById('');
@@ -176,7 +174,6 @@ export function NewTaskModal({
         assigneeIds: assigneeIds.length > 0 ? assigneeIds : undefined,
         assignedById: assignedById || undefined,
         taskType: taskType || undefined,
-        needsApproval,
         notes: description.trim() || undefined,
       });
       onCreated();
@@ -299,7 +296,6 @@ export function NewTaskModal({
             placeholder="Not set"
             options={TASK_TYPE_OPTIONS}
           />
-          <NeedsApprovalField taskType={taskType} value={needsApproval} onChange={setNeedsApproval} />
           <Field label="Description" value={description} onChange={setDescription} textarea rows={3} />
           {error && <ErrorNote>{error}</ErrorNote>}
         </ModalBody>

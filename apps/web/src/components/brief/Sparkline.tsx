@@ -18,8 +18,8 @@ const PAD_BOTTOM = 3;
  *
  * A line with a soft area under it in the primary green, the latest week
  * marked with a dot. Each week is a hover and tap target wider than its point,
- * and says itself in words: "Week of 15 Sep: ₹1.8L". A week with no value (no
- * approvals decided) is a gap in the line, not a zero.
+ * and says itself in words: "Week of 15 Sep: ₹1.8L". A week with no value is
+ * a gap in the line, not a zero.
  */
 export function Sparkline({
   points,

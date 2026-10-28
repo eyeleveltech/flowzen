@@ -106,7 +106,6 @@ export function zenScreen(ctx: ZenPageContext): { key: string; label: string | n
     const tab = q.get('tab')?.toLowerCase() ?? '';
     return MONEY_TABS[tab] ? { key: `/money:${tab}`, label: `Money → ${MONEY_TABS[tab]}` } : { key: '/money', label: 'Money' };
   }
-  if (base === '/members' && q.get('tab') === 'approvals') return { key: '/members:approvals', label: 'Team → Approvals' };
   const name = SCREENS[base];
   return name ? { key: base, label: name } : { key: '', label: null };
 }

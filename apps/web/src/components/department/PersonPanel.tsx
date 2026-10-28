@@ -2,7 +2,7 @@
 
 /**
  * Everything about one person in the department, without leaving the page:
- * their tasks by Overdue / Today / This week / Later / Waiting / In review,
+ * their tasks by Overdue / Today / This week / Later / Waiting,
  * the clients and projects they are on, their week, the gear they hold and
  * what is reserved for them, and this month's time split as percentages.
  *

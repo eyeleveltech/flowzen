@@ -13,7 +13,7 @@ import { prisma } from '../lib/prisma.js';
  * history, and asking for it again is asking for new work.
  */
 
-const OPEN: TaskStatus[] = [TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.IN_REVIEW, TaskStatus.ON_HOLD];
+const OPEN: TaskStatus[] = [TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.ON_HOLD];
 
 export type TaskTwin = {
   id: string;
@@ -73,4 +73,4 @@ export const twinDay = (day: string) =>
 
 /** How a status reads in a sentence. */
 export const twinStatus = (s: TaskStatus) =>
-  ({ TODO: 'to do', IN_PROGRESS: 'in progress', IN_REVIEW: 'waiting for approval', ON_HOLD: 'on hold' })[s as string] ?? s.toLowerCase();
+  ({ TODO: 'to do', IN_PROGRESS: 'in progress', ON_HOLD: 'on hold' })[s as string] ?? s.toLowerCase();

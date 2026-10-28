@@ -4,18 +4,13 @@ import { runZenJob, type ZenCard } from './zenJobs.js';
 import { draftTask } from './zenDraft.js';
 
 /*
- * The clash check and the approver rule are tested where they live; here they
- * are stand-ins, so what is tested is what the jobs do with them.
+ * The clash check is tested where it lives; here it is a stand-in, so what is
+ * tested is what the jobs do with it.
  */
 const findClashes = vi.fn(async (_opts: Record<string, unknown>) => [] as { message: string }[]);
 vi.mock('./calendarEvents.js', async (importOriginal) => {
   const real = await importOriginal<typeof import('./calendarEvents.js')>();
   return { ...real, findClashes: (opts: Record<string, unknown>) => findClashes(opts) };
-});
-const approveRefusal = vi.fn(async () => null as string | null);
-vi.mock('./taskApprovals.js', async (importOriginal) => {
-  const real = await importOriginal<typeof import('./taskApprovals.js')>();
-  return { ...real, approveRefusal: () => approveRefusal() };
 });
 vi.mock('../utils/mailer.js', () => ({ resolveMailConfig: vi.fn(async () => ({ host: 'x' })) }));
 
@@ -23,8 +18,7 @@ vi.mock('../utils/mailer.js', () => ({ resolveMailConfig: vi.fn(async () => ({ h
  * Zen's jobs (Zen Plan 4): it prepares, the person clicks.
  *
  *   · words become ids, or come back as `needs` with real candidates;
- *   · each job keeps its rules — no "done" for a task that needs approval,
- *     feedback before sending work back, gear only on a shoot, no cancelling;
+ *   · each job keeps its rules — gear only on a shoot, no cancelling;
  *   · money documents are forms, never requests;
  *   · and nothing here writes a single row.
  */
@@ -47,7 +41,6 @@ const task = (over: Record<string, unknown> = {}) => ({
   title: 'Reel cut',
   status: 'TODO',
   dueDate: new Date('2026-10-03T00:00:00Z'),
-  needsApproval: false,
   createdById: 'u-janani',
   taskType: 'VIDEO',
   repeat: null,
@@ -59,8 +52,6 @@ const task = (over: Record<string, unknown> = {}) => ({
 
 beforeEach(() => {
   findClashes.mockClear();
-  approveRefusal.mockReset();
-  approveRefusal.mockResolvedValue(null);
   p.user.findMany.mockResolvedValue(TEAM);
   p.user.findUnique.mockResolvedValue({ name: 'Akmal' });
   p.organization.findUnique.mockResolvedValue({ name: 'EyeLevel', timezone: 'Asia/Kolkata', workingDays: [1, 2, 3, 4, 5, 6], holidays: [] });
@@ -112,25 +103,11 @@ describe('task changes', () => {
     noWrites();
   });
 
-  it('never offers "done" for a task that needs approval', async () => {
-    p.task.findMany.mockResolvedValue([task({ needsApproval: true })]);
-    const out = await run('prepareTaskChanges', { task: 'Reel', setStatus: 'DONE' });
-    expect(out.cards).toBeUndefined();
-    expect(JSON.stringify(out.result)).toMatch(/needs approval/);
-  });
 
-  it('offers sending it for approval instead, to somebody on it', async () => {
-    p.task.findMany.mockResolvedValue([task({ needsApproval: true, assignees: [{ user: { id: ME, name: 'Akmal' } }] })]);
+  it('marks a task done through the status route', async () => {
+    p.task.findMany.mockResolvedValue([task()]);
     const out = await run('prepareTaskChanges', { task: 'Reel', setStatus: 'DONE' });
-    const steps = plan(out).steps as any[];
-    expect(steps.map((s) => s.items[0].request.path)).toEqual(['/tasks/t1/submit-review']);
-  });
-
-  it('leaves out a task waiting for approval', async () => {
-    p.task.findMany.mockResolvedValue([task(), task({ id: 't2', title: 'Waiting one', status: 'IN_REVIEW' })]);
-    const out = await run('prepareTaskChanges', { person: 'Janani', newDueDate: '2026-10-05' });
-    expect((plan(out).steps[0] as any).items).toHaveLength(1);
-    expect(plan(out).warnings?.[0]).toMatch(/Waiting one: waiting for approval/);
+    expect((plan(out).steps[0] as any).items[0].request).toEqual({ method: 'PATCH', path: '/tasks/t1/status', body: { status: 'DONE' } });
   });
 
   it('says only this copy of a repeating task moves', async () => {
@@ -143,30 +120,6 @@ describe('task changes', () => {
     p.task.findMany.mockResolvedValue([task({ repeat: { stoppedAt: null, frequency: 'WEEKLY' } })]);
     const out = await run('prepareTaskChanges', { task: 'Reel', repeat: 'STOP' });
     expect((plan(out).steps[0] as any).items[0].request.body).toEqual({ repeat: null });
-  });
-});
-
-describe('approvals', () => {
-  beforeEach(() => {
-    p.task.findMany.mockResolvedValue([task({ status: 'IN_REVIEW' })]);
-    p.taskReview.findFirst.mockResolvedValue({ round: 1, submittedAt: new Date('2026-10-01'), escalatedAt: null, link: null, note: null, submittedBy: { name: 'Janani' } });
-  });
-
-  it('asks what to fix before sending work back', async () => {
-    const out = await run('prepareApproval', { task: 'Reel', decision: 'REQUEST_CHANGES' });
-    expect(out.result).toMatchObject({ needs: ['feedback'] });
-  });
-
-  it('sends the feedback with the request', async () => {
-    const out = await run('prepareApproval', { task: 'Reel', decision: 'REQUEST_CHANGES', feedback: 'Trim the intro' });
-    expect((plan(out).steps[0] as any).items[0].request).toEqual({ method: 'POST', path: '/tasks/t1/request-changes', body: { feedback: 'Trim the intro' } });
-  });
-
-  it('says so, with no card, when this person may not decide it', async () => {
-    approveRefusal.mockResolvedValue("You're on this task, so you can't approve it.");
-    const out = await run('prepareApproval', { task: 'Reel', decision: 'APPROVE' });
-    expect(out.cards).toBeUndefined();
-    expect(out.result).toMatchObject({ cannot: "You're on this task, so you can't approve it." });
   });
 });
 
@@ -264,7 +217,7 @@ describe('closing a month', () => {
       retainer: { billing: 'IN_ADVANCE' },
       invoice: null,
       costs: [],
-      tasks: [task(), task({ id: 't2', title: 'Approval one', needsApproval: true }), task({ id: 't3', title: 'In review', status: 'IN_REVIEW' })],
+      tasks: [task(), task({ id: 't2', title: 'Second one' })],
     });
     p.proforma.findFirst.mockResolvedValue(null);
   });
@@ -275,12 +228,11 @@ describe('closing a month', () => {
     noWrites();
   });
 
-  it('offers no "done" for a task that needs approval, and leaves review to the approver', async () => {
+  it('offers each open task a move, done, cancel or leave', async () => {
     const out = await run('prepareMonthClose', { client: 'Acme', month: '2026-10' });
     const items = (plan(out).steps[0] as any).items;
     expect(items).toHaveLength(2);
-    expect(items[1].options.map((o: any) => o.label)).not.toContain('Mark done');
-    expect(plan(out).notes?.[0]).toMatch(/In review/);
+    for (const item of items) expect(item.options.map((o: any) => o.label)).toEqual(['Move to Mon 2 Nov', 'Mark done', 'Cancel', 'Leave it']);
   });
 
   it('only links to costs — Zen never enters one', async () => {

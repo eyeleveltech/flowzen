@@ -248,7 +248,7 @@ const QUERY_WORDS: Record<string, { param: string; words: Record<string, string>
     words: { billing: 'Retainer billing', invoices: 'Invoices', costs: 'Costs', profit: 'Profit & Costs' },
     as: (w) => ` → ${w} tab`,
   },
-  '/members': { param: 'tab', words: { team: 'Team', approvals: 'Approvals' }, as: (w) => ` → ${w} tab` },
+  '/members': { param: 'tab', words: { team: 'Team' }, as: (w) => ` → ${w} tab` },
   '/live-work': {
     param: 'tab',
     words: { retainers: 'Retainers', projects: 'Projects', sample: 'Sample work', internal: 'Internal' },

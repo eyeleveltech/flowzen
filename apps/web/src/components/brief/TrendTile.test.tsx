@@ -5,14 +5,14 @@ import { minutesLabel } from './format';
 
 /**
  * The delta chip is coloured by what the move MEANS, not which way it went:
- * more cash is good (green), a longer approval time is not (red).
+ * more cash is good (green), a longer wait is not (red).
  */
 
 const points = [60, 70, 80, 90, 75, 70, 60, 120].map((value, i) => ({ weekStart: `2026-08-${String(10 + i).padStart(2, '0')}`, value }));
 const tile = (props: Partial<Parameters<typeof TrendTile>[0]>) =>
   render(
     <TrendTile
-      label="Approvals · All work"
+      label="Time to reply"
       value={120}
       previous={60}
       format={minutesLabel}
@@ -20,14 +20,14 @@ const tile = (props: Partial<Parameters<typeof TrendTile>[0]>) =>
       pointFormat={minutesLabel}
       note="Typical time"
       onOpen={vi.fn()}
-      openLabel="Approvals"
+      openLabel="Time to reply"
       {...props}
     />,
   );
 const chip = () => screen.getByText('Up').parentElement!;
 
 describe('TrendTile', () => {
-  it('shows approval time going up as a red chip', () => {
+  it('shows a wait going up as a red chip', () => {
     tile({ upIsGood: false });
     expect(chip()).toHaveTextContent('100%');
     expect(chip().className).toContain('text-danger');
@@ -47,6 +47,6 @@ describe('TrendTile', () => {
 
   it('says the trend in words', () => {
     tile({ upIsGood: false });
-    expect(screen.getByText('Approvals · All work over eight weeks: from 1 h to 2 h, rising.')).toBeInTheDocument();
+    expect(screen.getByText('Time to reply over eight weeks: from 1 h to 2 h, rising.')).toBeInTheDocument();
   });
 });

@@ -76,7 +76,7 @@ import { useZenForm } from '@/lib/zenForms';
 import { getPriorityDot, getPriorityLabel } from '@/lib/priority';
 
 type RStatus = 'ACTIVE' | 'STOPPED';
-type TStatus = 'TODO' | 'IN_PROGRESS' | 'IN_REVIEW' | 'ON_HOLD' | 'DONE' | 'CANCELLED';
+type TStatus = 'TODO' | 'IN_PROGRESS' | 'ON_HOLD' | 'DONE' | 'CANCELLED';
 
 const TASK_STATUS_OPTIONS = [
   { value: 'TODO', label: 'To do' },

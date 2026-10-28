@@ -9,44 +9,22 @@ import { authenticate, requirePermission, hasPermission, type AuthRequest } from
 import { dayMinutesOf, formatWorkingMinutes, loadWorkCalendar, workingMinutesOn } from '../utils/workCalendar.js';
 import { computeTaskTypeMedians, taskTypeGroupKey } from '../utils/taskTypeMedian.js';
 import { defaultProjectId } from '../services/retainerProjects.js';
-import { TaskStatus, TaskWorkType, WaitingOn, Priority, TaskType, ReviewDecision, RepeatFrequency } from '@prisma/client';
-import { approvalFlagRefusal, approvalType, approveRefusal, addChangesRefusal, approverFor, approverIds, elapsedEnd, escalateFor, escalationNamesByType, TASK_TYPE_LABEL, type LastReview } from '../services/taskApprovals.js';
-import { CHASER_RULES } from '../workers/approvalChaser.cron.js';
-
-/**
- * "Escalated to Akmal" — the escalation people's names on each escalated
- * round, for the editor's side of a task list. One query for the whole list.
- */
-async function withEscalatedTo<T extends { taskType: TaskType | null; lastReview: LastReview | null }>(
-  orgId: string,
-  rows: T[],
-): Promise<(T & { lastReview: (LastReview & { escalatedTo: { id: string; name: string }[] }) | null })[]> {
-  const escalatedTypes = rows.filter((r) => r.lastReview?.escalatedAt).map((r) => r.taskType);
-  const names = await escalationNamesByType(orgId, escalatedTypes);
-  return rows.map((r) => ({
-    ...r,
-    lastReview: r.lastReview
-      ? {
-          ...r.lastReview,
-          escalatedTo: r.lastReview.escalatedAt && r.taskType ? (names.get(r.taskType) ?? []) : [],
-        }
-      : null,
-  }));
-}
+import { TaskStatus, TaskWorkType, WaitingOn, Priority, TaskType, RepeatFrequency } from '@prisma/client';
+import { TASK_TYPE_LABEL } from '../services/taskTypes.js';
 
 import { parsePagination } from '../utils/query.js';
 import { toCsv } from '../utils/csv.js';
 import { sendCsv } from '../utils/csvResponse.js';
-import { canSeeTask, taskInScope } from '../services/teamScope.js';
+import { taskInScope } from '../services/teamScope.js';
 /*
  * Changing a task goes through taskChangeableWhere, not taskInScope (security
  * fixes plan, H2): taskInScope narrows only a department Head, so for anybody
  * else every task in the organisation was in reach — renamed, closed, held,
  * taken over and deleted by id. Out of reach now reads "Task not found".
  */
-import { taskChangeableWhere } from '../services/taskAccess.js';
+import { taskChangeableWhere, taskReadableWhere } from '../services/taskAccess.js';
 import { findOpenTwin, twinDay, twinStatus } from '../services/taskDuplicates.js';
-import { pushReviewDecided, pushReviewSubmitted, pushTaskAssigned, pushTaskEdited } from '../services/push.js';
+import { pushTaskAssigned, pushTaskEdited } from '../services/push.js';
 import { clearFocusOff, clearFocusOn, ENDS_FOCUS, focusRefusal } from '../services/taskFocus.js';
 import { NO_PROJECT_WHERE } from '../services/internalWork.js';
 
@@ -63,14 +41,9 @@ export { TASK_PEOPLE } from '../services/taskPeople.js';
  */
 export type TaskPerson = { id: string; name: string; designation: string | null; dept?: string };
 
-export function withPeople<T extends { assignees: { user: TaskPerson }[]; reviews?: LastReview[] }>(task: T) {
-  const { reviews, ...rest } = task;
-  return { ...rest, assignees: task.assignees.map((a) => a.user), lastReview: reviews?.[0] ?? null } as Omit<
-    T,
-    'assignees' | 'reviews'
-  > & {
+export function withPeople<T extends { assignees: { user: TaskPerson }[] }>(task: T) {
+  return { ...task, assignees: task.assignees.map((a) => a.user) } as Omit<T, 'assignees'> & {
     assignees: TaskPerson[];
-    lastReview: LastReview | null;
   };
 }
 
@@ -129,29 +102,19 @@ tasksRouter.get('/my', requirePermission('work.own'), async (req: AuthRequest, r
     const formattedTasks = allMyTasks.map((t) => {
       const clientName =
         t.monthCard?.retainer.company.name || t.project?.company.name || t.company?.name || 'Internal';
-      const lastReview = t.reviews[0] ?? null;
-      // In review, the clock stops at the moment it was sent — an approver's
-      // time is not this person's.
-      const workingHours = workingMinutesOn(calendar, t.assignedAt, elapsedEnd(t, lastReview, now), t.waitingTotalMinutes);
+      const workingHours = workingMinutesOn(calendar, t.assignedAt, t.completedAt ?? now, t.waitingTotalMinutes);
       const typeMedianMinutes = medianByGroup.get(taskTypeGroupKey(t)) ?? null;
 
-      /*
-       * Waiting on an approver is its own group, below the active work.
-       *
-       * It is still open, but it is not this person's to move, and a video late
-       * only because nobody has approved it is not their overdue.
-       */
-      const isInReview = t.status === 'IN_REVIEW';
       const dueStr = new Date(t.dueDate).toISOString().slice(0, 10);
-      const isOverdue = !isInReview && t.status !== 'DONE' && dueStr < todayStr;
-      const isToday = !isInReview && t.status !== 'DONE' && dueStr === todayStr;
-      const isThisWeek = !isInReview && t.status !== 'DONE' && !isOverdue && !isToday && new Date(t.dueDate) <= endOfWeek;
+      const isOverdue = t.status !== 'DONE' && dueStr < todayStr;
+      const isToday = t.status !== 'DONE' && dueStr === todayStr;
+      const isThisWeek = t.status !== 'DONE' && !isOverdue && !isToday && new Date(t.dueDate) <= endOfWeek;
       const isDone = t.status === 'DONE';
       // Anything open and due beyond the 7-day window still needs a bucket —
       // a retainer's template tasks are created a month out, and a task that
       // fits none of overdue/today/thisWeek/done was silently disappearing
       // from the one screen ~25 people rely on to see their work.
-      const isLater = !isInReview && !isOverdue && !isToday && !isThisWeek && !isDone;
+      const isLater = !isOverdue && !isToday && !isThisWeek && !isDone;
 
       return {
         id: t.id,
@@ -206,21 +169,12 @@ tasksRouter.get('/my', requirePermission('work.own'), async (req: AuthRequest, r
         workingMinutes: workingHours.totalMinutes,
         typeMedianMinutes,
         typeMedianText: typeMedianMinutes != null ? formatWorkingMinutes(typeMedianMinutes, dayMinutesOf(calendar)) : null,
-        needsApproval: t.needsApproval,
         // The repeat, if it is a copy in one; `nextDue` is added below.
         repeat: t.repeat,
-        lastReview,
-        // How long the waiting round has waited, in working time — what
-        // "No answer for 2h 10m" reads on the editor's row.
-        reviewWaitingText:
-          isInReview && lastReview && lastReview.decision == null
-            ? formatWorkingMinutes(workingMinutesOn(calendar, lastReview.submittedAt, now).totalMinutes, dayMinutesOf(calendar))
-            : null,
         isOverdue,
         isToday,
         isThisWeek,
         isLater,
-        isInReview,
         isDone,
       };
     });
@@ -238,7 +192,7 @@ tasksRouter.get('/my', requirePermission('work.own'), async (req: AuthRequest, r
       select: { taskId: true, sortOrder: true },
     });
     const placeOf = new Map(places.map((p) => [p.taskId, p.sortOrder]));
-    const placed = (await withRepeatNext(orgId, await withEscalatedTo(orgId, formattedTasks))).map((t) => ({
+    const placed = (await withRepeatNext(orgId, formattedTasks)).map((t) => ({
       ...t,
       sortOrder: placeOf.get(t.id) ?? null,
     }));
@@ -264,10 +218,6 @@ tasksRouter.get('/my', requirePermission('work.own'), async (req: AuthRequest, r
     const overdue = inTheirOrder(placed.filter((t) => t.isOverdue));
     const thisWeek = inTheirOrder(placed.filter((t) => t.isThisWeek));
     const later = inTheirOrder(placed.filter((t) => t.isLater));
-    // Waiting on an approver, longest-waiting first.
-    const inReview = placed
-      .filter((t) => t.isInReview)
-      .sort((a, b) => (a.lastReview?.submittedAt?.getTime() ?? 0) - (b.lastReview?.submittedAt?.getTime() ?? 0));
     // History, not a plan — it stays in the order it was finished.
     const completed = placed.filter((t) => t.isDone);
 
@@ -278,7 +228,6 @@ tasksRouter.get('/my', requirePermission('work.own'), async (req: AuthRequest, r
         overdue: overdue.length,
         thisWeek: thisWeek.length,
         later: later.length,
-        inReview: inReview.length,
         completed: completed.length,
       },
       tasks: {
@@ -286,185 +235,11 @@ tasksRouter.get('/my', requirePermission('work.own'), async (req: AuthRequest, r
         overdue,
         thisWeek,
         later,
-        inReview,
         completed,
       },
       // One working day in minutes — what My Work's Elapsed filter counts a "day" as.
       dayMinutes: dayMinutesOf(calendar),
     });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// ── 1b. Waiting for my approval (/api/tasks/approvals) ──────────────────────
-//
-// The approver's side of My Work: every task sent for approval in a type this
-// person approves, oldest first — the one that has waited longest is the one
-// somebody is chasing on WhatsApp. Their own work is left out, because nobody
-// approves that. Empty rather than refused for everybody else, so My Work can
-// ask without knowing who is looking.
-
-/** Where a task sits, for the approval screens: its client, and its piece of work. */
-const TASK_PLACE = {
-  monthCard: { select: { month: true, retainer: { select: { company: { select: { name: true } } } } } },
-  project: { select: { name: true, company: { select: { name: true } } } },
-  company: { select: { name: true } },
-  internalProject: { select: { name: true } },
-  retainerProject: { select: { name: true } },
-} as const;
-
-function placeOf(t: {
-  monthCard: { retainer: { company: { name: string } } } | null;
-  project: { name: string; company: { name: string } } | null;
-  company: { name: string } | null;
-  internalProject: { name: string } | null;
-  retainerProject: { name: string } | null;
-}) {
-  return {
-    clientName: t.monthCard?.retainer.company.name || t.project?.company.name || t.company?.name || 'Internal',
-    projectName: t.project?.name ?? t.retainerProject?.name ?? t.internalProject?.name ?? null,
-  };
-}
-
-/** Who sent a round, and who decided it. */
-const REVIEW_PEOPLE = {
-  submittedBy: { select: { id: true, name: true } },
-  decidedBy: { select: { id: true, name: true } },
-  // Changes the other approvers added after it was sent back.
-  notes: {
-    orderBy: { createdAt: 'asc' },
-    select: { id: true, feedback: true, createdAt: true, author: { select: { id: true, name: true } } },
-  },
-} as const;
-
-/** How long a sent-back task stays in the other approvers' "add your changes" list. */
-const SENT_BACK_DAYS = 7;
-
-tasksRouter.get('/approvals', requirePermission('work.own'), async (req: AuthRequest, res: Response, next) => {
-  try {
-    const orgId = req.user!.organizationId;
-    const me = req.user!.userId;
-
-    const [types, escalationTypes] = await Promise.all([approverFor(orgId, me), escalateFor(orgId, me)]);
-    if (types.length === 0 && escalationTypes.length === 0) {
-      res.json({ success: true, items: [], sentBack: [] });
-      return;
-    }
-
-    /*
-     * Sent back, and still with the editor — where the other approvers add
-     * their changes. One approver is enough to approve, but a request for
-     * changes should not be the last word of the first person to open it. For
-     * a week after it was sent back, or until the editor sends it again.
-     */
-    const since = new Date(Date.now() - SENT_BACK_DAYS * 24 * 60 * 60 * 1000);
-    const sentBackTasks = await prisma.task.findMany({
-      where: {
-        organizationId: orgId,
-        deletedAt: null,
-        needsApproval: true,
-        status: { in: [TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.ON_HOLD] },
-        taskType: { in: [...new Set([...types, ...escalationTypes])] },
-        NOT: { assignees: { some: { userId: me } } },
-        reviews: { some: { decision: ReviewDecision.CHANGES_REQUESTED, decidedAt: { gte: since } } },
-      },
-      include: {
-        ...TASK_PLACE,
-        ...TASK_PEOPLE,
-        reviews: { orderBy: { round: 'desc' }, take: 1, include: REVIEW_PEOPLE },
-      },
-    });
-    const sentBack = sentBackTasks
-      .filter((t) => t.reviews[0]?.decision === ReviewDecision.CHANGES_REQUESTED)
-      .map((t) => {
-        const r = t.reviews[0];
-        return {
-          id: t.id,
-          title: t.title,
-          taskType: t.taskType,
-          taskTypeLabel: t.taskType ? TASK_TYPE_LABEL[t.taskType] : null,
-          ...placeOf(t),
-          assignees: t.assignees.map((a) => a.user),
-          review: {
-            id: r.id,
-            round: r.round,
-            link: r.link,
-            decidedBy: r.decidedBy,
-            decidedAt: r.decidedAt,
-            feedback: r.feedback,
-            notes: r.notes,
-          },
-        };
-      })
-      .sort((a, b) => (b.review.decidedAt?.getTime() ?? 0) - (a.review.decidedAt?.getTime() ?? 0));
-
-    const tasks = await prisma.task.findMany({
-      where: {
-        organizationId: orgId,
-        deletedAt: null,
-        status: TaskStatus.IN_REVIEW,
-        NOT: { assignees: { some: { userId: me } } },
-        OR: [
-          // Theirs to approve.
-          ...(types.length > 0 ? [{ taskType: { in: types } }] : []),
-          // Escalated to them — only once the waiting round has escalated.
-          ...(escalationTypes.length > 0
-            ? [
-                {
-                  taskType: { in: escalationTypes },
-                  reviews: { some: { decision: null, escalatedAt: { not: null } } },
-                },
-              ]
-            : []),
-        ],
-      },
-      include: {
-        ...TASK_PLACE,
-        ...TASK_PEOPLE,
-        // The round that is waiting, not the last one decided.
-        reviews: { where: { decision: null }, orderBy: { round: 'desc' }, take: 1, include: REVIEW_PEOPLE },
-      },
-    });
-
-    const calendar = await loadWorkCalendar(orgId);
-    const now = new Date();
-    const items = tasks
-      .filter((t) => t.reviews.length > 0)
-      .map((t) => {
-        const r = t.reviews[0];
-        // Working time, the same clock every other elapsed figure reads.
-        const waitingMinutes = workingMinutesOn(calendar, r.submittedAt, now).totalMinutes;
-        return {
-          id: t.id,
-          title: t.title,
-          taskType: t.taskType,
-          taskTypeLabel: t.taskType ? TASK_TYPE_LABEL[t.taskType] : null,
-          priority: t.priority,
-          dueDate: t.dueDate,
-          dueTime: t.dueTime,
-          ...placeOf(t),
-          assignees: t.assignees.map((a) => a.user),
-          creator: t.creator,
-          review: {
-            id: r.id,
-            round: r.round,
-            link: r.link,
-            note: r.note,
-            submittedAt: r.submittedAt,
-            submittedBy: r.submittedBy,
-            remindedAt: r.remindedAt,
-            escalatedAt: r.escalatedAt,
-          },
-          // Here because it escalated to them, not because they approve the type.
-          asEscalation: !(t.taskType && types.includes(t.taskType)),
-          waitingMinutes,
-          waitingText: formatWorkingMinutes(waitingMinutes, dayMinutesOf(calendar)),
-        };
-      })
-      .sort((a, b) => a.review.submittedAt.getTime() - b.review.submittedAt.getTime());
-
-    res.json({ success: true, items, sentBack });
   } catch (error) {
     next(error);
   }
@@ -680,7 +455,6 @@ type AllSort = (typeof ALL_SORTS)[number];
 const STATUS_SORT_ORDER: string[] = [
   TaskStatus.TODO,
   TaskStatus.IN_PROGRESS,
-  TaskStatus.IN_REVIEW,
   TaskStatus.ON_HOLD,
   TaskStatus.DONE,
   TaskStatus.CANCELLED,
@@ -808,10 +582,7 @@ tasksRouter.get('/all', requirePermission('work.all'), async (req: AuthRequest, 
      * asked for.
      */
     const statuses = list(status).flatMap((v) =>
-      // In review is still owed — just not by its assignee.
-      v === 'UNFINISHED'
-        ? [TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.IN_REVIEW, TaskStatus.ON_HOLD]
-        : [v as TaskStatus],
+      v === 'UNFINISHED' ? [TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.ON_HOLD] : [v as TaskStatus],
     );
     const statusWhere = statuses.length > 0 ? { status: { in: Array.from(new Set(statuses)) } } : {};
 
@@ -878,11 +649,7 @@ tasksRouter.get('/all', requirePermission('work.all'), async (req: AuthRequest, 
       const due = new Date(t.dueDate);
       const dueStr = `${due.getFullYear()}-${String(due.getMonth() + 1).padStart(2, '0')}-${String(due.getDate()).padStart(2, '0')}`;
       const settled = t.status === TaskStatus.DONE || t.status === TaskStatus.CANCELLED;
-      const lastReview = t.reviews[0] ?? null;
-      // Waiting on an approver is not the assignee's overdue, and its clock
-      // stops at the moment it was sent.
-      const notTheirs = settled || t.status === TaskStatus.IN_REVIEW;
-      const workingHours = workingMinutesOn(calendar, t.assignedAt, elapsedEnd(t, lastReview, now), t.waitingTotalMinutes);
+      const workingHours = workingMinutesOn(calendar, t.assignedAt, t.completedAt ?? now, t.waitingTotalMinutes);
 
       return {
         id: t.id,
@@ -920,19 +687,17 @@ tasksRouter.get('/all', requirePermission('work.all'), async (req: AuthRequest, 
         retainerId: t.monthCard?.retainerId ?? null,
         workingHoursText: workingHours.formatted,
         workingMinutes: workingHours.totalMinutes,
-        needsApproval: t.needsApproval,
         // The repeat, if it is a copy in one; `nextDue` is added below.
         repeat: t.repeat,
-        lastReview,
-        isOverdue: !notTheirs && dueStr < today,
-        isToday: !notTheirs && dueStr === today,
+        isOverdue: !settled && dueStr < today,
+        isToday: !settled && dueStr === today,
       };
     });
 
     // Applied after formatting, because "overdue" is a question about the
     // calendar and the status together rather than a column to filter on.
-    const withEscalation = await withRepeatNext(orgId, await withEscalatedTo(orgId, formatted));
-    const filteredRows = overdue === '1' || overdue === 'true' ? withEscalation.filter((t) => t.isOverdue) : withEscalation;
+    const withRepeats = await withRepeatNext(orgId, formatted);
+    const filteredRows = overdue === '1' || overdue === 'true' ? withRepeats.filter((t) => t.isOverdue) : withRepeats;
 
     // The clicked column, then due date and title so equal rows keep a steady
     // order. Blanks (nobody on it, never assigned) go last either way.
@@ -1150,7 +915,7 @@ tasksRouter.get('/', requirePermission('work.own'), async (req: AuthRequest, res
       const workingHours = workingMinutesOn(
         calendar,
         t.assignedAt,
-        elapsedEnd(t, t.reviews[0], new Date()),
+        t.completedAt ?? new Date(),
         t.waitingTotalMinutes,
       );
       return {
@@ -1160,7 +925,7 @@ tasksRouter.get('/', requirePermission('work.own'), async (req: AuthRequest, res
       };
     });
 
-    const listed = await withRepeatNext(orgId, await withEscalatedTo(orgId, formatted));
+    const listed = await withRepeatNext(orgId, formatted);
 
     if (wantsCsv) {
       const csv = toCsv(listed, [
@@ -1231,8 +996,6 @@ const taskCreateSchema = z.object({
   assignedById: z.string().min(1).optional(),
   reviewerId: z.string().min(1).nullable().optional(),
   taskType: z.nativeEnum(TaskType).nullable().optional(),
-  /** Needs an approver's sign-off before it is done. Off unless ticked. */
-  needsApproval: z.boolean().optional(),
   dueDate: z.string().min(1, 'Due date is required'),
   dueTime: dueTimeSchema,
   priority: z.nativeEnum(Priority).optional(),
@@ -1335,16 +1098,8 @@ tasksRouter.post('/', requirePermission('work.own'), async (req: AuthRequest, re
     }
 
     const orgId = req.user!.organizationId;
-    const { title, workType, workId, monthCardId, projectId, retainerProjectId, internalProjectId, companyId, assigneeId, assigneeIds, assignedById, reviewerId, taskType, needsApproval, dueDate, dueTime, priority, notes, repeat, duplicateCheck } =
+    const { title, workType, workId, monthCardId, projectId, retainerProjectId, internalProjectId, companyId, assigneeId, assigneeIds, assignedById, reviewerId, taskType, dueDate, dueTime, priority, notes, repeat, duplicateCheck } =
       parsed.data;
-
-    // Approval needs somebody to approve it. No type picked is fine: the task
-    // is filed as Other, which has the same approvers as all work.
-    const approvalRefused = await approvalFlagRefusal(orgId, taskType, needsApproval ?? false);
-    if (approvalRefused) {
-      res.status(400).json({ success: false, error: approvalRefused });
-      return;
-    }
 
     // `assigneeIds` wins when both arrive; `assigneeId` alone still means a
     // task with one person on it, which is what every existing caller sends.
@@ -1539,7 +1294,6 @@ tasksRouter.post('/', requirePermission('work.own'), async (req: AuthRequest, re
         assignedById,
         reviewerId,
         taskType,
-        needsApproval,
         dueDate: new Date(dueDate),
         dueTime,
         priority,
@@ -1577,7 +1331,6 @@ const taskEditSchema = z
     assignedById: z.string().min(1).optional(),
     reviewerId: z.string().min(1).nullable().optional(),
     taskType: z.nativeEnum(TaskType).nullable().optional(),
-    needsApproval: z.boolean().optional(),
     dueDate: z.string().min(1).optional(),
     dueTime: dueTimeSchema,
     priority: z.nativeEnum(Priority).optional(),
@@ -1617,51 +1370,8 @@ tasksRouter.patch('/:id', requirePermission('work.own'), async (req: AuthRequest
       return;
     }
 
-    const { title, assigneeId, assigneeIds, assignedById, reviewerId, taskType, needsApproval, dueDate, dueTime, priority, notes, repeat } =
+    const { title, assigneeId, assigneeIds, assignedById, reviewerId, taskType, dueDate, dueTime, priority, notes, repeat } =
       parsed.data;
-
-    /*
-     * Approval, on an edit.
-     *
-     *   · Neither the flag nor the type moves while the task is waiting on an
-     *     approver — the round in flight was sent to that type's approvers.
-     *   · Ticked (or kept ticked on a new type), it needs a type with approvers.
-     *   · Taking it off is for whoever created the task, one of its approvers,
-     *     or a Head — not for the person whose work it would stop checking.
-     */
-    const typeChanging = taskType !== undefined && taskType !== existing.taskType;
-    const approvalChanging = needsApproval !== undefined && needsApproval !== existing.needsApproval;
-    if (existing.status === TaskStatus.IN_REVIEW && (typeChanging || approvalChanging)) {
-      res.status(400).json({
-        success: false,
-        error: "This task is waiting for approval. Its type and approval can't change until it's decided.",
-      });
-      return;
-    }
-    const nextNeedsApproval = needsApproval ?? existing.needsApproval;
-    // Needing approval with no type picked is filed as Other.
-    const pickedType = taskType !== undefined ? taskType : existing.taskType;
-    const nextType = nextNeedsApproval ? approvalType(pickedType) : pickedType;
-    if (nextNeedsApproval && (typeChanging || approvalChanging)) {
-      const refused = await approvalFlagRefusal(orgId, nextType, true);
-      if (refused) {
-        res.status(400).json({ success: false, error: refused });
-        return;
-      }
-    }
-    if (approvalChanging && needsApproval === false) {
-      const me = req.user!.userId;
-      const pool = await approverIds(orgId, existing.taskType);
-      const allowed =
-        existing.createdById === me || pool.includes(me) || hasPermission(req.user!, 'work.team');
-      if (!allowed) {
-        res.status(403).json({
-          success: false,
-          error: 'Only whoever created this task, one of its approvers, or a Head can take approval off it.',
-        });
-        return;
-      }
-    }
 
     // Everybody named has to be on this team and still here — without it the
     // contents of a picker are the only thing standing between a typo and a
@@ -1764,8 +1474,7 @@ tasksRouter.patch('/:id', requirePermission('work.own'), async (req: AuthRequest
         ...(nextPeople ? { assigneeId: nextPeople[0] } : {}),
         ...(assignedById !== undefined ? { assignedById } : {}),
         ...(reviewerId !== undefined ? { reviewerId } : {}),
-        ...(taskType !== undefined || nextType !== existing.taskType ? { taskType: nextType } : {}),
-        ...(needsApproval !== undefined ? { needsApproval } : {}),
+        ...(taskType !== undefined ? { taskType } : {}),
         ...(dueDate !== undefined ? { dueDate: new Date(dueDate) } : {}),
         ...(dueTime !== undefined ? { dueTime } : {}),
         ...(priority !== undefined ? { priority } : {}),
@@ -1811,9 +1520,6 @@ tasksRouter.patch('/:id', requirePermission('work.own'), async (req: AuthRequest
     }
     if (taskType !== undefined && task.taskType !== existing.taskType) {
       changed.taskType = { from: existing.taskType, to: task.taskType };
-    }
-    if (needsApproval !== undefined && task.needsApproval !== existing.needsApproval) {
-      changed.needsApproval = { from: existing.needsApproval, to: task.needsApproval };
     }
     if (dueTime !== undefined && task.dueTime !== existing.dueTime) {
       changed.dueTime = { from: existing.dueTime, to: task.dueTime };
@@ -2042,7 +1748,7 @@ tasksRouter.post('/:id/focus', requirePermission('work.own'), async (req: AuthRe
 // done early and reopening it always has. This used to accept any raw
 // string with no validation at all.
 
-const TASK_STATUSES = ['TODO', 'IN_PROGRESS', 'IN_REVIEW', 'ON_HOLD', 'DONE', 'CANCELLED'] as const;
+const TASK_STATUSES = ['TODO', 'IN_PROGRESS', 'ON_HOLD', 'DONE', 'CANCELLED'] as const;
 const FINISHED_STATUSES: string[] = ['DONE', 'CANCELLED'];
 
 tasksRouter.patch('/:id/status', requirePermission('work.own'), async (req: AuthRequest, res: Response, next) => {
@@ -2062,31 +1768,6 @@ tasksRouter.patch('/:id/status', requirePermission('work.own'), async (req: Auth
     });
     if (!task) {
       res.status(404).json({ success: false, error: 'Task not found' });
-      return;
-    }
-
-    /*
-     * Approval has its own doors, and this is not one of them.
-     *
-     *   · In review is reached only by "Send for approval", which records the
-     *     round and who it went to.
-     *   · Out of review is Approve or Request changes — or Cancel, which ends
-     *     the task and follows the usual rules below.
-     *   · A task that needs approval reaches Done only through Approve.
-     */
-    if (status === 'IN_REVIEW') {
-      res.status(400).json({ success: false, error: "A task goes into review by sending it for approval. Use 'Send for approval'." });
-      return;
-    }
-    if (task.status === TaskStatus.IN_REVIEW && status !== 'CANCELLED') {
-      res.status(400).json({
-        success: false,
-        error: 'This task is waiting for approval. An approver approves it or requests changes — the only other way out is Cancel.',
-      });
-      return;
-    }
-    if (status === 'DONE' && task.needsApproval && task.status !== TaskStatus.DONE) {
-      res.status(400).json({ success: false, error: "This task needs approval. Use 'Send for approval'." });
       return;
     }
 
@@ -2184,12 +1865,6 @@ tasksRouter.post('/:id/wait', requirePermission('work.own'), async (req: AuthReq
       res.status(404).json({ success: false, error: 'Task not found' });
       return;
     }
-    // Waiting on an approver is not waiting on the client: that clock is the
-    // review's, and the round decides what happens next.
-    if (existing.status === TaskStatus.IN_REVIEW) {
-      res.status(400).json({ success: false, error: "This task is waiting for approval, so it can't be put on hold." });
-      return;
-    }
     const waitingOn = parsed.data.waitingOn ?? null;
     if (waitingOn === WaitingOn.CLIENT && !taskHasClient(existing)) {
       res.status(400).json({
@@ -2246,10 +1921,6 @@ tasksRouter.post('/:id/resume', requirePermission('work.own'), async (req: AuthR
       res.status(404).json({ success: false, error: 'Task not found' });
       return;
     }
-    if (task.status === TaskStatus.IN_REVIEW) {
-      res.status(400).json({ success: false, error: 'This task is waiting for approval, not on hold.' });
-      return;
-    }
     /*
      * Only a task on hold can be resumed. This accepted any status, so a
      * screen holding an out-of-date "On hold" copy of a task somebody had
@@ -2297,464 +1968,75 @@ tasksRouter.post('/:id/resume', requirePermission('work.own'), async (req: AuthR
   }
 });
 
-// ── 7. Approval ─────────────────────────────────────────────────────────────
-//
-// A task marked "Needs approval" is sent, not marked done. Send for approval
-// opens a round and moves it to In review; one approver for its type then
-// approves it (Done), or requests changes with written feedback (back to In
-// progress, and the next send is the next round). Round by round, so the
-// history says how many times a piece of work went back, and why.
-//
-// The working minutes a round spends waiting on an approver are added to
-// `waitingTotalMinutes` when it is decided. Every elapsed and aging figure
-// already subtracts that field, so review time never counts against the
-// editor. `waitingSince`/`waitingOn` are left alone — they are the ON_HOLD
-// flow's, and mixing the two would make each lie about the other.
-
-/** The task, with who is on it and its latest round, for the approval actions. */
-const loadForApproval = (orgId: string, id: string) =>
-  prisma.task.findFirst({
-    where: { id, organizationId: orgId, deletedAt: null },
-    include: {
-      assignees: { select: { userId: true } },
-      reviews: { orderBy: { round: 'desc' }, take: 1, include: REVIEW_PEOPLE },
-    },
-  });
-
-/** Somebody else moved the task first — a second approver, or a double send. */
-class ApprovalConflict extends Error {}
-
-const submitReviewSchema = z.object({
-  link: z
-    .string()
-    .trim()
-    .max(2000)
-    .refine((v) => v === '' || /^https?:\/\/\S+$/i.test(v), 'Paste the full link, starting with http:// or https://')
-    .optional(),
-  note: z.string().trim().max(2000, 'Keep the note under 2000 characters').optional(),
-});
-
-tasksRouter.post('/:id/submit-review', requirePermission('work.own'), async (req: AuthRequest, res: Response, next) => {
-  try {
-    const parsed = submitReviewSchema.safeParse(req.body ?? {});
-    if (!parsed.success) {
-      res.status(400).json({ success: false, error: parsed.error.issues[0].message });
-      return;
-    }
-
-    const orgId = req.user!.organizationId;
-    const id = String(req.params.id);
-    const me = req.user!.userId;
-
-    const task = await loadForApproval(orgId, id);
-    if (!task) {
-      res.status(404).json({ success: false, error: 'Task not found' });
-      return;
-    }
-    if (!task.needsApproval) {
-      res.status(400).json({ success: false, error: "This task doesn't need approval — mark it Done instead." });
-      return;
-    }
-    const onIt = task.assignees.some((a) => a.userId === me);
-    if (!onIt && task.createdById !== me) {
-      res.status(403).json({
-        success: false,
-        error: 'Only the people on this task, or whoever created it, can send it for approval.',
-      });
-      return;
-    }
-    if (task.status !== TaskStatus.TODO && task.status !== TaskStatus.IN_PROGRESS) {
-      const why =
-        task.status === TaskStatus.IN_REVIEW
-          ? "It's already waiting for approval."
-          : task.status === TaskStatus.ON_HOLD
-            ? "It's on hold. Take it off hold first."
-            : 'This task is finished.';
-      res.status(400).json({ success: false, error: why });
-      return;
-    }
-    // The approvers could have been emptied since the box was ticked.
-    const refused = await approvalFlagRefusal(orgId, task.taskType, true);
-    if (refused) {
-      res.status(400).json({ success: false, error: refused });
-      return;
-    }
-
-    const round = (task.reviews[0]?.round ?? 0) + 1;
-    const link = parsed.data.link || null;
-    const note = parsed.data.note || null;
-
-    let review;
-    try {
-      review = await prisma.$transaction(async (tx) => {
-        // Conditional, so two clicks cannot open two rounds: the second finds
-        // the task already in review and moves nothing.
-        const moved = await tx.task.updateMany({
-          where: { id, status: { in: [TaskStatus.TODO, TaskStatus.IN_PROGRESS] } },
-          data: { status: TaskStatus.IN_REVIEW },
-        });
-        if (moved.count === 0) throw new ApprovalConflict();
-        return tx.taskReview.create({
-          data: { organizationId: orgId, taskId: id, round, submittedById: me, link, note },
-          include: REVIEW_PEOPLE,
-        });
-      });
-    } catch (e) {
-      if (e instanceof ApprovalConflict || (e as { code?: string }).code === 'P2002') {
-        res.status(409).json({ success: false, error: 'It was just sent for approval. Refresh to see it.' });
-        return;
-      }
-      throw e;
-    }
-
-    await prisma.activity.create({
-      data: {
-        organizationId: orgId,
-        entityType: 'Task',
-        entityId: id,
-        actorId: me,
-        verb: 'task_submitted_for_approval',
-        payload: { title: task.title, round, ...(link ? { link } : {}) },
-      },
-    });
-    await pushReviewSubmitted(req.user!, task, review.id);
-    // With the approver now, so nobody is working on it.
-    await clearFocusOn(id);
-
-    res.status(201).json({ success: true, status: TaskStatus.IN_REVIEW, review });
-  } catch (error) {
-    next(error);
-  }
-});
+// ── 7. One Task ─────────────────────────────────────────────────────────────
 
 /**
- * Deciding the open round — Approve, or Request changes.
+ * GET /api/tasks/:id — one task, in the shape a My Work row has.
  *
- * One approver decides it. Two clicking at the same moment both read "In
- * review", so the write is conditional on the task still being there: the
- * first moves it, the second moves nothing and is told who got there first.
+ * What /my-work?task=… opens when the task is not on the reader's own list:
+ * the bell, the brief and Zen all link a task that way, and a Head follows
+ * those links to somebody else's work. The approval drawer used to answer
+ * them; with approval gone this is what does. Only for whoever may read the
+ * task (services/taskAccess.ts) — anybody else is told "not found".
+ *
+ * Declared last, so `/my`, `/all` and `/targets` are never read as an id.
  */
-async function decideReview(
-  req: AuthRequest,
-  res: Response,
-  decision: ReviewDecision,
-  feedback: string | null,
-): Promise<void> {
-  const orgId = req.user!.organizationId;
-  const id = String(req.params.id);
-  const me = req.user!.userId;
-
-  const task = await loadForApproval(orgId, id);
-  if (!task) {
-    res.status(404).json({ success: false, error: 'Task not found' });
-    return;
-  }
-
-  const open = task.reviews[0];
-  if (task.status !== TaskStatus.IN_REVIEW || !open || open.decision) {
-    if (open?.decision) {
-      res.status(409).json({ success: false, error: `Already decided by ${open.decidedBy?.name ?? 'someone else'}` });
-      return;
-    }
-    res.status(400).json({ success: false, error: "This task isn't waiting for approval." });
-    return;
-  }
-
-  const refused = await approveRefusal(
-    orgId,
-    me,
-    { taskType: task.taskType, assigneeIds: task.assignees.map((a) => a.userId) },
-    open,
-  );
-  if (refused) {
-    res.status(403).json({ success: false, error: refused });
-    return;
-  }
-
-  const now = new Date();
-  const calendar = await loadWorkCalendar(orgId);
-  // The round's wait, in working time — handed back to the editor's clock.
-  const reviewMinutes = workingMinutesOn(calendar, open.submittedAt, now).totalMinutes;
-  const approved = decision === ReviewDecision.APPROVED;
-
-  try {
-    await prisma.$transaction(async (tx) => {
-      const moved = await tx.task.updateMany({
-        where: { id, status: TaskStatus.IN_REVIEW },
-        data: {
-          status: approved ? TaskStatus.DONE : TaskStatus.IN_PROGRESS,
-          ...(approved ? { completedAt: now } : {}),
-          // Changes requested is not a reopen: `reopenCount` counts finished
-          // work pulled back, which this never was.
-          waitingTotalMinutes: { increment: reviewMinutes },
-        },
-      });
-      if (moved.count === 0) throw new ApprovalConflict();
-      const decided = await tx.taskReview.updateMany({
-        where: { id: open.id, decision: null },
-        data: { decision, decidedById: me, decidedAt: now, feedback },
-      });
-      if (decided.count === 0) throw new ApprovalConflict();
-      // The reminder or escalation in the bell is answered — clear it now,
-      // not on the chaser's next tick.
-      await tx.alert.updateMany({
-        where: { organizationId: orgId, rule: { in: CHASER_RULES }, entityType: 'Task', entityId: id, resolvedAt: null },
-        data: { resolvedAt: now },
-      });
-    });
-  } catch (e) {
-    if (e instanceof ApprovalConflict) {
-      const latest = await prisma.taskReview.findFirst({
-        where: { taskId: id },
-        orderBy: { round: 'desc' },
-        include: { decidedBy: { select: { name: true } } },
-      });
-      res.status(409).json({ success: false, error: `Already decided by ${latest?.decidedBy?.name ?? 'someone else'}` });
-      return;
-    }
-    throw e;
-  }
-
-  await prisma.activity.create({
-    data: {
-      organizationId: orgId,
-      entityType: 'Task',
-      entityId: id,
-      actorId: me,
-      verb: approved ? 'task_approved' : 'task_changes_requested',
-      payload: { title: task.title, round: open.round, ...(feedback ? { feedback } : {}) },
-    },
-  });
-  await pushReviewDecided(req.user!, task, open, approved, feedback);
-  if (approved) await clearFocusOn(id);
-
-  res.json({
-    success: true,
-    decision,
-    round: open.round,
-    status: approved ? TaskStatus.DONE : TaskStatus.IN_PROGRESS,
-  });
-}
-
-tasksRouter.post('/:id/approve', requirePermission('work.own'), async (req: AuthRequest, res: Response, next) => {
-  try {
-    await decideReview(req, res, ReviewDecision.APPROVED, null);
-  } catch (error) {
-    next(error);
-  }
-});
-
-const requestChangesSchema = z.object({
-  feedback: z
-    .string()
-    .trim()
-    .min(1, 'Say what needs changing — the editor works from this.')
-    .max(2000, 'Keep the feedback under 2000 characters'),
-});
-
-tasksRouter.post('/:id/request-changes', requirePermission('work.own'), async (req: AuthRequest, res: Response, next) => {
-  try {
-    const parsed = requestChangesSchema.safeParse(req.body ?? {});
-    if (!parsed.success) {
-      res.status(400).json({ success: false, error: parsed.error.issues[0].message });
-      return;
-    }
-    await decideReview(req, res, ReviewDecision.CHANGES_REQUESTED, parsed.data.feedback);
-  } catch (error) {
-    next(error);
-  }
-});
-
-const addChangesSchema = z.object({
-  feedback: z
-    .string()
-    .trim()
-    .min(1, 'Say what needs changing — the editor works from this.')
-    .max(2000, 'Keep the changes under 2000 characters'),
-});
-
-/**
- * POST /api/tasks/:id/add-changes — another approver's changes, on a round
- * somebody already sent back.
- *
- * One approver is enough to approve. But the first to press Request changes
- * used to close the round for everybody, so the other approvers' notes went
- * to WhatsApp or nowhere. While the task is back with the editor, any of them
- * can add theirs; the editor gets one list, each note with its author.
- */
-tasksRouter.post('/:id/add-changes', requirePermission('work.own'), async (req: AuthRequest, res: Response, next) => {
-  try {
-    const parsed = addChangesSchema.safeParse(req.body ?? {});
-    if (!parsed.success) {
-      res.status(400).json({ success: false, error: parsed.error.issues[0].message });
-      return;
-    }
-    const orgId = req.user!.organizationId;
-    const id = String(req.params.id);
-    const me = req.user!.userId;
-
-    const task = await loadForApproval(orgId, id);
-    if (!task) {
-      res.status(404).json({ success: false, error: 'Task not found' });
-      return;
-    }
-    const latest = task.reviews[0];
-    const refused = await addChangesRefusal(
-      orgId,
-      me,
-      { taskType: task.taskType, status: task.status, assigneeIds: task.assignees.map((a) => a.userId) },
-      latest,
-    );
-    if (refused) {
-      res.status(400).json({ success: false, error: refused });
-      return;
-    }
-
-    const note = await prisma.taskReviewNote.create({
-      data: { reviewId: latest.id, authorId: me, feedback: parsed.data.feedback },
-      select: { id: true, feedback: true, createdAt: true, author: { select: { id: true, name: true } } },
-    });
-
-    await prisma.activity.create({
-      data: {
-        organizationId: orgId,
-        entityType: 'Task',
-        entityId: id,
-        actorId: me,
-        verb: 'task_changes_added',
-        payload: { title: task.title, round: latest.round, feedback: parsed.data.feedback },
-      },
-    });
-
-    res.status(201).json({ success: true, note });
-  } catch (error) {
-    next(error);
-  }
-});
-
-/**
- * GET /api/tasks/:id/reviews — one task's approval rounds, and what the
- * person looking can do about it.
- *
- * The WhatsApp link lands here: an approver opens /my-work?task=… on their
- * phone, and the task is usually not on their own list. So this carries
- * enough of the task to draw it, the whole history, and whether this viewer
- * can approve it now — or, when it was already decided, who decided.
- *
- * Seen by the people on the task, whoever created it, the approvers for its
- * type, and Heads.
- */
-tasksRouter.get('/:id/reviews', requirePermission('work.own'), async (req: AuthRequest, res: Response, next) => {
+tasksRouter.get('/:id', requirePermission('work.own'), async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
-    const id = String(req.params.id);
-    const me = req.user!.userId;
-
-    const task = await prisma.task.findFirst({
-      where: { id, organizationId: orgId, deletedAt: null },
+    const t = await prisma.task.findFirst({
+      where: await taskReadableWhere(req.user!, { id: String(req.params.id), organizationId: orgId, deletedAt: null }),
       include: {
-        ...TASK_PLACE,
+        monthCard: { select: { month: true, retainer: { select: { company: { select: { name: true } } } } } },
+        project: { select: { name: true, company: { select: { name: true } } } },
+        internalProject: { select: { id: true, name: true } },
+        company: { select: { name: true } },
         ...TASK_PEOPLE,
-        reviews: { orderBy: { round: 'asc' }, include: REVIEW_PEOPLE },
       },
     });
-    if (!task) {
+    if (!t) {
       res.status(404).json({ success: false, error: 'Task not found' });
       return;
     }
-
-    const assigneeIds = task.assignees.map((a) => a.user.id);
-    const [types, escalationTypes] = await Promise.all([approverFor(orgId, me), escalateFor(orgId, me)]);
-    const isApprover = Boolean(task.taskType && types.includes(task.taskType));
-    const isEscalation = Boolean(task.taskType && escalationTypes.includes(task.taskType));
-    const onIt = assigneeIds.includes(me);
-    if (!onIt && task.createdById !== me && !isApprover && !isEscalation) {
-      // Approvers see their round whoever's task it is; a Head sees the
-      // reviews of their own departments' work, and outside it the task is
-      // "not found", as everywhere else it is out of their reach.
-      if (!hasPermission(req.user!, 'work.team')) {
-        res.status(403).json({ success: false, error: "You can't see this task." });
-        return;
-      }
-      if (!(await canSeeTask(req.user!, task.id))) {
-        res.status(404).json({ success: false, error: 'Task not found' });
-        return;
-      }
-    }
-
-    const inReview = task.status === TaskStatus.IN_REVIEW;
-    const open = inReview ? ([...task.reviews].reverse().find((r) => r.decision == null) ?? null) : null;
-    const refusal = inReview ? await approveRefusal(orgId, me, { taskType: task.taskType, assigneeIds }, open) : null;
-    // Who it escalated to, when the waiting round has.
-    const escalatedTo =
-      open?.escalatedAt && task.taskType
-        ? ((await escalationNamesByType(orgId, [task.taskType])).get(task.taskType) ?? [])
-        : [];
-
-    let waitingMinutes: number | null = null;
-    let waitingText: string | null = null;
-    if (open) {
-      const calendar = await loadWorkCalendar(orgId);
-      waitingMinutes = workingMinutesOn(calendar, open.submittedAt, new Date()).totalMinutes;
-      waitingText = formatWorkingMinutes(waitingMinutes, dayMinutesOf(calendar));
-    }
-
-    res.json({
-      success: true,
-      task: {
-        id: task.id,
-        title: task.title,
-        status: task.status,
-        taskType: task.taskType,
-        taskTypeLabel: task.taskType ? TASK_TYPE_LABEL[task.taskType] : null,
-        needsApproval: task.needsApproval,
-        priority: task.priority,
-        dueDate: task.dueDate,
-        dueTime: task.dueTime,
-        ...placeOf(task),
-        assignees: task.assignees.map((a) => a.user),
-        creator: task.creator,
+    const calendar = await loadWorkCalendar(orgId);
+    const workingHours = workingMinutesOn(calendar, t.assignedAt, t.completedAt ?? new Date(), t.waitingTotalMinutes);
+    const [task] = await withRepeatNext(orgId, [
+      {
+        id: t.id,
+        title: t.title,
+        workType: t.workType,
+        workId: t.workId,
+        status: t.status,
+        priority: t.priority,
+        waitingOn: waitingOnShown(t),
+        hasClient: taskHasClient(t),
+        waitingSince: t.waitingSince,
+        waitingTotalMinutes: t.waitingTotalMinutes,
+        dueDate: t.dueDate,
+        dueTime: t.dueTime,
+        assignedAt: t.assignedAt,
+        completedAt: t.completedAt,
+        reopenCount: t.reopenCount,
+        notes: t.notes,
+        taskType: t.taskType,
+        assignee: t.assignee,
+        assignees: t.assignees.map((a) => a.user),
+        assignedBy: t.assignedBy,
+        creator: t.creator,
+        reviewer: t.reviewer,
+        clientName: t.monthCard?.retainer.company.name || t.project?.company.name || t.company?.name || 'Internal',
+        monthCardMonth: t.monthCard?.month ?? null,
+        projectName: t.project?.name ?? t.internalProject?.name ?? null,
+        internalProjectId: t.internalProjectId,
+        internalProjectName: t.internalProject?.name ?? null,
+        workingHoursText: workingHours.formatted,
+        workingMinutes: workingHours.totalMinutes,
+        typeMedianMinutes: null,
+        typeMedianText: null,
+        repeat: t.repeat,
       },
-      reviews: task.reviews.map((r) => ({
-        id: r.id,
-        round: r.round,
-        submittedBy: r.submittedBy,
-        submittedAt: r.submittedAt,
-        link: r.link,
-        note: r.note,
-        decision: r.decision,
-        decidedBy: r.decidedBy,
-        decidedAt: r.decidedAt,
-        feedback: r.feedback,
-        notes: r.notes,
-        remindedAt: r.remindedAt,
-        escalatedAt: r.escalatedAt,
-      })),
-      escalatedTo,
-      viewer: {
-        isApprover,
-        isEscalation,
-        canApprove: inReview && refusal == null,
-        // Why not, when they are an approver (or escalation person) and still
-        // cannot — their own work, or not escalated yet.
-        approveRefusal: inReview && (isApprover || isEscalation) ? refusal : null,
-        canSubmit:
-          task.needsApproval &&
-          (task.status === TaskStatus.TODO || task.status === TaskStatus.IN_PROGRESS) &&
-          (onIt || task.createdById === me),
-        // Sent back, and this approver can add their own changes to it.
-        canAddChanges:
-          (isApprover || isEscalation) &&
-          (await addChangesRefusal(
-            orgId,
-            me,
-            { taskType: task.taskType, status: task.status, assigneeIds },
-            task.reviews[task.reviews.length - 1],
-          )) == null,
-      },
-      waitingMinutes,
-      waitingText,
-    });
+    ]);
+    res.json({ success: true, task });
   } catch (error) {
     next(error);
   }

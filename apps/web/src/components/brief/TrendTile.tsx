@@ -35,7 +35,7 @@ function CountUp({ value, format }: { value: number; format: (n: number) => stri
  * eight weeks of it, and a line saying what it is compared with.
  *
  * The chip is coloured by what the move MEANS, not which way it went: more
- * cash is good, a longer approval time is not.
+ * cash is good, and for a figure where more is worse, `upIsGood` turns it.
  */
 export function TrendTile({
   label,
@@ -49,6 +49,7 @@ export function TrendTile({
   note,
   onOpen,
   openLabel,
+  className,
 }: {
   label: string;
   /** What the big number is, to count up to. Null shows a dash. */
@@ -64,6 +65,8 @@ export function TrendTile({
   note: React.ReactNode;
   onOpen: () => void;
   openLabel: string;
+  /** Where it sits in the scoreboard's grid. */
+  className?: string;
 }) {
   const moved = value !== null && previous !== null && value !== previous;
   const up = moved && value! > previous!;
@@ -80,7 +83,12 @@ export function TrendTile({
         }.`;
 
   return (
-    <div className="group relative flex flex-col rounded-card border border-border bg-white p-4 transition-[border-color,box-shadow] hover:border-line hover:shadow-overlay">
+    <div
+      className={cn(
+        'group relative flex flex-col rounded-card border border-border bg-white p-4 transition-[border-color,box-shadow] hover:border-line hover:shadow-overlay',
+        className,
+      )}
+    >
       {/* The whole tile opens what is behind the number; the sparkline's weeks sit above it. */}
       <button
         type="button"

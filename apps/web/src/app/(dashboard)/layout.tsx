@@ -42,8 +42,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   useEffect(() => {
     const userStr = localStorage.getItem('flowzen-user');
     if (!userStr && !isAuthenticated) {
-      // Carry the address, so a signed-out approver who tapped a WhatsApp link
-      // lands back on that task after signing in.
+      // Carry the address, so somebody signed out who tapped a link to a task
+      // lands back on it after signing in.
       router.push(loginHref());
     }
   }, [isAuthenticated, router]);

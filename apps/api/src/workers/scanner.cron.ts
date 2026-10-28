@@ -178,13 +178,12 @@ export async function evaluateAgencyHealthRules(organizationId: string): Promise
     }
   }
 
-  // 5. RULE: TASK_OVERDUE — never for work waiting on an approver. A video
-  // late because nobody has approved it is not the editor's overdue.
+  // 5. RULE: TASK_OVERDUE
   const overdueTasks = await prisma.task.findMany({
     where: {
       organizationId,
       deletedAt: null,
-      status: { notIn: ['DONE', 'CANCELLED', 'IN_REVIEW'] },
+      status: { notIn: ['DONE', 'CANCELLED'] },
       dueDate: { lt: now },
     },
     include: { assignee: true },
@@ -909,7 +908,7 @@ export async function runAgencyHealthScanner(): Promise<number> {
       }
 
       // Everything open that this scan evaluates — not the rules other workers
-      // own (the approval chaser's, the calendar's), which it never evaluates
+      // own (the calendar's, a proposal sent for review), which it never evaluates
       // and would otherwise close within the hour.
       const openAlerts = await prisma.alert.findMany({
         where: { organizationId: org.id, resolvedAt: null, rule: { notIn: EXTERNAL_RULES } },

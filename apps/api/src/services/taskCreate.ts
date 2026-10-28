@@ -4,13 +4,11 @@
  * The one place a task row is created — by a person (POST /tasks, after the
  * route has checked who may assign whom and where the task may sit) and by the
  * repeat job (each copy of a repeating task). Sharing it is what keeps a copy
- * the same as a task somebody typed: the same people rows, the same approval
- * filing, the same log line.
+ * the same as a task somebody typed: the same people rows, the same log line.
  */
 
 import { Priority, TaskStatus, type TaskType, type TaskWorkType } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
-import { approvalType } from './taskApprovals.js';
 import { TASK_PEOPLE } from './taskPeople.js';
 
 /** The client or a transaction inside it — whichever the caller is writing through. */
@@ -35,7 +33,6 @@ export type NewTask = {
   assignedById?: string | null;
   reviewerId?: string | null;
   taskType?: TaskType | null;
-  needsApproval?: boolean;
   dueDate: Date;
   dueTime?: string | null;
   priority?: Priority;
@@ -63,9 +60,7 @@ export async function createTaskRecord(db: Db, t: NewTask) {
       // Nobody, unless somebody was named — see POST /tasks.
       assignedById: t.assignedById || null,
       reviewerId: t.reviewerId || null,
-      // Needing approval with no type is filed as Other (taskApprovals).
-      taskType: t.needsApproval ? approvalType(t.taskType) : (t.taskType ?? null),
-      needsApproval: t.needsApproval ?? false,
+      taskType: t.taskType ?? null,
       dueDate: t.dueDate,
       dueTime: t.dueTime ?? null,
       assignedAt: new Date(),
@@ -89,7 +84,6 @@ export async function createTaskRecord(db: Db, t: NewTask) {
         title: task.title,
         workType: task.workType,
         assigneeIds: t.people,
-        ...(task.needsApproval ? { needsApproval: true } : {}),
         ...(t.verb === 'task_repeated' ? { dueDate: task.dueDate.toISOString().slice(0, 10) } : {}),
       },
     },

@@ -32,9 +32,7 @@ import {
   RefreshCw,
   Package,
   IndianRupee,
-  Hourglass,
   FileSignature,
-  Siren,
 } from 'lucide-react';
 import { Drawer } from '@/components/ui/drawer';
 import toast from 'react-hot-toast';
@@ -64,9 +62,6 @@ const notificationIcons: Record<string, typeof CheckSquare> = {
   CLIENT_QUIET: Building2,
   MONTH_CARD_NOT_INVOICED: IndianRupee,
   RETAINER_PROFORMA_NOT_RAISED: IndianRupee,
-  // A task waiting on an approver: reminded, then escalated.
-  APPROVAL_REMINDER: Hourglass,
-  APPROVAL_ESCALATED: Siren,
   // The register's four. These were missing, and asset alerts are the only
   // ones open to an Employee — so every notification a designer could see
   // fell through to the generic circle.

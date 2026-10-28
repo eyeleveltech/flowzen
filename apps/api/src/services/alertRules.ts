@@ -7,9 +7,6 @@
  * their audience from people rather than a permission.
  */
 
-/** The approval chaser's reminders and escalations. */
-export const CHASER_RULES = ['APPROVAL_REMINDER', 'APPROVAL_ESCALATED'];
-
 /** Calendar events: the morning-of reminder, and "you were booked / it moved". */
 export const EVENT_RULES = ['EVENT_TODAY', 'EVENT_UPDATE'];
 
@@ -19,4 +16,4 @@ export const EVENT_RULES = ['EVENT_TODAY', 'EVENT_UPDATE'];
  */
 export const REVIEW_RULE = 'PROPOSAL_REVIEW_REQUESTED';
 
-export const EXTERNAL_RULES = [...CHASER_RULES, ...EVENT_RULES, REVIEW_RULE];
+export const EXTERNAL_RULES = [...EVENT_RULES, REVIEW_RULE];

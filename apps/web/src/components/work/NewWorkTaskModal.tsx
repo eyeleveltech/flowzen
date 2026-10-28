@@ -19,7 +19,6 @@ import { AssigneeField, AssignedByField } from '@/components/work/AssigneeField'
 import { TASK_TYPE_OPTIONS } from '@/lib/task-type';
 import { ErrorNote } from '@/components/ui/empty-state';
 import { PRIORITY_CONFIG } from '@/lib/priority';
-import { NeedsApprovalField } from '@/components/work/NeedsApprovalField';
 import { useAuthStore } from '@/stores';
 import { DueTimeField } from '@/components/work/DueTimeField';
 import { repeatOptions, REPEAT_HINT } from '@/lib/repeat';
@@ -70,7 +69,6 @@ export function NewWorkTaskModal({
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [assignedById, setAssignedById] = useState('');
   const [taskType, setTaskType] = useState('');
-  const [needsApproval, setNeedsApproval] = useState(false);
   const [priority, setPriority] = useState('MEDIUM');
   const [description, setDescription] = useState('');
   const [dueDate, setDueDate] = useState('');
@@ -94,7 +92,6 @@ export function NewWorkTaskModal({
     // field means nothing when it is filled in by default.
     setAssignedById('');
     setTaskType('');
-    setNeedsApproval(false);
     setPriority('MEDIUM');
     setDescription('');
     setDueDate('');
@@ -173,7 +170,6 @@ export function NewWorkTaskModal({
         assigneeIds: assigneeIds.length > 0 ? assigneeIds : undefined,
         assignedById: assignedById || undefined,
         taskType: taskType || undefined,
-        needsApproval,
         dueDate,
         dueTime: dueTime || undefined,
         repeat: repeat || undefined,
@@ -273,7 +269,6 @@ export function NewWorkTaskModal({
             placeholder="Not set"
             options={TASK_TYPE_OPTIONS}
           />
-          <NeedsApprovalField taskType={taskType} value={needsApproval} onChange={setNeedsApproval} />
           <Field label="Description" value={description} onChange={setDescription} textarea rows={3} />
           {error && <ErrorNote>{error}</ErrorNote>}
         </ModalBody>

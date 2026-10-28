@@ -1,15 +1,13 @@
 import { prisma } from '../lib/prisma.js';
 import type { AiTool } from './ai/types.js';
-import { composeApprovalsReport } from './approvalsReport.js';
 import { composeForecast } from './forecast.js';
 import { leadStaleness, nextStepState, studioToday } from './salesFollowUp.js';
 import { ACTIVE_DEAL_WHERE } from './activeDeal.js';
 import { describe, resolveSubjects } from './activityLog.js';
-import { CHASER_RULES } from './alertRules.js';
 import { companyLink, rawLinkFor, retainerMonthLink, taskLink } from '../utils/recordLink.js';
 
 /**
- * Zen's further lookups (Zen Plan 3): alerts, approvals, outreach, proformas,
+ * Zen's further lookups (Zen Plan 3): alerts, outreach, proformas,
  * one retainer month, costs, the forecast, history and the Monday brief.
  *
  * The same rules as `zenTools.ts`, which this extends:
@@ -128,8 +126,6 @@ const RULES: Record<string, { words: string; area: string }> = {
   TASK_AGING: { words: 'Task taking much longer than usual', area: 'team' },
   TASK_WAITING_HOLD: { words: 'Task waiting on the client', area: 'team' },
   MEMBER_OVERALLOCATED: { words: 'Person over-allocated', area: 'team' },
-  APPROVAL_REMINDER: { words: 'Approval waiting', area: 'approvals' },
-  APPROVAL_ESCALATED: { words: 'Approval escalated', area: 'approvals' },
   ASSET_OVERDUE: { words: 'Equipment late back', area: 'assets' },
   ASSET_HELD_BY_INACTIVE_USER: { words: 'Equipment held by a switched-off account', area: 'assets' },
   ASSET_REPAIR_STALE: { words: 'Equipment in repair over 14 days', area: 'assets' },
@@ -137,7 +133,7 @@ const RULES: Record<string, { words: string; area: string }> = {
   EVENT_TODAY: { words: 'Meeting or shoot today', area: 'calendar' },
   EVENT_UPDATE: { words: 'Meeting or shoot changed', area: 'calendar' },
 };
-const AREAS = ['money', 'sales', 'work', 'clients', 'team', 'approvals', 'assets', 'calendar'];
+const AREAS = ['money', 'sales', 'work', 'clients', 'team', 'assets', 'calendar'];
 
 /* ─── The tools ──────────────────────────────────────────────────────────── */
 
@@ -145,7 +141,7 @@ export const ZEN_LOOKUPS = [
   {
     name: 'getAlerts',
     description:
-      'Open alerts (the bell), grouped by rule, worst first. Filter by area (money, sales, work, clients, team, approvals, assets, calendar), by one rule, or by client. Use for "what needs attention", "what alerts are open about money".',
+      'Open alerts (the bell), grouped by rule, worst first. Filter by area (money, sales, work, clients, team, assets, calendar), by one rule, or by client. Use for "what needs attention", "what alerts are open about money".',
     parameters: {
       type: 'object',
       properties: {
@@ -154,15 +150,6 @@ export const ZEN_LOOKUPS = [
         client: { type: 'string', description: 'Company name or id.' },
         limit: { type: 'number' },
       },
-    },
-  },
-  {
-    name: 'getApprovals',
-    description:
-      'Work waiting for approval right now — what, whose, for how long, whether it was reminded or escalated — and the last 7 or 30 days: decisions, typical time, on time, escalations, each approver.',
-    parameters: {
-      type: 'object',
-      properties: { days: { type: 'number', enum: [7, 30], description: 'The period for the stats. Defaults to 7.' } },
     },
   },
   {
@@ -314,53 +301,9 @@ export async function runZenLookup(name: ZenLookupName, args: Record<string, unk
             message: a.message,
             severity: a.severity,
             raisedOn: day(a.raisedAt),
-            // A stuck approval opens the task itself, where Approve is.
-            link: CHASER_RULES.includes(a.rule) ? taskLink(a.entityId) : linkTo(a.entityType, a.entityId),
+            link: linkTo(a.entityType, a.entityId),
           })),
         })),
-      };
-    }
-
-    case 'getApprovals': {
-      const days = Number(args.days) === 30 ? 30 : 7;
-      const to = new Date();
-      const from = new Date(to.getTime() - days * 86_400_000);
-      const report = await composeApprovalsReport(organizationId, { from, to }, to);
-      return {
-        periodDays: days,
-        link: '/members?tab=approvals',
-        waitingNow: report.waitingNow.slice(0, CAP).map((w) => ({
-          task: w.title,
-          client: w.clientName,
-          type: w.taskType,
-          round: w.round,
-          sentBy: w.editorName,
-          sentOn: day(w.submittedAt),
-          waitingMinutes: w.waitingMinutes,
-          reminded: Boolean(w.remindedAt),
-          escalated: Boolean(w.escalatedAt),
-          link: taskLink(w.taskId),
-        })),
-        byGroup: report.byType.map((g) => ({
-          types: g.allWork ? 'all work' : g.taskTypes.join(', '),
-          approvers: g.approvers.map((a: { name: string }) => a.name),
-          sent: g.submitted,
-          decided: g.decided,
-          approved: g.approved,
-          sentBack: g.changesRequested,
-          typicalMinutes: g.medianDecisionMinutes,
-          decidedOnTime: g.onTime,
-          escalated: g.escalated,
-          waitingNow: g.waitingNow,
-        })),
-        byApprover: report.byPerson.map((p) => ({
-          approver: p.user.name,
-          approved: p.approved,
-          sentBack: p.changesRequested,
-          typicalMinutes: p.medianDecisionMinutes,
-          afterEscalation: p.afterEscalation,
-        })),
-        onTimeMeans: `decided within ${report.onTimeMinutes} working minutes (the reminder time)`,
       };
     }
 
@@ -537,7 +480,7 @@ export async function runZenLookup(name: ZenLookupName, args: Record<string, unk
       const external = card.costs.reduce((s, c) => s + money(c.amount), 0);
       const paid = card.invoice ? card.invoice.payments.reduce((s, p) => s + money(p.amount), 0) : 0;
       const late = (t: (typeof card.tasks)[number]) =>
-        !['DONE', 'CANCELLED', 'IN_REVIEW'].includes(t.status) && day(t.dueDate)! < today;
+        !['DONE', 'CANCELLED'].includes(t.status) && day(t.dueDate)! < today;
       return {
         client: company.name,
         month: card.month,

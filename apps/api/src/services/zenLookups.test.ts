@@ -33,9 +33,11 @@ beforeEach(() => {
 describe('the lookups Zen is given', () => {
   it('include every new one', () => {
     const names = ZEN_TOOLS.map((t) => t.name);
-    for (const n of ['getAlerts', 'getApprovals', 'getOutreach', 'getProformas', 'getMonthCard', 'getCosts', 'getForecast', 'getHistory', 'getBrief']) {
+    for (const n of ['getAlerts', 'getOutreach', 'getProformas', 'getMonthCard', 'getCosts', 'getForecast', 'getHistory', 'getBrief']) {
       expect(names).toContain(n);
     }
+    // Task approval was removed; there is nothing left to look up.
+    expect(names).not.toContain('getApprovals');
   });
 });
 

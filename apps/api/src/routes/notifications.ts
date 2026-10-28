@@ -1,11 +1,10 @@
 import { Router, type Response, type NextFunction } from 'express';
-import { TaskStatus, type Prisma } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, hasPermission, type AuthRequest, type UserSession } from '../middleware/auth.js';
 import type { PermissionKey } from '@flowzen/shared';
-import { approverFor, escalateFor } from '../services/taskApprovals.js';
-import { CHASER_RULES, EVENT_RULES } from '../services/alertRules.js';
-import { linkForUser, taskLink } from '../utils/recordLink.js';
+import { EVENT_RULES } from '../services/alertRules.js';
+import { linkForUser } from '../utils/recordLink.js';
 import { teamScope } from '../services/teamScope.js';
 
 /**
@@ -116,53 +115,10 @@ export const RULE_PERMISSION: Record<string, PermissionKey | readonly Permission
 export const MINE_REGARDLESS = ['TASK_OVERDUE', 'TASK_AGING', 'TASK_WAITING_HOLD'] as const;
 
 /**
- * The approval chaser's alerts this person should see.
- *
- * Not in RULE_PERMISSION on purpose: the audience is people, not a
- * permission. A reminder reaches the task type's approvers; an escalation
- * reaches them and the type's escalation people. Only while the task is still
- * in review, and never about work the person is on — the editor already sees
- * the state on their own My Work, and nobody approves their own task.
- *
- * The bell, "Mark all read", reading one, and the 8am digest all decide a
- * person's alerts through this — one rule, not a copy in each place.
- */
-export async function approvalAlertClauses(orgId: string, userId: string): Promise<Prisma.AlertWhereInput[]> {
-  const [types, escalationTypes] = await Promise.all([approverFor(orgId, userId), escalateFor(orgId, userId)]);
-  if (types.length === 0 && escalationTypes.length === 0) return [];
-
-  const waiting = (taskTypes: typeof types) =>
-    taskTypes.length === 0
-      ? Promise.resolve([] as string[])
-      : prisma.task
-          .findMany({
-            where: {
-              organizationId: orgId,
-              deletedAt: null,
-              status: TaskStatus.IN_REVIEW,
-              taskType: { in: taskTypes },
-              NOT: { assignees: { some: { userId } } },
-            },
-            select: { id: true },
-          })
-          .then((rows) => rows.map((t) => t.id));
-  const [approverTaskIds, escalationTaskIds] = await Promise.all([waiting(types), waiting(escalationTypes)]);
-
-  return [
-    ...(approverTaskIds.length > 0
-      ? [{ rule: { in: [...CHASER_RULES] }, entityType: 'Task', entityId: { in: approverTaskIds } }]
-      : []),
-    ...(escalationTaskIds.length > 0
-      ? [{ rule: 'APPROVAL_ESCALATED', entityType: 'Task', entityId: { in: escalationTaskIds } }]
-      : []),
-  ];
-}
-
-/**
  * The calendar's alerts this person should see: the morning-of reminder and
  * "booked / moved / cancelled", for events they are on.
  *
- * Like the approval clauses, not a permission: the audience is the event's
+ * Not a permission: the audience is the event's
  * people. Somebody taken off an event stops seeing its alerts; a cancelled
  * event keeps its people, so its "Cancelled" row still reaches them. Only
  * recent events are looked at — older alerts are resolved by the worker.
@@ -198,12 +154,8 @@ export async function ownerAlertClauses(orgId: string, userId: string): Promise<
 
 /** Everything reaching a person by who they are rather than what they may see. */
 export async function peopleAlertClauses(orgId: string, userId: string): Promise<Prisma.AlertWhereInput[]> {
-  const [approvals, events, owned] = await Promise.all([
-    approvalAlertClauses(orgId, userId),
-    eventAlertClauses(orgId, userId),
-    ownerAlertClauses(orgId, userId),
-  ]);
-  return [...approvals, ...events, ...owned];
+  const [events, owned] = await Promise.all([eventAlertClauses(orgId, userId), ownerAlertClauses(orgId, userId)]);
+  return [...events, ...owned];
 }
 
 /**
@@ -223,7 +175,7 @@ export const TEAM_RULES = ['TASK_OVERDUE', 'TASK_AGING', 'TASK_WAITING_HOLD', 'M
  *     somebody in another department is on is that department's business;
  *   - the task rules about their own tasks, whatever their permissions
  *     (MINE_REGARDLESS);
- *   - approvals waiting on them and today's events they are on.
+ *   - today's events they are on, and the internal projects they own.
  *
  * An empty list means there is nothing this person may be told.
  */
@@ -296,9 +248,9 @@ export async function alertClausesFor(user: UserSession): Promise<Prisma.AlertWh
   const mine: Prisma.AlertWhereInput[] =
     myTaskIds.length > 0 ? [{ rule: { in: [...missingTaskRules] }, entityType: 'Task', entityId: { in: myTaskIds } }] : [];
 
-  const approvals = await peopleAlertClauses(orgId, userId);
+  const people = await peopleAlertClauses(orgId, userId);
 
-  return [...(openRules.length > 0 ? [{ rule: { in: openRules } }] : []), ...scoped, ...mine, ...approvals];
+  return [...(openRules.length > 0 ? [{ rule: { in: openRules } }] : []), ...scoped, ...mine, ...people];
 }
 
 /**
@@ -345,8 +297,6 @@ const linkFor = (
   user: AuthRequest['user'],
   rule?: string,
 ): string | null => {
-  // A stuck approval opens the task itself, where Approve is.
-  if (rule && (CHASER_RULES as readonly string[]).includes(rule)) return taskLink(entityId);
   // A proposal waiting for review opens on its own page, where Finalise is.
   if (rule === 'PROPOSAL_REVIEW_REQUESTED') return `/quotations/${entityId}`;
   return linkForUser(entityType, entityId, user);

@@ -1,15 +1,13 @@
 import { Router, type Response, type NextFunction } from 'express';
-import type { AlertSeverity, TaskType } from '@prisma/client';
+import type { AlertSeverity } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, type AuthRequest, requirePermission } from '../middleware/auth.js';
 import { notUsingLastWeek } from '../services/usageSummary.js';
-import { composeApprovalsReport } from '../services/approvalsReport.js';
-import { TASK_TYPE_LABEL } from '../services/taskApprovals.js';
 import { generateBriefSummary, numbersChangedSince } from '../services/briefSummary.js';
 import { waitingOnShown } from '../services/taskWaiting.js';
 import { addDays, isWorkingDay, loadWorkCalendar, todayIn, weekdayOf } from '../utils/workCalendar.js';
 import { dayStartUtc, localDayAndTime, whenLabel } from '../utils/zonedTime.js';
-import { linkForUser, rawLinkFor, taskLink } from '../utils/recordLink.js';
+import { linkForUser, rawLinkFor } from '../utils/recordLink.js';
 import { logger } from '../utils/logger.js';
 
 export const briefRouter = Router();
@@ -48,7 +46,6 @@ export const NEEDS_ACTION = [
   { group: 'Money to collect', rules: ['INVOICE_OVERDUE', 'INVOICE_AGING_60', 'PROFORMA_UNPAID'] },
   { group: 'Sales follow-ups', rules: ['VERBAL_NO_ADVANCE', 'PROPOSAL_STALLED', 'PROFORMA_EXPIRED'] },
   { group: 'Billing to do', rules: ['MONTH_CARD_NOT_INVOICED', 'RETAINER_PROFORMA_NOT_RAISED', 'ALLOCATIONS_UNCONFIRMED'] },
-  { group: 'Stuck approvals', rules: ['APPROVAL_ESCALATED'] },
 ] as const;
 
 export const RISKS = [
@@ -61,8 +58,7 @@ const RENEWAL_RULE = 'RETAINER_EXPIRING';
 
 /*
  * Left out on purpose: TASK_* and MEMBER_OVERALLOCATED (the team block counts
- * them, by department), APPROVAL_REMINDER (escalation is the one worth a
- * Monday line) and ASSET_*.
+ * them, by department) and ASSET_*.
  */
 const BRIEF_RULES: string[] = [...[...NEEDS_ACTION, ...RISKS].flatMap((g): string[] => [...g.rules]), RENEWAL_RULE];
 
@@ -74,7 +70,7 @@ export type AlertRow = {
   title: string;
   clientName: string | null;
   amount?: number;
-  /** Who to ask: the proposal, project or retainer owner. Never the editor on an approval. */
+  /** Who to ask: the proposal, project or retainer owner. */
   ownerName?: string;
   flaggedDaysAgo: number;
   severity: AlertSeverity;
@@ -201,33 +197,6 @@ async function weekFigures(orgId: string, w: Week, tz: string) {
   };
 }
 
-/** How approvals went, one entry per approver group — today that is one "All work" group. */
-/** A week as the approvals report takes it: the studio's midnight to the last millisecond of Sunday. */
-const reportRange = (w: Week, tz: string) => ({
-  from: dayStartUtc(w.from, tz),
-  to: new Date(dayStartUtc(addDays(w.to, 1), tz).getTime() - 1),
-});
-const groupKey = (types: TaskType[]) => [...types].sort().join(',');
-const groupLabel = (g: { allWork: boolean; taskTypes: TaskType[] }) =>
-  g.allWork ? 'All work' : g.taskTypes.map((t) => TASK_TYPE_LABEL[t]).join(', ');
-
-async function approvalFigures(orgId: string, shown: Week, previous: Week, tz: string, now: Date) {
-  const [last, before] = await Promise.all([
-    composeApprovalsReport(orgId, reportRange(shown, tz), now),
-    composeApprovalsReport(orgId, reportRange(previous, tz), now),
-  ]);
-  const pick = (g: (typeof last.byType)[number]) => ({
-    decided: g.decided,
-    medianDecisionMinutes: g.medianDecisionMinutes,
-    onTime: g.onTime,
-    escalated: g.escalated,
-  });
-  return last.byType.map((g) => {
-    const prev = before.byType.find((b) => groupKey(b.taskTypes) === groupKey(g.taskTypes));
-    return { group: groupLabel(g), last: pick(g), before: prev ? pick(prev) : null };
-  });
-}
-
 /** The week before a week. */
 const weekBefore = (w: Week): Week => ({ from: addDays(w.from, -7), to: addDays(w.from, -1) });
 
@@ -236,13 +205,9 @@ const weekBefore = (w: Week): Week => ({ from: addDays(w.from, -7), to: addDays(
  * "last week", or any of the 26 before it on the week switcher. One compute
  * for both, so a past week can never be counted differently from this one.
  */
-export async function scoreboardFor(orgId: string, shown: Week, tz: string, now: Date) {
+export async function scoreboardFor(orgId: string, shown: Week, tz: string) {
   const previous = weekBefore(shown);
-  const [last, before, approvals] = await Promise.all([
-    weekFigures(orgId, shown, tz),
-    weekFigures(orgId, previous, tz),
-    approvalFigures(orgId, shown, previous, tz, now),
-  ]);
+  const [last, before] = await Promise.all([weekFigures(orgId, shown, tz), weekFigures(orgId, previous, tz)]);
   const pair = <T>(pick: (w: typeof last) => T) => ({ last: pick(last), before: pick(before) });
   return {
     before: previous,
@@ -252,7 +217,6 @@ export async function scoreboardFor(orgId: string, shown: Week, tz: string, now:
       dealsWon: pair((w) => w.dealsWon),
       proposalsSent: pair((w) => w.proposalsSent),
       tasksDone: pair((w) => w.tasksDone),
-      approvals,
     },
     doneTasks: last.doneTasks,
   };
@@ -279,14 +243,6 @@ function withoutClient(message: string, client: string | null): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-/** "3 h", "2 days" — how long something has been waiting. */
-function waitedFor(ms: number): string {
-  const hours = Math.max(1, Math.round(ms / 3_600_000));
-  if (hours < 24) return `${hours} h`;
-  const days = Math.round(hours / 24);
-  return `${days} ${days === 1 ? 'day' : 'days'}`;
-}
-
 /**
  * Every open alert the brief shows, enriched in batches — one query per kind
  * of record, never one per row — with its client, amount, owner and link.
@@ -300,7 +256,7 @@ async function alertRows(orgId: string, now: Date, viewer?: Viewer) {
   const owner = { select: { name: true } } as const;
   const company = { select: { name: true, owner } } as const;
 
-  const [invoices, proformas, proposals, monthCards, tasks, projects, companies, retainers] = await Promise.all([
+  const [invoices, proformas, proposals, monthCards, projects, companies, retainers] = await Promise.all([
     idsOf('Invoice').length
       ? prisma.invoice.findMany({
           where: { id: { in: idsOf('Invoice') } },
@@ -330,20 +286,6 @@ async function alertRows(orgId: string, now: Date, viewer?: Viewer) {
       ? prisma.monthCard.findMany({
           where: { id: { in: idsOf('MonthCard') } },
           select: { id: true, revenue: true, retainer: { select: { company, owner } } },
-        })
-      : [],
-    idsOf('Task').length
-      ? prisma.task.findMany({
-          where: { id: { in: idsOf('Task') } },
-          select: {
-            id: true,
-            title: true,
-            company: { select: { name: true } },
-            project: { select: { company: { select: { name: true } } } },
-            monthCard: { select: { retainer: { select: { company: { select: { name: true } } } } } },
-            // When the round now waiting went in — not who sent it.
-            reviews: { where: { decision: null }, orderBy: { round: 'desc' }, take: 1, select: { submittedAt: true } },
-          },
         })
       : [],
     idsOf('Project').length
@@ -387,7 +329,6 @@ async function alertRows(orgId: string, now: Date, viewer?: Viewer) {
   const proforma = byId(proformas);
   const proposal = byId(proposals);
   const monthCard = byId(monthCards);
-  const task = byId(tasks);
   const project = byId(projects);
   const companyOf = byId(companies);
   const retainer = byId(retainers);
@@ -457,21 +398,6 @@ async function alertRows(orgId: string, now: Date, viewer?: Viewer) {
         const mc = monthCard.get(a.entityId);
         if (!mc) break;
         row(mc.retainer.company.name, { amount: num(mc.revenue), ownerName: mc.retainer.owner.name });
-        break;
-      }
-      case 'Task': {
-        // A stuck approval: the video, its client and how long — never the editor's name.
-        const t = task.get(a.entityId);
-        if (!t) break;
-        const client =
-          t.monthCard?.retainer.company.name || t.project?.company.name || t.company?.name || null;
-        const since = t.reviews[0]?.submittedAt ?? a.raisedAt;
-        rows.push({
-          ...base,
-          clientName: client,
-          title: `${t.title} — waiting ${waitedFor(now.getTime() - since.getTime())}`,
-          link: taskLink(t.id),
-        });
         break;
       }
       case 'Project': {
@@ -628,14 +554,13 @@ type TeamRow = {
   dueThisWeek: number;
   doneLastWeek: number;
   waitingOnClient: number;
-  inReview: number;
   overAllocatedPeople: number;
   /**
    * The same open work split so no task is in two pieces, for the stacked
-   * bar: overdue first (on hold included), then on track, in review, and
-   * waiting on the client. `active` and `overdue` above overlap; these don't.
+   * bar: overdue first (on hold included), then on track, and waiting on the
+   * client. `active` and `overdue` above overlap; these don't.
    */
-  segments: { overdue: number; onTrack: number; inReview: number; waitingOnClient: number };
+  segments: { overdue: number; onTrack: number; waitingOnClient: number };
 };
 
 async function teamByDepartment(
@@ -647,7 +572,7 @@ async function teamByDepartment(
   const month = weeks.today.slice(0, 7);
   const [open, allocations] = await Promise.all([
     prisma.task.findMany({
-      where: { organizationId: orgId, deletedAt: null, status: { in: ['TODO', 'IN_PROGRESS', 'ON_HOLD', 'IN_REVIEW'] } },
+      where: { organizationId: orgId, deletedAt: null, status: { in: ['TODO', 'IN_PROGRESS', 'ON_HOLD'] } },
       select: {
         status: true,
         dueDate: true,
@@ -681,9 +606,8 @@ async function teamByDepartment(
         dueThisWeek: 0,
         doneLastWeek: 0,
         waitingOnClient: 0,
-        inReview: 0,
         overAllocatedPeople: 0,
-        segments: { overdue: 0, onTrack: 0, inReview: 0, waitingOnClient: 0 },
+        segments: { overdue: 0, onTrack: 0, waitingOnClient: 0 },
       });
     }
     return rows.get(id)!;
@@ -695,16 +619,13 @@ async function teamByDepartment(
     for (const dept of deptsOf(t)) {
       const r = rowFor(dept);
       if (t.status === 'TODO' || t.status === 'IN_PROGRESS') r.active += 1;
-      // Waiting on an approver is not the editor's overdue: IN_REVIEW is left out.
-      if (due < today && t.status !== 'IN_REVIEW') r.overdue += 1;
+      const late = due < today;
+      if (late) r.overdue += 1;
       if (due >= today && due <= weeks.comingUntil) r.dueThisWeek += 1;
       if (t.status === 'ON_HOLD' && waitingOnShown(t) === 'CLIENT') r.waitingOnClient += 1;
-      if (t.status === 'IN_REVIEW') r.inReview += 1;
 
-      const late = due < today && t.status !== 'IN_REVIEW';
       if (late) r.segments.overdue += 1;
       else if (t.status === 'TODO' || t.status === 'IN_PROGRESS') r.segments.onTrack += 1;
-      else if (t.status === 'IN_REVIEW') r.segments.inReview += 1;
       else if (t.status === 'ON_HOLD' && waitingOnShown(t) === 'CLIENT') r.segments.waitingOnClient += 1;
     }
   }
@@ -712,7 +633,7 @@ async function teamByDepartment(
   for (const u of over) rowFor(u.departmentId ?? '').overAllocatedPeople += 1;
 
   return [...rows.values()]
-    .filter((r) => r.active + r.overdue + r.dueThisWeek + r.doneLastWeek + r.waitingOnClient + r.inReview + r.overAllocatedPeople > 0)
+    .filter((r) => r.active + r.overdue + r.dueThisWeek + r.doneLastWeek + r.waitingOnClient + r.overAllocatedPeople > 0)
     .sort((a, b) => book.rank(a.departmentId ?? '') - book.rank(b.departmentId ?? '') || a.dept.localeCompare(b.dept));
 }
 
@@ -737,7 +658,7 @@ export async function composeMondayBrief(
   const weeks = weeksFor(tz, now);
 
   const [board, alerts, ahead, stored, calendar] = await Promise.all([
-    scoreboardFor(orgId, weeks.last, tz, now),
+    scoreboardFor(orgId, weeks.last, tz),
     alertRows(orgId, now, opts.viewer),
     comingUp(orgId, weeks, tz, opts.viewer),
     prisma.weeklyBrief.findUnique({
@@ -838,14 +759,13 @@ export const forgetTrends = () => trendCache.clear();
  * Each scoreboard figure for the 8 complete weeks ending at `shownFrom`.
  *
  * One query per figure over the whole stretch, bucketed by the studio's week —
- * not the brief composed eight times. Approval times are the approvals
- * report's own medians, a week at a time, because a median of medians is not
- * one. Held for ten minutes: closed weeks hardly move.
+ * not the brief composed eight times. Held for ten minutes: closed weeks
+ * hardly move.
  */
-async function computeTrends(orgId: string, shownFrom: string, tz: string, now: Date) {
+async function computeTrends(orgId: string, shownFrom: string, tz: string) {
   const mondays = Array.from({ length: 8 }, (_, i) => addDays(shownFrom, -7 * (7 - i)));
   const span: Week = { from: mondays[0], to: addDays(shownFrom, 6) };
-  const [payments, invoices, won, sent, done, approvals] = await Promise.all([
+  const [payments, invoices, won, sent, done] = await Promise.all([
     prisma.payment.findMany({
       where: { receivedAt: daysIn(span), invoice: { organizationId: orgId } },
       select: { amount: true, receivedAt: true },
@@ -866,7 +786,6 @@ async function computeTrends(orgId: string, shownFrom: string, tz: string, now: 
       where: { organizationId: orgId, deletedAt: null, status: 'DONE', completedAt: momentsIn(span, tz) },
       select: { completedAt: true },
     }),
-    Promise.all(mondays.map((m) => composeApprovalsReport(orgId, reportRange({ from: m, to: addDays(m, 6) }, tz), now))),
   ]);
 
   /** Sum values into the week each one falls in. */
@@ -882,21 +801,12 @@ async function computeTrends(orgId: string, shownFrom: string, tz: string, now: 
   };
   const local = (d: Date | null) => (d ? localDayAndTime(d, tz).date : null);
 
-  // Approval groups as the shown week has them, matched across weeks by their task types.
-  const shownGroups = approvals[approvals.length - 1].byType;
   return {
     cashCollected: series(payments, (p) => dayOf(p.receivedAt), (p) => num(p.amount)),
     invoiced: series(invoices, (i) => dayOf(i.raisedAt), (i) => num(i.amount)),
     dealsWon: series(won, (p) => local(p.wonAt), (p) => num(p.versions[0]?.value)),
     proposalsSent: series(sent, (v) => local(v.sentAt), () => 1),
     tasksDone: series(done, (t) => local(t.completedAt), () => 1),
-    approvals: shownGroups.map((g) => ({
-      group: groupLabel(g),
-      points: mondays.map((m, i) => ({
-        weekStart: m,
-        value: approvals[i].byType.find((b) => groupKey(b.taskTypes) === groupKey(g.taskTypes))?.medianDecisionMinutes ?? null,
-      })),
-    })),
   };
 }
 
@@ -904,7 +814,7 @@ export async function trendsFor(orgId: string, shownFrom: string, tz: string, no
   const key = `${orgId}|${shownFrom}`;
   const hit = trendCache.get(key);
   if (hit && now.getTime() - hit.at < TRENDS_KEEP_MS) return hit.trends;
-  const trends = await computeTrends(orgId, shownFrom, tz, now);
+  const trends = await computeTrends(orgId, shownFrom, tz);
   trendCache.set(key, { at: now.getTime(), trends });
   return trends;
 }
@@ -923,7 +833,7 @@ async function pastWeek(orgId: string, shown: Week, now: Date) {
   // The brief written for the Monday after that week is the one about it.
   const writtenFor = addDays(shown.from, 7);
   const [board, stored] = await Promise.all([
-    scoreboardFor(orgId, shown, tz, now),
+    scoreboardFor(orgId, shown, tz),
     prisma.weeklyBrief.findUnique({
       where: { organizationId_weekStart: { organizationId: orgId, weekStart: asDate(writtenFor) } },
       select: { summary: true, summaryModel: true, generatedAt: true },

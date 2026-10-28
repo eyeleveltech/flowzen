@@ -256,7 +256,7 @@ describe("a Zen draft never goes up twice", () => {
     expect(where).toMatchObject({
       title: { equals: 'reel CUTDOWNS', mode: 'insensitive' },
       deletedAt: null,
-      status: { in: ['TODO', 'IN_PROGRESS', 'IN_REVIEW', 'ON_HOLD'] },
+      status: { in: ['TODO', 'IN_PROGRESS', 'ON_HOLD'] },
       assignees: { some: { userId: { in: ['usr-des'] } } },
       dueDate: new Date('2026-09-09T00:00:00Z'),
     });

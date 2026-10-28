@@ -6,7 +6,7 @@
  * Nothing on these has happened when they appear. Each step is a button, and
  * pressing it is the change: the request goes from this browser, on your own
  * session, to the endpoint the screen itself would call — so every rule the
- * app keeps (approvals, closed months, who may do what) answers exactly as it
+ * app keeps (closed months, who may do what) answers exactly as it
  * would there. Money documents open their real form, filled in, for you to
  * check and save. Messages are copied or opened in WhatsApp or your email —
  * Flowzen sends nothing.

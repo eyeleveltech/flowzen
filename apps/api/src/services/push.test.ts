@@ -90,15 +90,15 @@ describe('queuePushFor — who is told', () => {
     expect(prisma.pushOutbox.createMany).not.toHaveBeenCalled();
   });
 
-  it('respects each kind’s switch — approvals off means no approval push', async () => {
-    (prisma.user.findMany as any).mockResolvedValue([person(RAVI, { pushApprovals: false, pushCalendar: true, pushTasks: true, pushBell: false })]);
-    expect(await queuePushFor(ORG, [RAVI], HEAD, 'APPROVALS', 'review:r1:submitted', 'Waiting', 'x', '/', { now: tuesdayNoon })).toBe(0);
-    expect(await queuePushFor(ORG, [RAVI], HEAD, 'CALENDAR', 'event:e1:1', 'Booked', 'x', '/', { now: tuesdayNoon })).toBe(1);
+  it('respects each kind’s switch — calendar off means no calendar push', async () => {
+    (prisma.user.findMany as any).mockResolvedValue([person(RAVI, { pushCalendar: false, pushTasks: true, pushBell: false })]);
+    expect(await queuePushFor(ORG, [RAVI], HEAD, 'CALENDAR', 'event:e1:1', 'Booked', 'x', '/', { now: tuesdayNoon })).toBe(0);
+    expect(await queuePushFor(ORG, [RAVI], HEAD, 'TASKS', 'task:t1:assigned', 'New task for you', 'x', '/', { now: tuesdayNoon })).toBe(1);
   });
 
   it('"Everything in my bell" is off until the person turns it on', async () => {
     expect(await queuePushFor(ORG, [RAVI], null, 'BELL', 'alert:a1', 'Invoice overdue', 'x', '/', { now: tuesdayNoon })).toBe(0);
-    (prisma.user.findMany as any).mockResolvedValue([person(RAVI, { pushApprovals: true, pushCalendar: true, pushTasks: true, pushBell: true })]);
+    (prisma.user.findMany as any).mockResolvedValue([person(RAVI, { pushCalendar: true, pushTasks: true, pushBell: true })]);
     expect(await queuePushFor(ORG, [RAVI], null, 'BELL', 'alert:a1', 'Invoice overdue', 'x', '/', { now: tuesdayNoon })).toBe(1);
   });
 
@@ -125,8 +125,8 @@ describe('queuePushFor — who is told', () => {
 
   it('one event is one push: the (person, source) key is unique and duplicates are skipped', async () => {
     (prisma.pushOutbox.createMany as any).mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 });
-    expect(await queuePushFor(ORG, [RAVI], null, 'APPROVALS', 'review:r1:reminded', 't', 'b', '/', { now: tuesdayNoon })).toBe(1);
-    expect(await queuePushFor(ORG, [RAVI], null, 'APPROVALS', 'review:r1:reminded', 't', 'b', '/', { now: tuesdayNoon })).toBe(0);
+    expect(await queuePushFor(ORG, [RAVI], null, 'CALENDAR', 'event:e1:today', 't', 'b', '/', { now: tuesdayNoon })).toBe(1);
+    expect(await queuePushFor(ORG, [RAVI], null, 'CALENDAR', 'event:e1:today', 't', 'b', '/', { now: tuesdayNoon })).toBe(0);
     for (const call of (prisma.pushOutbox.createMany as any).mock.calls) expect(call[0].skipDuplicates).toBe(true);
   });
 
@@ -226,11 +226,11 @@ describe('pushNewAlerts — "Everything in my bell"', () => {
     (prisma.user.findMany as any).mockImplementation(async ({ where }: any) =>
       where.notificationPreference
         ? [{ id: RAVI, email: 'r@x', name: 'Ravi', preset: RolePreset.MANAGEMENT, permissions: [] }]
-        : where.id.in.map((id: string) => person(id, { pushApprovals: true, pushCalendar: true, pushTasks: true, pushBell: true })),
+        : where.id.in.map((id: string) => person(id, { pushCalendar: true, pushTasks: true, pushBell: true })),
     );
   });
 
-  it('only people who turned it on, and only alerts their bell shows — never the approval or calendar ones', async () => {
+  it('only people who turned it on, and only alerts their bell shows — never the calendar ones', async () => {
     (prisma.alert.findMany as any).mockResolvedValue([
       { id: 'a1', rule: 'PROJECT_OVER_ESTIMATE', message: 'Reel for Brigade: 60% done with 80% of the quote already spent. At this rate it finishes at ₹1,90,000.', entityType: 'Project', entityId: 'p1' },
       { id: 'a2', rule: 'INVOICE_OVERDUE', message: 'Invoice EL/014 for Brigade is overdue (due date passed).', entityType: 'Invoice', entityId: 'i1' },

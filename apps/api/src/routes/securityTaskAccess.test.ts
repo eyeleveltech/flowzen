@@ -68,8 +68,6 @@ beforeEach(() => {
   p.task.findFirst.mockImplementation(async ({ where }: any) => TASKS.find((t) => matches(t, where)) ?? null);
   p.task.count.mockImplementation(async ({ where }: any) => TASKS.filter((t) => matches(t, where)).length);
   p.task.findMany.mockImplementation(async ({ where }: any) => TASKS.filter((t) => matches(t, where)).map((t) => ({ id: t.id })));
-  p.taskApprover.findMany.mockResolvedValue([]);
-  p.approvalEscalationContact.findMany.mockResolvedValue([]);
   p.activity.findMany.mockResolvedValue([]);
   p.activity.count.mockResolvedValue(0);
 });
@@ -83,6 +81,8 @@ describe('H2: changing somebody else’s task', () => {
     ['post', '/api/tasks/task-shyam/resume', {}],
     ['post', '/api/tasks/task-shyam/focus', {}],
     ['delete', '/api/tasks/task-shyam', undefined],
+    // Opening it from a link is reading it, and reading follows the same rule.
+    ['get', '/api/tasks/task-shyam', undefined],
   ];
 
   it.each(attempts)('%s %s is "not found" to an Employee who is not on it', async (method, url, body) => {
@@ -102,6 +102,27 @@ describe('H2: changing somebody else’s task', () => {
     // And whoever created or assigned it.
     const harish = { ...shyam, userId: 'usr-harish' };
     expect(matches(SHYAMS, await taskChangeableWhere(harish, { id: 'task-shyam' }))).toBe(true);
+  });
+
+  it('opens the task from a link for the person on it', async () => {
+    p.task.findFirst.mockImplementationOnce(async ({ where }: any) =>
+      matches(SHYAMS, where)
+        ? {
+            ...SHYAMS,
+            priority: 'MEDIUM',
+            dueDate: new Date('2026-10-30T00:00:00Z'),
+            assignedAt: new Date('2026-10-01T05:00:00Z'),
+            completedAt: null,
+            waitingOn: null,
+            waitingTotalMinutes: 0,
+            repeat: null,
+            assignees: [{ user: { id: 'usr-shyam', name: 'Shyam', designation: null } }],
+          }
+        : null,
+    );
+    const res = await request(app).get('/api/tasks/task-shyam').set(...as('shyam'));
+    expect(res.status).toBe(200);
+    expect(res.body.task).toMatchObject({ id: 'task-shyam', title: 'Reel cut', clientName: 'Internal', assignees: [{ id: 'usr-shyam', name: 'Shyam' }] });
   });
 
   it('leaves Management’s reach unchanged', async () => {
@@ -135,12 +156,6 @@ describe('H1: the activity feed', () => {
       { entityType: { in: expect.not.arrayContaining(['Task']) } },
       { entityType: 'Task', entityId: { in: ['task-ramya'] } },
     ]);
-  });
-
-  it('lets an approver read the rounds of the type they review', async () => {
-    p.taskApprover.findMany.mockResolvedValue([{ taskType: 'VIDEO' }]);
-    const res = await request(app).get('/api/activities?entityType=Task&entityId=task-shyam').set(...as('ramya'));
-    expect(res.status).toBe(200);
   });
 
   it('never carries an actor’s email', async () => {

@@ -157,12 +157,12 @@ pushRouter.delete('/subscriptions/:id', async (req: AuthRequest, res: Response, 
   }
 });
 
-/** GET /api/push/preferences — the four kinds; the defaults until changed. */
+/** GET /api/push/preferences — the three kinds; the defaults until changed. */
 pushRouter.get('/preferences', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const row = await prisma.notificationPreference.findUnique({ where: { userId: req.user!.userId } });
-    const { pushApprovals, pushCalendar, pushTasks, pushBell } = row ?? DEFAULT_PREFERENCES;
-    res.json({ success: true, preferences: { pushApprovals, pushCalendar, pushTasks, pushBell } });
+    const { pushCalendar, pushTasks, pushBell } = row ?? DEFAULT_PREFERENCES;
+    res.json({ success: true, preferences: { pushCalendar, pushTasks, pushBell } });
   } catch (error) {
     next(error);
   }
@@ -170,7 +170,6 @@ pushRouter.get('/preferences', async (req: AuthRequest, res: Response, next: Nex
 
 const preferencesSchema = z
   .object({
-    pushApprovals: z.boolean().optional(),
     pushCalendar: z.boolean().optional(),
     pushTasks: z.boolean().optional(),
     pushBell: z.boolean().optional(),
@@ -178,7 +177,7 @@ const preferencesSchema = z
   .strict()
   .refine((v) => Object.keys(v).length > 0, { message: 'Nothing to change' });
 
-/** PUT /api/push/preferences — any of the four. */
+/** PUT /api/push/preferences — any of the three. */
 pushRouter.put('/preferences', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const parsed = preferencesSchema.safeParse(req.body);
@@ -192,8 +191,8 @@ pushRouter.put('/preferences', async (req: AuthRequest, res: Response, next: Nex
       create: { userId, ...parsed.data },
       update: parsed.data,
     });
-    const { pushApprovals, pushCalendar, pushTasks, pushBell } = row;
-    res.json({ success: true, preferences: { pushApprovals, pushCalendar, pushTasks, pushBell } });
+    const { pushCalendar, pushTasks, pushBell } = row;
+    res.json({ success: true, preferences: { pushCalendar, pushTasks, pushBell } });
   } catch (error) {
     next(error);
   }

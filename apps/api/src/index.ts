@@ -49,7 +49,6 @@ import { startAllocationScheduler } from './workers/allocation.cron.js';
 import { startRecurringCostScheduler } from './workers/recurringCost.cron.js';
 import { startMondayBriefScheduler } from './workers/brief.cron.js';
 import { startAlertDigestScheduler } from './workers/alertDigest.cron.js';
-import { startApprovalChaser } from './workers/approvalChaser.cron.js';
 import { startTaskRepeatScheduler } from './workers/taskRepeat.cron.js';
 import { startEventReminders } from './workers/eventReminder.cron.js';
 import { startGoogleCalendarWorker } from './workers/googleCalendar.cron.js';
@@ -169,9 +168,6 @@ startMondayBriefScheduler();
 // alert only reached somebody who happened to open the app.
 startAlertDigestScheduler();
 
-// Chase work waiting for approval: a reminder, then an escalation, in working
-// time — so a video sent for sign-off does not wait for somebody to remember.
-startApprovalChaser();
 // Repeating tasks: the next copy of each, hourly.
 startTaskRepeatScheduler();
 startEventReminders();
