@@ -15,7 +15,7 @@
  * Editable with `setup.admin`; everyone else sees it read-only.
  */
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { ArrowDown, ArrowUp, ArrowUpRight, Check, Pencil, Plus, RotateCcw, X } from 'lucide-react';
@@ -332,6 +332,7 @@ export function DepartmentsTab({ canEdit }: { canEdit: boolean }) {
   const confirm = useConfirmStore((s) => s.confirm);
   const [newName, setNewName] = useState('');
   const [adding, setAdding] = useState(false);
+  const newNameRef = useRef<HTMLInputElement>(null);
 
   const { data, isPending, error } = useQuery({
     queryKey: ['departments', 'settings', canEdit],
@@ -406,26 +407,39 @@ export function DepartmentsTab({ canEdit }: { canEdit: boolean }) {
         }
         aside={
           canEdit ? (
+            /*
+             * Adding one. The field and its button were drawn so faintly — a
+             * near-invisible border, and the button greyed out until a name was
+             * typed — that the whole control read as switched off, and people
+             * could not find how to add a department. Both look usable now; an
+             * empty name is said in words rather than by a dead button.
+             */
             <form
-              className="flex items-center gap-2"
+              className="flex flex-wrap items-center gap-2"
               onSubmit={async (e) => {
                 e.preventDefault();
-                if (!newName.trim()) return;
+                const name = newName.trim();
+                if (!name) {
+                  toast.error("Type the new department's name first.");
+                  newNameRef.current?.focus();
+                  return;
+                }
                 setAdding(true);
-                if (await attempt(() => api.departments.create(newName.trim()), `${newName.trim()} added`)) setNewName('');
+                if (await attempt(() => api.departments.create(name), `${name} added`)) setNewName('');
                 setAdding(false);
               }}
             >
               <input
+                ref={newNameRef}
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
-                placeholder="New department"
+                placeholder="New department name"
                 aria-label="New department name"
                 maxLength={60}
-                className="h-8 w-40 rounded-lg border border-border px-2 text-sm outline-none focus:border-primary"
+                className="h-9 w-52 rounded-lg border border-line bg-white px-3 text-sm text-primary outline-none placeholder:text-secondary focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25"
               />
-              <Button size="sm" type="submit" icon={Plus} loading={adding} disabled={!newName.trim()}>
-                Add
+              <Button size="sm" variant="primary" type="submit" icon={Plus} loading={adding}>
+                Add department
               </Button>
             </form>
           ) : null
