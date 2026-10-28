@@ -2,6 +2,7 @@
 -- DRY RUN: shows what it would add, then ROLLBACK. Writes nothing.
 -- Project "Tagmango Website and App rework", on the month card of each due date. Assigned by Akmal.
 -- 20 tasks. Rerunning skips anything already added (tracker ID tag in the notes).
+-- Also closes 7 older team-plan tasks the tracker replaces (2 Done, 5 Cancelled).
 \encoding UTF8
 \set ON_ERROR_STOP on
 \pset pager off
@@ -114,7 +115,38 @@ SELECT 'c' || replace(gen_random_uuid()::text, '-', ''), r."organizationId", 'Ta
                           'assigneeIds', (SELECT jsonb_agg(hp.user_id ORDER BY u.ord) FROM unnest(n.people) WITH ORDINALITY AS u(key, ord) JOIN hwt_people hp ON hp.key = u.key))
 FROM hwt_new n, retainers r WHERE r.id = 'cmvakef3b00ijms3d0on1nd6t';
 
--- 4. What this run did.
+-- 4. The older team-plan tasks this tracker replaces: closed as the status menu
+--    closes a task (finished time, "now" cleared, a line in its history).
+--    Only while still open; the team plan's tag stays at the end of the notes,
+--    so a rerun of her-will-seed.sql still knows them.
+CREATE TEMP TABLE hwt_close (tag text PRIMARY KEY, to_status "TaskStatus" NOT NULL, why text) ON COMMIT DROP;
+INSERT INTO hwt_close VALUES
+  ($t$From the Her Will team plan, Harish #9$t$, 'DONE', $t$Done in the tracker (HW-102)$t$),
+  ($t$From the Her Will team plan, Janani #4$t$, 'DONE', $t$Pages already designed (tracker HW-057)$t$),
+  ($t$From the Her Will team plan, Harish #6$t$, 'CANCELLED', $t$Replaced by HW-101$t$),
+  ($t$From the Her Will team plan, Harish #10$t$, 'CANCELLED', $t$Replaced by HW-096$t$),
+  ($t$From the Her Will team plan, Harish #12$t$, 'CANCELLED', $t$Replaced by HW-103$t$),
+  ($t$From the Her Will team plan, Harish #3$t$, 'CANCELLED', $t$Replaced by HW-099$t$),
+  ($t$From the Her Will team plan, Harish #16$t$, 'CANCELLED', $t$Replaced by HW-105$t$);
+
+CREATE TEMP TABLE hwt_closed ON COMMIT DROP AS
+SELECT t.id, t.title, t.status AS was, c.to_status, c.why, c.tag
+FROM hwt_close c
+JOIN tasks t ON t."retainerProjectId" = 'cmvakgugo00ixms3digxjeuuq' AND t."deletedAt" IS NULL AND t.notes LIKE '%' || c.tag
+WHERE t.status IN ('TODO', 'IN_PROGRESS');
+
+UPDATE tasks t SET status = c.to_status, "completedAt" = now(), "updatedAt" = now()
+FROM hwt_closed c WHERE t.id = c.id;
+
+UPDATE users SET "focusTaskId" = NULL WHERE "focusTaskId" IN (SELECT id FROM hwt_closed);
+
+INSERT INTO activities (id, "organizationId", "entityType", "entityId", "actorId", verb, payload)
+SELECT 'c' || replace(gen_random_uuid()::text, '-', ''), r."organizationId", 'Task', c.id, 'cmudv77z7001hqx2343lgsz61',
+       CASE WHEN c.to_status = 'DONE' THEN 'task_completed' ELSE 'task_cancelled' END,
+       jsonb_build_object('from', c.was, 'to', c.to_status)
+FROM hwt_closed c, retainers r WHERE r.id = 'cmvakef3b00ijms3d0on1nd6t';
+
+-- 5. What this run did.
 SELECT count(*) AS added, count(*) FILTER (WHERE status = 'IN_PROGRESS') AS in_progress, count(*) FILTER (WHERE status = 'TODO') AS to_do,
        (SELECT count(*) FROM hwt_plan) - count(*) AS already_there
 FROM hwt_new;
@@ -122,6 +154,11 @@ SELECT to_char(n.due, 'DD Mon') AS due, n.status, n.priority,
        (SELECT string_agg(u.name, ', ' ORDER BY x.ord) FROM unnest(n.people) WITH ORDINALITY AS x(key, ord) JOIN hwt_people hp ON hp.key = x.key JOIN users u ON u.id = hp.user_id) AS people,
        left(n.title, 70) AS task
 FROM hwt_new n ORDER BY n.due, n.ref;
+
+SELECT c.to_status AS closed_as, c.was, left(c.title, 60) AS older_task, c.why
+FROM hwt_closed c ORDER BY c.to_status, c.title;
+SELECT replace(c.tag, 'From the Her Will team plan, ', '') AS not_closed_not_open_or_not_found
+FROM hwt_close c WHERE c.tag NOT IN (SELECT tag FROM hwt_closed);
 
 -- Harish's other open tasks in this project (from the 16 Oct team plan) — check none is the same work twice.
 SELECT to_char(t."dueDate", 'DD Mon') AS due, t.status, left(t.title, 70) AS already_on_his_list
