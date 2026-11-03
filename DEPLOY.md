@@ -97,3 +97,26 @@ works only once Flowzen is added to the Home Screen (iOS 16.4+) and opened from 
 Then each person turns them on from **Profile → Phone notifications**, per device, and
 picks which kinds they want. Pushes outside working hours wait for the next working
 morning.
+
+## API keys for AI agents and automations (one-time setup, optional)
+Management makes keys in **Settings → API** for Claude/ChatGPT (MCP at `/api/mcp`) and
+n8n/Make/Zapier (REST at `/api/v1`, described at `/api/v1/openapi.json`).
+
+1. **Server env** — add to `/var/www/flowzen/.env`, then Scenario A (rebuild and restart):
+   ```
+   API_KEY_PEPPER=<48 random bytes: node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))">
+   ```
+   **Never change it once keys exist** — every key would stop working. Never commit it.
+2. **Apache**, in the API's HTTPS (`:443`) virtual host, then `sudo systemctl reload apache2`:
+   ```apache
+   # Keys are only accepted over HTTPS; Express learns the request was HTTPS from this.
+   RequestHeader set X-Forwarded-Proto "https"
+   # MCP: pass answers straight through, uncompressed. Put these lines ABOVE the
+   # existing "ProxyPass /api http://127.0.0.1:4000/api" — Apache uses the first match.
+   ProxyPass        /api/mcp http://127.0.0.1:4000/api/mcp flushpackets=on
+   ProxyPassReverse /api/mcp http://127.0.0.1:4000/api/mcp
+   SetEnvIf Request_URI "^/api/mcp" no-gzip=1
+   ```
+   (`a2enmod headers` if `RequestHeader` is unknown.) Without the first line every key gets
+   `403 https_required`.
+3. In Flowzen: **Settings → API** → switch **Allow API keys** on, then **New key**.

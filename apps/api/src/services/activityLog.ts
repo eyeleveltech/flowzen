@@ -25,6 +25,7 @@
 import { STAGE_LABEL } from '@flowzen/shared';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
+import { viaWords } from './apiCallContext.js';
 
 // ── Areas ────────────────────────────────────────────────────────────────────
 
@@ -82,7 +83,13 @@ export function areaWhere(area: string): Prisma.ActivityWhereInput | null {
     case 'assets':
       return { entityType: 'Asset' };
     case 'settings':
-      return { entityType: 'Organization', verb: { notIn: [...CLIENT_ORG_VERBS, ...PEOPLE_ORG_VERBS] } };
+      return {
+        OR: [
+          { entityType: 'Organization', verb: { notIn: [...CLIENT_ORG_VERBS, ...PEOPLE_ORG_VERBS] } },
+          // Settings → API: keys made, changed and revoked.
+          { entityType: 'ApiKey' },
+        ],
+      };
     default:
       return null;
   }
@@ -524,6 +531,13 @@ const ACTION: Record<string, string> = {
   'Department.department_archived': 'archived the department',
   'Department.department_restored': 'restored the department',
 
+  // Settings → API (API Plan 1)
+  'ApiKey.api_key_created': 'created an API key',
+  'ApiKey.api_key_revoked': 'revoked an API key',
+  'ApiKey.api_key_renamed': 'renamed an API key',
+  'ApiKey.api_key_scopes_changed': 'changed what an API key can do',
+  'Organization.api_keys_switched': 'switched API keys',
+
   // The organisation
   'Organization.organisation_updated': 'changed the organisation settings',
   'Organization.document_settings_updated': 'changed the document settings',
@@ -548,6 +562,12 @@ const NO_SUBJECT = new Set([
   'Organization.monday_brief_mailed',
   'Organization.assistant_asked',
   'Organization.outreach_imported',
+  'Organization.api_keys_switched',
+  // A key has no page of its own; its name is the detail line.
+  'ApiKey.api_key_created',
+  'ApiKey.api_key_revoked',
+  'ApiKey.api_key_renamed',
+  'ApiKey.api_key_scopes_changed',
 ]);
 
 /** Account events a person does to themselves read without "of Harish". */
@@ -842,6 +862,14 @@ export function detailLines(
     lines.push(`Remind after ${p.remind} · escalate after ${str(p.escalate)}`);
   }
 
+  // API keys: which one, and what it may do.
+  if (entityType === 'ApiKey') {
+    if (verb === 'api_key_renamed' && str(p.from) && str(p.to)) lines.push(`“${p.from}” → “${p.to}”`);
+    else if (str(p.name)) lines.push(`“${p.name}”`);
+    if (Array.isArray(p.scopes)) lines.push(p.scopes.length ? (p.scopes as string[]).join(', ') : 'No scopes');
+  }
+  if (verb === 'api_keys_switched') lines.push(p.enabled ? 'On' : 'Off');
+
   // Sign-ins: where from.
   if (str(p.device) || str(p.ip)) lines.push([str(p.device), str(p.ip)].filter(Boolean).join(' · '));
 
@@ -862,6 +890,8 @@ export type LogEntry = {
   nobody: 'Flowzen' | 'Someone';
   area: Area;
   action: string;
+  /** "via API: n8n" when the change was made through an API key, else null. */
+  via: string | null;
   subject: Subject | null;
   detail: string[];
   entityType: string;
@@ -883,6 +913,7 @@ export function describe(
     nobody: row.verb === 'sign_in_failed' ? 'Someone' : 'Flowzen',
     area: areaOf(row.entityType, row.verb),
     action: self || actionFor(row.entityType, row.verb),
+    via: viaWords(row.payload),
     subject,
     detail: detailLines(row.entityType, row.verb, row.payload, people),
     entityType: row.entityType,

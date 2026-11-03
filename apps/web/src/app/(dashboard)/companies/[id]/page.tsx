@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, type TabDef } from '@/components/ui/tabs';
 import { plural } from '@/lib/utils';
 import { useZenForm } from '@/lib/zenForms';
-import { activityText, activityScope, activityDetail } from '@/lib/activity';
+import { activityText, activityScope, activityDetail, viaText } from '@/lib/activity';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { 
@@ -1546,6 +1546,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                     <div className="min-w-0">
                       <div className="flex min-w-0 flex-wrap items-center gap-2">
                         <span className="font-medium text-primary">{a.actor?.name || 'System'}</span>
+                        {viaText(a.payload) && <span className="text-secondary">({viaText(a.payload)})</span>}
                         <span className="text-secondary">{activityText(a.verb)}</span>
                         {scope && (
                           <span className="eyebrow rounded border border-border bg-subtle px-1.5 py-0.5">{scope}</span>

@@ -87,6 +87,17 @@ const ENTITY: Record<string, string> = {
   OutreachEntry: 'Lead',
 };
 
+/**
+ * "via API: n8n" when a change was made through an API key (API Plan 1): the
+ * server stamps the key on the Activity row's payload, and every history line
+ * says so after the person's name. The same wording as the audit log.
+ */
+export const viaText = (payload: unknown): string | null => {
+  const via = payload && typeof payload === 'object' ? (payload as { via?: unknown }).via : undefined;
+  if (typeof via !== 'string' || !via) return null;
+  return via.startsWith('API key: ') ? `via API: ${via.slice('API key: '.length)}` : `via ${via}`;
+};
+
 export const activityText = (verb: string): string =>
   VERB[verb] ?? verb.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
 

@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { stampVia } from '../services/apiCallContext.js';
 
 /**
  * ─── Soft delete, once, instead of 139 times ────────────────────────────────
@@ -83,6 +84,22 @@ const hideDeleted = Object.fromEntries(
   ]),
 );
 
+/*
+ * ─── "via API: n8n" ──────────────────────────────────────────────────────────
+ *
+ * A write made through an API key records the key in its Activity row's
+ * payload (services/apiCallContext.ts), whichever of the hundred-odd places
+ * wrote the row. Outside a key's request this changes nothing.
+ */
+const stampActivityVia = {
+  activity: {
+    create: ({ args, query }: { args: any; query: (a: any) => Promise<unknown> }) =>
+      query({ ...args, data: stampVia(args.data) }),
+    createMany: ({ args, query }: { args: any; query: (a: any) => Promise<unknown> }) =>
+      query({ ...args, data: Array.isArray(args.data) ? args.data.map((d: unknown) => stampVia(d)) : stampVia(args.data) }),
+  },
+};
+
 const base = new PrismaClient();
 
 /*
@@ -94,7 +111,7 @@ const base = new PrismaClient();
  * duplication this file exists to remove. The shape is checked by the tests
  * below it and by the probe that exercises each model.
  */
-const client = base.$extends({ query: hideDeleted as never });
+const client = base.$extends({ query: { ...hideDeleted, ...stampActivityVia } as never });
 
 const globalForPrisma = globalThis as unknown as { prisma: typeof client };
 

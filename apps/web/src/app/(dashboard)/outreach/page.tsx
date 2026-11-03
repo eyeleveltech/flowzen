@@ -38,6 +38,7 @@ import { personOptions } from '@/lib/people';
 import { NextStepLine, stepDate, useStudioToday } from '@/components/sales/NextStep';
 import { LastContactModal, LogTouchModal, type SalesTarget } from '@/components/sales/SalesDialogs';
 import { plural } from '@/lib/utils';
+import { viaText } from '@/lib/activity';
 
 /**
  * Where the conversation has got to.
@@ -1213,7 +1214,13 @@ export default function OutreachPage() {
                     {h.payload?.nextActionDate && (
                       <span className="text-secondary"> · {formatDay(h.payload.nextActionDate)}</span>
                     )}
-                    {h.actor?.name && <span className="text-secondary"> by {h.actor.name}</span>}
+                    {h.actor?.name && (
+                      <span className="text-secondary">
+                        {' '}
+                        by {h.actor.name}
+                        {viaText(h.payload) && ` (${viaText(h.payload)})`}
+                      </span>
+                    )}
                     {h.payload?.remarks && <div className="mt-0.5 text-secondary">{h.payload.remarks}</div>}
                     {h.payload?.note && <div className="mt-0.5 text-secondary">{h.payload.note}</div>}
                     {h.payload?.nextStep && (

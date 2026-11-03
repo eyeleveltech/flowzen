@@ -61,6 +61,10 @@ services:
       - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY:-}
       - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY:-}
       - VAPID_SUBJECT=${VAPID_SUBJECT:-}
+      # API keys (Settings → API). Mixed into every key's stored hash; 32+
+      # random characters. Without it the app runs and no key can be made.
+      # Never change it once keys exist: every key would stop working.
+      - API_KEY_PEPPER=${API_KEY_PEPPER:-}
       - PORT=4000
       # Set to "true" ONLY to bypass the automatic pre-migration backup (not recommended).
       - SKIP_PREMIGRATION_BACKUP=${SKIP_PREMIGRATION_BACKUP:-false}

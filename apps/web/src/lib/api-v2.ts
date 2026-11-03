@@ -919,6 +919,8 @@ export interface AuditEntry {
   nobody: 'Flowzen' | 'Someone';
   area: string;
   action: string;
+  /** "via API: n8n" when it was done through an API key. */
+  via?: string | null;
   subject: { label: string; context: string | null; href: string | null; gone: boolean } | null;
   detail: string[];
   entityType: string;
@@ -2543,6 +2545,18 @@ export const api = {
     test: () => post<{ success: boolean; devices: number }>('/push/test'),
   },
 
+  /** Settings → API: the switch, and making, changing and revoking API keys (setup.admin). */
+  apiKeys: {
+    list: () => get<ApiKeysPage>('/api-keys'),
+    setEnabled: (enabled: boolean) => patch<{ success: boolean; enabled: boolean }>('/api-keys/settings', { enabled }),
+    /** The answer carries the whole key, once. */
+    create: (body: { name: string; scopes: string[]; expiry: string }) =>
+      post<{ success: boolean; key: string; apiKey: ApiKeyRow }>('/api-keys', body),
+    update: (id: string, body: { name?: string; scopes?: string[] }) =>
+      patch<{ success: boolean; apiKey: ApiKeyRow }>(`/api-keys/${id}`, body),
+    revoke: (id: string) => post<{ success: boolean; apiKey: ApiKeyRow }>(`/api-keys/${id}/revoke`),
+    usage: (id: string) => get<{ success: boolean; calls: ApiKeyCall[] }>(`/api-keys/${id}/usage`),
+  },
 
   calendar: {
     /** At most 62 days at a time; layers this person cannot see come back empty. */
@@ -3423,6 +3437,64 @@ export interface ProposalDealDocs {
   documents: ProposalDocSummary[];
   versions: { id: string; n: number; sentAt: string; scopeSummary: string; fromDocument: { id: string; n: number } | null; value?: number }[];
 }
+
+/** Settings → API. */
+export interface ApiScopeInfo {
+  key: string;
+  group: string;
+  label: string;
+  description: string;
+}
+
+export interface ApiKeyRow {
+  id: string;
+  name: string;
+  /** The visible start, "fz_live_ab12cd34". The key itself is never sent again. */
+  prefix: string;
+  scopes: string[];
+  /** What its creator can do today — the most "Edit scopes" may tick. */
+  allowedScopes: string[];
+  createdBy: { id: string; name: string; active: boolean };
+  createdAt: string;
+  lastUsedAt: string | null;
+  lastUsedIp: string | null;
+  expiresAt: string | null;
+  revokedAt: string | null;
+  revokedBy: { id: string; name: string } | null;
+  status: 'active' | 'revoked' | 'expired';
+}
+
+export interface ApiKeysPage {
+  enabled: boolean;
+  /** False when the server has no API_KEY_PEPPER: keys cannot be made. */
+  configured: boolean;
+  maxActive: number;
+  activeCount: number;
+  expiryChoices: string[];
+  scopes: ApiScopeInfo[];
+  me: { id: string; name: string };
+  myScopes: string[];
+  keys: ApiKeyRow[];
+  logKeepDays: number;
+  endpoints: { method: string; path: string; scopes: string[]; summary: string }[];
+  tools: { name: string; title: string; scopes: string[]; writes: boolean }[];
+}
+
+export interface ApiKeyCall {
+  id: string;
+  at: string;
+  method: string;
+  route: string;
+  status: number;
+  durationMs: number;
+}
+
+/**
+ * Where the public API answers, for the examples on Settings → API: the API's
+ * own address, made absolute when it is configured as a path.
+ */
+export const publicApiBase = (): string =>
+  /^https?:\/\//.test(API_URL) ? API_URL.replace(/\/+$/, '') : `${typeof window === 'undefined' ? '' : window.location.origin}${API_URL}`;
 
 export interface ServiceCatalogItem {
   id: string;

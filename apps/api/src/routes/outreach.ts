@@ -229,6 +229,13 @@ const outreachCreateSchema = z
     contactPersonName: z.string().trim().optional().nullable(),
     phone: z.string().trim().optional().nullable(),
     email: z.string().trim().email('That email address does not look right').optional().nullable().or(z.literal('')),
+    /**
+     * Where an automation got it, and its id there (API Plan 1). Only the
+     * public API sends these — it checks for an existing lead first, and the
+     * unique index catches two copies sent at once. The form never does.
+     */
+    externalSource: z.string().trim().min(1).max(60).optional(),
+    externalId: z.string().trim().min(1).max(200).optional(),
   })
   .refine(reachable, {
     message: 'Add a phone number or an email address — a lead you cannot reach is only a name.',
@@ -265,6 +272,10 @@ outreachRouter.post('/', requirePermission('company.write'), async (req: AuthReq
         phone: parsed.data.phone?.trim() || null,
         email: parsed.data.email?.trim() || null,
         status: OutreachStatus.NOT_CONTACTED,
+        // Both or neither: one without the other identifies nothing.
+        ...(parsed.data.externalSource && parsed.data.externalId
+          ? { externalSource: parsed.data.externalSource, externalId: parsed.data.externalId }
+          : {}),
       },
     });
 

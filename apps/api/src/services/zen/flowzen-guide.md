@@ -369,7 +369,7 @@ Enter costs (Heads, Accounts, Management). How each person's month divides acros
 
 ## Setup (/settings)
 
-Setup access (Management). The sidebar calls it Setup; the page is Settings. A panel on the left lists the tabs in five groups: Agency (General, Working calendar), Sales & money (Pipeline, Services & pricing, Documents & billing, Tax & numbering), People & work (Team, Departments, Onboarding, Assets), AI & connections (Zen assistant, Email, Integrations) and Records (Activity, Usage, Trash). A link opens a tab: /settings?tab=<key>, where the key is organisation, calendar, pipeline, pricing, proforma, documents, team, departments, onboarding, assets, zen, email, integrations, activity, usage or trash. Without one it opens on General.
+Setup access (Management). The sidebar calls it Setup; the page is Settings. A panel on the left lists the tabs in five groups: Agency (General, Working calendar), Sales & money (Pipeline, Services & pricing, Documents & billing, Tax & numbering), People & work (Team, Departments, Onboarding, Assets), AI & connections (Zen assistant, Email, Integrations, API) and Records (Activity, Usage, Trash). A link opens a tab: /settings?tab=<key>, where the key is organisation, calendar, pipeline, pricing, proforma, documents, team, departments, onboarding, assets, zen, email, integrations, api, activity, usage or trash. Without one it opens on General.
 
 ### Settings → General
 
@@ -423,6 +423,15 @@ The "Google Calendar connection" switch. When it is on, people connect from Prof
 - Meetings and shoots are written into a "Flowzen" calendar in the person's Google.
 
 The "Phone notifications" switch. When it is on, people turn them on from Profile → Phone notifications. When it is off, nothing is sent and the Profile card is hidden. Each switch shows only when the server has its keys.
+
+### Settings → API
+
+Setup access only. Keys for AI agents (Claude, ChatGPT) and automation tools (n8n, Make, Zapier). See "The API" below for what a key can do.
+- **Allow API keys:** off by default. Off refuses every key at once; the keys are kept.
+- **New key:** a name, what it can do (ticked scopes — only ones the person making it can do themselves), and when it expires (30 days, 90 days, 1 year or never). The key is shown once, with Copy: it cannot be shown again, so a lost key is revoked and replaced.
+- **Each key:** its visible start (fz_live_ab12…), scopes, who made it and when, last used (time and address), expiry and status. Actions: Usage (its last 100 calls, kept 30 days, never what was sent), Rename or edit scopes, and Revoke (works at once, cannot be undone).
+- At most 20 working keys. Everyone with Setup access gets a bell when a key is made or revoked.
+- **Connect:** the addresses, copy-paste examples for curl, n8n, Make, Zapier, Claude Code and Claude Desktop, and the list of endpoints and MCP tools.
 
 ### Settings → Team
 
@@ -717,3 +726,14 @@ Management only. Zen can look up:
 - this week's Monday brief.
 
 It can draft a task for the person to create — or several at once from one message (up to 25 on one card, each with Add or Leave out, then one button adds them) — and remember how they like things done. It cannot change anything, and it never sees salaries: salary costs are one summed line, and profit it works out leaves people cost out. Anything it cannot look up — meetings and shoots, the time split itself, usage — it should say so and give the screen's link.
+
+## The API
+Flowzen can be reached by other tools with an API key from Settings → API (/settings?tab=api):
+- **AI agents** connect over MCP at /api/mcp — Claude Code, Claude Desktop, or any MCP client.
+- **Automation tools** (n8n, Make, Zapier) use the REST API at /api/v1. Its full description is /api/v1/openapi.json.
+
+A key acts as the person who made it, narrowed to its scopes, so it never sees or does more than they can: a Head's key sees their department's tasks, and money amounts and deal values show only if that person may see them. A key stops working when it is revoked, expires, its maker leaves, or API keys are switched off.
+
+What a key can be given: read tasks; create and update tasks (no delete); read projects and retainers (no fees); read companies; read leads; add leads, change their status and next step, log a touch; read deals; log a touch on a deal and set its next step (no stage moves, won or lost); read the calendar (Google busy time only as "Busy"); book and move events (no cancelling); read invoices, proformas, payments and what is owed. Never: salaries or costs, people, Settings, deleting anything, usage, Zen, or changing money.
+
+Everything done through a key is in the history as that person "via API: <key name>" — for example "Harish (via API: n8n) created the task". Tools poll for changes with ?updatedSince= rather than being pushed to.

@@ -236,7 +236,8 @@ function Row({ e, time }: { e: AuditEntry; time: string }) {
 
       <div className="min-w-0 flex-1">
         <p className="text-sm leading-snug text-body">
-          <span className="font-semibold text-primary">{who}</span> {e.action}
+          <span className="font-semibold text-primary">{who}</span>
+          {e.via && <span className="text-secondary"> ({e.via})</span>} {e.action}
           {e.subject && (
             <>
               {' '}

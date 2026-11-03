@@ -57,6 +57,7 @@ import { taskTypeLabel } from '@/lib/task-type';
 import { usePageHeader } from '@/hooks/usePageHeader';
 import { Breadcrumbs } from '@/components/ui/breadcrumbs';
 import { changeTaskStatus as changeStatusAsking, waitingWords } from '@/lib/task-status';
+import { viaText } from '@/lib/activity';
 
 const PRIORITY_OPTIONS = Object.entries(PRIORITY_CONFIG).map(([value, cfg]) => ({ value, label: cfg.label }));
 
@@ -309,7 +310,8 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           at: a.at,
           text: humanizeVerb(a.verb, a.payload),
           body: null,
-          userName: a.actor?.name,
+          // "Harish (via API: n8n)" for a change made through an API key.
+          userName: a.actor?.name && viaText(a.payload) ? `${a.actor.name} (${viaText(a.payload)})` : a.actor?.name,
         })),
       );
     } catch {

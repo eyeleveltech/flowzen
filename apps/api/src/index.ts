@@ -43,6 +43,9 @@ import { calendarRouter } from './routes/calendar.js';
 import { googleRouter } from './routes/google.js';
 import { pushRouter } from './routes/push.js';
 import { usageRouter } from './routes/usage.js';
+import { apiKeysRouter } from './routes/apiKeys.js';
+import { apiV1Router } from './routes/apiV1.js';
+import { mcpRouter } from './routes/mcp.js';
 import { startAgencyHealthScanner } from './workers/scanner.cron.js';
 import { startMonthCardScheduler } from './workers/monthCard.cron.js';
 import { startAllocationScheduler } from './workers/allocation.cron.js';
@@ -54,6 +57,7 @@ import { startEventReminders } from './workers/eventReminder.cron.js';
 import { startGoogleCalendarWorker } from './workers/googleCalendar.cron.js';
 import { startUsageCleanup } from './workers/usageCleanup.cron.js';
 import { startPushWorker } from './workers/push.cron.js';
+import { startApiCleanup } from './workers/apiCleanup.cron.js';
 
 const app = express();
 
@@ -68,13 +72,28 @@ const app = express();
 app.set('trust proxy', 1);
 
 app.use(helmet());
+
+/**
+ * The public API (API Plan 1): /api/v1 for automation tools, /api/mcp for AI
+ * agents. Server to server — no browser is meant to call it — so it gets no
+ * CORS at all, and it reads its own JSON so a bad body answers in its own
+ * `{ error: { code, message } }` shape. It takes an API key and nothing else.
+ */
+const PUBLIC_API = /^\/api\/(v1|mcp)(\/|$)/;
+const exceptPublicApi =
+  (mw: express.RequestHandler): express.RequestHandler =>
+  (req, res, next) =>
+    PUBLIC_API.test(req.path) ? next() : mw(req, res, next);
+
 app.use(
-  cors({
-    origin: process.env.CORS_ORIGIN?.split(',').map((s: string) => s.trim()) ?? true,
-    credentials: true,
-  }),
+  exceptPublicApi(
+    cors({
+      origin: process.env.CORS_ORIGIN?.split(',').map((s: string) => s.trim()) ?? true,
+      credentials: true,
+    }),
+  ),
 );
-app.use(express.json({ limit: '2mb' }));
+app.use(exceptPublicApi(express.json({ limit: '2mb' })));
 app.use(cookieParser());
 
 /**
@@ -100,6 +119,10 @@ app.use(
     message: { success: false, error: 'Too many requests. Slow down and try again in a minute.' },
   }),
 );
+
+// Each API key has its own, tighter limit inside (middleware/apiKey.ts).
+app.use('/api/v1', apiV1Router);
+app.use('/api/mcp', mcpRouter);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString(), version: 2 });
@@ -144,6 +167,8 @@ app.use('/api/calendar', calendarRouter);
 app.use('/api/google', googleRouter);
 app.use('/api/push', pushRouter);
 app.use('/api/usage', usageRouter);
+// Settings → API: making and revoking keys. A signed-in session, like any screen.
+app.use('/api/api-keys', apiKeysRouter);
 
 // Start background health rules scanner
 startAgencyHealthScanner();
@@ -174,6 +199,8 @@ startEventReminders();
 startGoogleCalendarWorker();
 startUsageCleanup();
 startPushWorker();
+// API call logs (30 days) and Idempotency-Keys (a day), trimmed daily.
+startApiCleanup();
 
 app.use((_req, res) => {
   res.status(404).json({ success: false, error: 'Not found' });

@@ -16,4 +16,10 @@ export const EVENT_RULES = ['EVENT_TODAY', 'EVENT_UPDATE'];
  */
 export const REVIEW_RULE = 'PROPOSAL_REVIEW_REQUESTED';
 
-export const EXTERNAL_RULES = [...EVENT_RULES, REVIEW_RULE];
+/**
+ * An API key made or revoked (API Plan 1): told to every setup.admin. Raised
+ * by Settings → API, and closed after two weeks by the API clean-up.
+ */
+export const API_KEY_RULE = 'API_KEY_CHANGED';
+
+export const EXTERNAL_RULES = [...EVENT_RULES, REVIEW_RULE, API_KEY_RULE];

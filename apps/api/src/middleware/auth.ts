@@ -22,6 +22,39 @@ export interface AuthRequest extends Request {
 }
 
 /**
+ * Marks a request the public API (routes/apiV1.ts) is running through one of
+ * the app's own routes, already authenticated as an API key's creator.
+ *
+ * A Symbol rather than a header or a field, so nothing arriving over the wire
+ * can set it: only code in this process holds the symbol. That is what lets
+ * `authenticate` accept the user already on the request without a session,
+ * and still refuse an API key everywhere else.
+ */
+export const API_DISPATCH = Symbol('flowzen.apiDispatch');
+
+/** The person as every route sees them, from their row: preset defaults plus their own switches. */
+export function sessionOf(dbUser: {
+  id: string;
+  organizationId: string;
+  email: string;
+  name: string;
+  preset: string;
+  permissions: string[];
+  active: boolean;
+}): UserSession {
+  const presetKey = (dbUser.preset as RolePreset) || 'EMPLOYEE';
+  return {
+    userId: dbUser.id,
+    organizationId: dbUser.organizationId,
+    email: dbUser.email,
+    name: dbUser.name,
+    preset: presetKey,
+    permissions: resolvePermissions(presetKey, (dbUser.permissions as PermissionKey[]) ?? []),
+    active: dbUser.active,
+  };
+}
+
+/**
  * Resolves all permissions for a user from their preset and custom overrides.
  */
 export function resolvePermissions(preset: RolePreset, customPermissions: (PermissionKey | string)[] = []): PermissionKey[] {
@@ -50,12 +83,30 @@ export async function authenticate(
   next: NextFunction,
 ): Promise<void> {
   try {
+    // The public API running one of these routes for a key it has already
+    // checked. Unreachable from outside the process — see API_DISPATCH.
+    if ((req as AuthRequest & { [API_DISPATCH]?: boolean })[API_DISPATCH] && req.user) {
+      next();
+      return;
+    }
+
     let token: string | undefined;
 
     // 1. Bearer header
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
       token = authHeader.substring(7);
+    }
+
+    // An API key only opens /api/v1 and /api/mcp. Said plainly, rather than
+    // the "expired session" a key would otherwise get from the JWT check.
+    if (token?.startsWith('fz_live_')) {
+      res.status(401).json({
+        success: false,
+        error: 'API keys only work on /api/v1 and /api/mcp. This address needs a signed-in session.',
+        code: 'API_KEY_NOT_ACCEPTED_HERE',
+      });
+      return;
     }
 
     // 2. Cookie fallback
@@ -107,21 +158,7 @@ export async function authenticate(
       }
     }
 
-    // Calculate effective permissions
-    const presetKey = (dbUser.preset as RolePreset) || 'EMPLOYEE';
-    const presetDefaults = ROLE_PRESET_PERMISSIONS[presetKey] || [];
-    const customPermissions = (dbUser.permissions as PermissionKey[]) || [];
-    const effectivePermissions = Array.from(new Set([...presetDefaults, ...customPermissions]));
-
-    req.user = {
-      userId: dbUser.id,
-      organizationId: dbUser.organizationId,
-      email: dbUser.email,
-      name: dbUser.name,
-      preset: presetKey,
-      permissions: effectivePermissions,
-      active: dbUser.active,
-    };
+    req.user = sessionOf(dbUser);
 
     next();
   } catch (error) {

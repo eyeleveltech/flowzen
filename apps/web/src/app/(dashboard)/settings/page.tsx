@@ -49,6 +49,7 @@ import { DepartmentsTab } from './components/DepartmentsTab';
 import { UsageTab } from './components/UsageTab';
 import { IntegrationsTab } from './components/IntegrationsTab';
 import { AssetsTab } from './components/AssetsTab';
+import { ApiTab } from './components/ApiTab';
 import { SETTINGS_GROUPS } from '@/config/settingsTabs';
 
 const GROUPS = SETTINGS_GROUPS;
@@ -187,6 +188,9 @@ export default function SettingsPage() {
       const cfg = await api.config.get();
       const o = cfg.organization;
       setConfig(cfg);
+      // API keys are setup.admin's alone: anybody else sent a ?tab=api link
+      // lands on General, not on an empty page under the API heading.
+      if (!cfg.me.permissions?.includes('setup.admin')) setTabState((t) => (t === 'api' ? 'organisation' : t));
       setForm({
         name: o.name,
         website: o.website ?? '',
@@ -351,11 +355,13 @@ export default function SettingsPage() {
   const locale = config.organization.locale;
 
   // What this person may open. Integrations only when the server has Google or
-  // phone-notification keys to offer; Usage and prices are Management's.
+  // phone-notification keys to offer; Usage and prices are Management's; API
+  // keys are setup.admin's, like the routes behind them.
   const visible = (t: TabDef) =>
     (t.key !== 'integrations' || config.organization.googleCalendarConfigured || config.organization.pushConfigured) &&
     (t.key !== 'usage' || config.me.preset === 'MANAGEMENT') &&
-    (t.key !== 'pricing' || config.me.preset === 'MANAGEMENT');
+    (t.key !== 'pricing' || config.me.preset === 'MANAGEMENT') &&
+    (t.key !== 'api' || canEdit);
   const groups = GROUPS.map((g) => ({ label: g.label, tabs: g.tabs.filter(visible) })).filter((g) => g.tabs.length);
   const current = ALL_TABS.find((t) => t.key === tab) ?? ALL_TABS[0];
 
@@ -935,6 +941,8 @@ export default function SettingsPage() {
               onChanged={() => void load()}
             />
           )}
+
+        {tab === 'api' && canEdit && <ApiTab tz={tz} locale={locale} />}
 
         {tab === 'activity' && (
           <ActivityTab key={activityPerson} tz={tz} locale={locale} initialPerson={activityPerson} />

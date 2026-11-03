@@ -76,6 +76,8 @@ export const RULE_PERMISSION: Record<string, PermissionKey | readonly Permission
   PROPOSAL_STALLED: 'pipeline.read',
   // Prices are Management's, so a draft waiting to be priced is theirs to hear about.
   PROPOSAL_REVIEW_REQUESTED: 'setup.admin',
+  // An API key made or revoked: whoever looks after Settings hears about it.
+  API_KEY_CHANGED: 'setup.admin',
   VERBAL_NO_ADVANCE: 'pipeline.read',
   // A proforma is a request for money: whoever sells it, and Accounts who
   // collect it (Money Plan 2, decision 12). Any one of these opens it.
@@ -279,6 +281,7 @@ const SOURCE: Record<string, string> = {
   Organization: 'Time split',
   CalendarEvent: 'Calendar',
   InternalProject: 'Internal work',
+  ApiKey: 'Settings',
 };
 
 /** Where a row opens: utils/recordLink, shared with the calendar. */
@@ -299,6 +302,8 @@ const linkFor = (
 ): string | null => {
   // A proposal waiting for review opens on its own page, where Finalise is.
   if (rule === 'PROPOSAL_REVIEW_REQUESTED') return `/quotations/${entityId}`;
+  // API keys live in Settings → API, which is setup.admin's like the rule.
+  if (rule === 'API_KEY_CHANGED') return '/settings?tab=api';
   return linkForUser(entityType, entityId, user);
 };
 

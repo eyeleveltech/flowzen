@@ -71,6 +71,10 @@ model Organization {
   /// admin turns it on, and only offered when the server has VAPID keys. Off
   /// means nothing is sent and the Profile card is hidden.
   pushEnabled        Boolean  @default(false)
+  /// Settings → API: "Allow API keys" (API Plan 1). Off by default, and off
+  /// refuses every key at once — the keys themselves are kept, so switching
+  /// it back on needs nothing re-issued.
+  apiEnabled         Boolean  @default(false)
   /// The old free-text list of departments. Replaced by `Department` rows
   /// (Departments Plan 1): nothing writes it any more, /config builds its
   /// `departments` from the rows for any old reader, and it goes in Plan 4.
@@ -206,6 +210,7 @@ model Organization {
   departmentRecords          Department[]
   pushSubscriptions          PushSubscription[]
   pushOutbox                 PushOutbox[]
+  apiKeys                    ApiKey[]
 
   /// "EL" -> EL/CAM/001. The stickers get printed once, so this is a setting
   /// rather than a constant, but changing it does not renumber what exists.
@@ -317,6 +322,8 @@ model User {
   proposalReviewsRequested   ProposalDocument[]   @relation("ProposalDocumentReviewRequestedBy")
   serviceCatalogEdits        ServiceCatalogItem[] @relation("ServiceCatalogUpdatedBy")
   clientRatesApproved        ClientRate[]         @relation("ClientRateApprovedBy")
+  apiKeysCreated             ApiKey[]             @relation("ApiKeyCreatedBy")
+  apiKeysRevoked             ApiKey[]             @relation("ApiKeyRevokedBy")
 
   @@index([organizationId, active])
   @@index([focusTaskId])
@@ -475,6 +482,12 @@ model OutreachEntry {
   /// Dead is the end of a conversation; this is for a row that should not have
   /// been on the list at all -- typed twice, a typo, a bad import line.
   deletedAt         DateTime?
+  /// Where an automation got this lead from, and its id there ("Lead Radar",
+  /// row 412) — API Plan 1. Sending the same pair again returns this lead
+  /// rather than a second one. Null for every lead typed in by a person, and
+  /// NULLs are distinct under the unique index, so those are unaffected.
+  externalSource    String?
+  externalId        String?
 
   organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   // `ownerId` has been written since the first version — POST defaults it to
@@ -485,6 +498,7 @@ model OutreachEntry {
   owner           User?        @relation("OutreachOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   promotedCompany Company?     @relation("PromotedCompany", fields: [promotedCompanyId], references: [id], onDelete: SetNull)
 
+  @@unique([organizationId, externalSource, externalId])
   @@index([organizationId, status])
   @@index([organizationId, deletedAt])
   @@map("outreach_entries")
@@ -2549,4 +2563,89 @@ model PushOutbox {
   @@unique([userId, sourceKey])
   @@index([sentAt, dueAt])
   @@map("push_outbox")
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// PUBLIC API — keys, their request log, and POST retries (API Plan 1)
+//
+// Management makes a key in Settings → API and hands it to an AI agent (MCP at
+// /api/mcp) or an automation tool (REST at /api/v1). A key acts as the person
+// who made it, narrowed to the scopes ticked on it, so every rule the app
+// already applies — team scope, money masking, closed months — applies to it
+// unchanged. The key itself is never stored.
+// ──────────────────────────────────────────────────────────────────────────────
+
+model ApiKey {
+  id             String    @id @default(cuid())
+  organizationId String
+  /// What it is for, in the admin's words: "n8n automations", "Claude agent".
+  name           String
+  /// The visible start of the key, "fz_live_ab12cd34", so a list can say which
+  /// key is which. Far too short to use, and the only part ever shown again.
+  prefix         String
+  /// HMAC-SHA256 of the whole key with the server's API_KEY_PEPPER. A copy of
+  /// the database alone cannot be turned back into working keys.
+  keyHash        String    @unique
+  /// What it may do: "tasks:read", "leads:write"… (services/apiKeys.ts). Each
+  /// is re-checked against the creator's permissions on every request, so a
+  /// key cannot outlive a demotion.
+  scopes         String[]
+  createdById    String
+  createdAt      DateTime  @default(now())
+  lastUsedAt     DateTime?
+  lastUsedIp     String?
+  /// Null: never expires.
+  expiresAt      DateTime?
+  revokedAt      DateTime?
+  revokedById    String?
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User             @relation("ApiKeyCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+  revokedBy    User?            @relation("ApiKeyRevokedBy", fields: [revokedById], references: [id], onDelete: SetNull)
+  requests     ApiRequestLog[]
+  idempotency  ApiIdempotency[]
+
+  @@index([organizationId, revokedAt])
+  @@map("api_keys")
+}
+
+/// One call made with a key: when, which route pattern, the status and how
+/// long it took. Never a body, a query string or an id from the path. Kept 30
+/// days (workers/apiCleanup.cron.ts).
+model ApiRequestLog {
+  id         String   @id @default(cuid())
+  apiKeyId   String
+  at         DateTime @default(now())
+  method     String
+  /// The pattern, "/v1/tasks/:id" — never the path with real ids in it.
+  route      String
+  status     Int
+  durationMs Int
+
+  apiKey ApiKey @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+
+  @@index([apiKeyId, at])
+  @@index([at])
+  @@map("api_request_logs")
+}
+
+/// What a POST answered, by its Idempotency-Key, so an automation's retry gets
+/// the same answer instead of a second task. Kept 24 hours.
+model ApiIdempotency {
+  id             String   @id @default(cuid())
+  apiKeyId       String
+  idempotencyKey String
+  /// SHA-256 of the route and body, so one Idempotency-Key reused for a
+  /// different request is refused rather than answered with the wrong thing.
+  requestHash    String
+  /// 0 while the first request is still running.
+  status         Int
+  body           Json
+  createdAt      DateTime @default(now())
+
+  apiKey ApiKey @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+
+  @@unique([apiKeyId, idempotencyKey])
+  @@index([createdAt])
+  @@map("api_idempotency")
 }
