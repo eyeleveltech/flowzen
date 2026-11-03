@@ -34,8 +34,10 @@ export type ExpiryChoice = keyof typeof EXPIRY_DAYS;
  * whole studio) is decided by the same rules as the app.
  *
  * Never available, at any price: salaries and cost rates, people
- * administration, Settings, deleting anything, usage tracking, Zen, and money
- * writes. There is no scope for any of them, so no key can be given one.
+ * administration, Settings, deleting anything, usage tracking, Zen, and
+ * invoices, proformas and payments. There is no scope for any of them, so no
+ * key can be given one. A retainer's fee and a project's quote are set
+ * through work:write, by the same route and rules as the app's forms.
  */
 export const API_SCOPES = [
   {
@@ -56,8 +58,16 @@ export const API_SCOPES = [
     key: 'work:read',
     group: 'Work',
     label: 'Read projects and retainers',
-    description: 'Retainers, one-time projects and internal projects: names, dates and progress. No fees.',
+    description: 'Retainers, one-time projects and internal projects: names, dates and progress. Fees only with Read invoices and payments too.',
     needs: ['work.all'],
+  },
+  {
+    key: 'work:write',
+    group: 'Work',
+    label: 'Create and manage retainers and projects',
+    description:
+      'Start retainers and one-time projects; change dates, fee, owner and status; stop and resume retainers; add pieces of work and milestones. Never delete.',
+    needs: ['company.write'],
   },
   {
     key: 'clients:read',
@@ -65,6 +75,13 @@ export const API_SCOPES = [
     label: 'Read companies',
     description: 'Companies and their contacts.',
     needs: ['company.read'],
+  },
+  {
+    key: 'clients:write',
+    group: 'Clients',
+    label: 'Add and edit companies',
+    description: 'Add companies and contacts, edit them, and turn an Interested lead into a company. Never delete.',
+    needs: ['company.write'],
   },
   {
     key: 'leads:read',
@@ -77,7 +94,7 @@ export const API_SCOPES = [
     key: 'leads:write',
     group: 'Leads',
     label: 'Add and update leads',
-    description: 'Add leads, change their status and next step, and log a touch.',
+    description: 'Add leads, edit their details, change their status and next step, and log a touch. Never delete.',
     needs: ['company.write'],
   },
   {
@@ -91,7 +108,15 @@ export const API_SCOPES = [
     key: 'pipeline:write',
     group: 'Pipeline',
     label: 'Log touches on deals',
-    description: 'Log a touch and set the next step. No stage moves, won or lost, or pricing.',
+    description: 'Log a touch and set the next step.',
+    needs: ['pipeline.write'],
+  },
+  {
+    key: 'pipeline:manage',
+    group: 'Pipeline',
+    label: 'Run deals',
+    description:
+      'Put deals on the pipeline, send new prices, mark Verbal yes, win, lose and reopen them, and change owner, kind, scope and probability. Never delete.',
     needs: ['pipeline.write'],
   },
   {

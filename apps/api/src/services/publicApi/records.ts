@@ -28,6 +28,7 @@ import type {
   LeadOut,
   MeOut,
   PaymentOut,
+  PersonOut,
   ProformaOut,
   ProjectOut,
   ReceivablesOut,
@@ -100,6 +101,13 @@ async function progressFor(
 }
 
 const NO_PROGRESS: Progress = { total: 0, done: 0, open: 0, overdue: 0, percent: 0 };
+
+/**
+ * A retainer's fee and a project's quote: for a key that may read money
+ * (money:read) made by somebody who may see figures. work:read alone is names,
+ * dates and progress, as it always was.
+ */
+const seesFees = (ctx: ApiContext) => ctx.key.scopes.includes('money:read') && hasPermission(ctx.user, 'money.figures');
 
 // ── Tasks ────────────────────────────────────────────────────────────────────
 
@@ -228,6 +236,48 @@ export async function listInternalProjects(ctx: ApiContext, q: Q<typeof internal
   };
 }
 
+// No cost estimate or margin anywhere: the quote and its milestones are the
+// money, and only for a key that may read money (seesFees).
+const PROJECT_SELECT = {
+  id: true,
+  name: true,
+  status: true,
+  priority: true,
+  startDate: true,
+  endDate: true,
+  isSample: true,
+  description: true,
+  quotedValue: true,
+  gstPercent: true,
+  createdAt: true,
+  updatedAt: true,
+  company: { select: { id: true, name: true } },
+  owner: { select: { id: true, name: true } },
+} satisfies Prisma.ProjectSelect;
+
+type ProjectRow = Prisma.ProjectGetPayload<{ select: typeof PROJECT_SELECT }>;
+
+function projectOut(p: ProjectRow, progress: Progress, ctx: ApiContext): ProjectOut {
+  return {
+    id: p.id,
+    name: p.name,
+    client: person(p.company)!,
+    status: p.status,
+    priority: p.priority,
+    startDate: day(p.startDate)!,
+    endDate: day(p.endDate)!,
+    owner: person(p.owner)!,
+    isSample: p.isSample,
+    description: p.description,
+    quotedValue: seesFees(ctx) ? Number(p.quotedValue) : null,
+    gstPercent: p.gstPercent == null ? null : Number(p.gstPercent),
+    progress,
+    createdAt: iso(p.createdAt)!,
+    updatedAt: iso(p.updatedAt)!,
+    link: absoluteLink(linkForUser('Project', p.id, ctx.user)),
+  };
+}
+
 export async function listProjects(ctx: ApiContext, q: Q<typeof projectListQuery>): Promise<Page<ProjectOut>> {
   const paging = pageArgs(q);
   const rows = await prisma.project.findMany({
@@ -240,41 +290,84 @@ export async function listProjects(ctx: ApiContext, q: Q<typeof projectListQuery
     },
     orderBy: paging.orderBy,
     take: paging.take,
-    // No quoted value, cost or margin: work:read is names, dates and progress.
-    select: {
-      id: true,
-      name: true,
-      status: true,
-      priority: true,
-      startDate: true,
-      endDate: true,
-      isSample: true,
-      createdAt: true,
-      updatedAt: true,
-      company: { select: { id: true, name: true } },
-      owner: { select: { id: true, name: true } },
-    },
+    select: PROJECT_SELECT,
   });
   const { rows: page, nextCursor } = paging.finish(rows);
   const progress = await progressFor('projectId', page.map((p) => p.id), await studioToday(ctx.user.organizationId));
+  return { data: page.map((p) => projectOut(p, progress.get(p.id) ?? NO_PROGRESS, ctx)), nextCursor };
+}
+
+export async function getProject(ctx: ApiContext, id: string): Promise<ProjectOut> {
+  if (!validId(id)) throw notFound('Project');
+  const p = await prisma.project.findFirst({
+    where: { id, organizationId: ctx.user.organizationId, deletedAt: null },
+    select: {
+      ...PROJECT_SELECT,
+      milestones: { orderBy: { order: 'asc' }, select: { id: true, label: true, percent: true, amount: true, status: true } },
+    },
+  });
+  if (!p) throw notFound('Project');
+  const progress = await progressFor('projectId', [p.id], await studioToday(ctx.user.organizationId));
+  const fees = seesFees(ctx);
   return {
-    data: page.map((p) => ({
-      id: p.id,
-      name: p.name,
-      client: person(p.company)!,
-      status: p.status,
-      priority: p.priority,
-      startDate: day(p.startDate)!,
-      endDate: day(p.endDate)!,
-      owner: person(p.owner)!,
-      isSample: p.isSample,
-      progress: progress.get(p.id) ?? NO_PROGRESS,
-      createdAt: iso(p.createdAt)!,
-      updatedAt: iso(p.updatedAt)!,
-      link: absoluteLink(linkForUser('Project', p.id, ctx.user)),
-    })),
-    nextCursor,
+    ...projectOut(p, progress.get(p.id) ?? NO_PROGRESS, ctx),
+    milestones: p.milestones.map((m) => ({ ...m, amount: fees ? Number(m.amount) : null })),
   };
+}
+
+/** A retainer, with this month's card for its progress. */
+const retainerSelect = (month: string) =>
+  ({
+    id: true,
+    status: true,
+    startDate: true,
+    termMonths: true,
+    renewalDate: true,
+    billing: true,
+    monthlyValue: true,
+    gstPercent: true,
+    stoppedAt: true,
+    stopReason: true,
+    createdAt: true,
+    updatedAt: true,
+    company: { select: { id: true, name: true } },
+    owner: { select: { id: true, name: true } },
+    projects: {
+      orderBy: [{ status: 'asc' }, { name: 'asc' }],
+      select: { id: true, name: true, status: true, startDate: true, endDate: true },
+    },
+    monthCards: { where: { month }, select: { id: true } },
+  }) satisfies Prisma.RetainerSelect;
+
+type RetainerRow = Prisma.RetainerGetPayload<{ select: ReturnType<typeof retainerSelect> }>;
+
+/** Each retainer as the API shows it, with this month's progress counted in one query. */
+async function retainersOut(rows: RetainerRow[], month: string, today: string, ctx: ApiContext): Promise<RetainerOut[]> {
+  const progress = await progressFor('monthCardId', rows.flatMap((r) => r.monthCards.map((c) => c.id)), today);
+  const fees = seesFees(ctx);
+  return rows.map((r) => {
+    const card = r.monthCards[0];
+    return {
+      id: r.id,
+      name: `${r.company.name} retainer`,
+      client: person(r.company)!,
+      status: r.status,
+      startDate: day(r.startDate)!,
+      termMonths: r.termMonths,
+      renewalDate: day(r.renewalDate),
+      owner: person(r.owner)!,
+      billing: r.billing,
+      monthlyFee: fees ? Number(r.monthlyValue) : null,
+      gstPercent: r.gstPercent == null ? null : Number(r.gstPercent),
+      stoppedAt: iso(r.stoppedAt),
+      stopReason: r.stopReason,
+      projects: r.projects.map((p) => ({ id: p.id, name: p.name, status: p.status, startDate: day(p.startDate), endDate: day(p.endDate) })),
+      thisMonth: card ? { month, ...(progress.get(card.id) ?? NO_PROGRESS) } : null,
+      createdAt: iso(r.createdAt)!,
+      updatedAt: iso(r.updatedAt)!,
+      link: absoluteLink(linkForUser('Retainer', r.id, ctx.user)),
+    };
+  });
 }
 
 export async function listRetainers(ctx: ApiContext, q: Q<typeof retainerListQuery>): Promise<Page<RetainerOut>> {
@@ -290,48 +383,19 @@ export async function listRetainers(ctx: ApiContext, q: Q<typeof retainerListQue
     },
     orderBy: paging.orderBy,
     take: paging.take,
-    // No monthly fee: work:read carries no money.
-    select: {
-      id: true,
-      status: true,
-      startDate: true,
-      termMonths: true,
-      renewalDate: true,
-      createdAt: true,
-      updatedAt: true,
-      company: { select: { id: true, name: true } },
-      owner: { select: { id: true, name: true } },
-      projects: {
-        orderBy: [{ status: 'asc' }, { name: 'asc' }],
-        select: { id: true, name: true, status: true, startDate: true, endDate: true },
-      },
-      monthCards: { where: { month }, select: { id: true } },
-    },
+    select: retainerSelect(month),
   });
   const { rows: page, nextCursor } = paging.finish(rows);
-  const cardIds = page.flatMap((r) => r.monthCards.map((c) => c.id));
-  const progress = await progressFor('monthCardId', cardIds, today);
-  return {
-    data: page.map((r) => {
-      const card = r.monthCards[0];
-      return {
-        id: r.id,
-        name: `${r.company.name} retainer`,
-        client: person(r.company)!,
-        status: r.status,
-        startDate: day(r.startDate)!,
-        termMonths: r.termMonths,
-        renewalDate: day(r.renewalDate),
-        owner: person(r.owner)!,
-        projects: r.projects.map((p) => ({ id: p.id, name: p.name, status: p.status, startDate: day(p.startDate), endDate: day(p.endDate) })),
-        thisMonth: card ? { month, ...(progress.get(card.id) ?? NO_PROGRESS) } : null,
-        createdAt: iso(r.createdAt)!,
-        updatedAt: iso(r.updatedAt)!,
-        link: absoluteLink(linkForUser('Retainer', r.id, ctx.user)),
-      };
-    }),
-    nextCursor,
-  };
+  return { data: await retainersOut(page, month, today, ctx), nextCursor };
+}
+
+export async function getRetainer(ctx: ApiContext, id: string): Promise<RetainerOut> {
+  if (!validId(id)) throw notFound('Retainer');
+  const today = await studioToday(ctx.user.organizationId);
+  const month = today.slice(0, 7);
+  const r = await prisma.retainer.findFirst({ where: { id, organizationId: ctx.user.organizationId }, select: retainerSelect(month) });
+  if (!r) throw notFound('Retainer');
+  return (await retainersOut([r], month, today, ctx))[0];
 }
 
 // ── Companies ────────────────────────────────────────────────────────────────
@@ -494,13 +558,20 @@ const dealSelect = (allVersions: boolean) =>
     nextStep: true,
     nextStepDate: true,
     lastTouchedAt: true,
+    probabilityOverride: true,
+    verbalYesAt: true,
     wonAt: true,
+    wonVersionId: true,
     lostReason: true,
     createdAt: true,
     updatedAt: true,
     company: { select: { id: true, name: true } },
     owner: { select: { id: true, name: true } },
-    versions: { orderBy: { n: 'desc' }, ...(allVersions ? {} : { take: 1 }), select: { n: true, sentAt: true, value: true } },
+    versions: {
+      orderBy: { n: 'desc' },
+      ...(allVersions ? {} : { take: 1 }),
+      select: { id: true, n: true, sentAt: true, value: true, scopeSummary: true },
+    },
   }) satisfies Prisma.ProposalSelect;
 
 type DealRow = Prisma.ProposalGetPayload<{ select: ReturnType<typeof dealSelect> }>;
@@ -520,9 +591,19 @@ function dealOut(p: DealRow, ctx: ApiContext, withVersions: boolean): DealOut {
     nextStepDate: day(p.nextStepDate),
     lastTouchedAt: iso(p.lastTouchedAt),
     value: values && latest ? Number(latest.value) : null,
+    probabilityOverride: p.probabilityOverride,
     ...(withVersions
-      ? { versions: p.versions.map((v) => ({ n: v.n, sentAt: iso(v.sentAt)!, value: values ? Number(v.value) : null })) }
+      ? {
+          versions: p.versions.map((v) => ({
+            n: v.n,
+            sentAt: iso(v.sentAt)!,
+            value: values ? Number(v.value) : null,
+            scopeSummary: v.scopeSummary,
+            won: v.id === p.wonVersionId,
+          })),
+        }
       : {}),
+    verbalYesAt: iso(p.verbalYesAt),
     wonAt: iso(p.wonAt),
     lostReason: p.lostReason,
     createdAt: iso(p.createdAt)!,
@@ -964,6 +1045,29 @@ export async function search(ctx: ApiContext, q: string): Promise<SearchHit[]> {
     ...projects.map((p) => ({ type: 'project' as const, id: p.id, title: p.name, context: p.company.name, link: absoluteLink(linkForUser('Project', p.id, ctx.user)) })),
     ...invoices.map((i) => ({ type: 'invoice' as const, id: i.id, title: i.number, context: i.company.name, link: absoluteLink(linkForUser('Invoice', i.id, ctx.user)) })),
   ];
+}
+
+// ── People ───────────────────────────────────────────────────────────────────
+
+/**
+ * Who work can be put on: the team's working members, so an automation can
+ * turn a name into the id a task's assigneeIds takes. Departments only for a
+ * creator who may see the team, as on the Team page.
+ */
+export async function listPeople(ctx: ApiContext, q: { q?: string }): Promise<PersonOut[]> {
+  const team = hasPermission(ctx.user, 'work.team');
+  const rows = await prisma.user.findMany({
+    where: { organizationId: ctx.user.organizationId, active: true, ...(q.q ? { name: like(q.q) } : {}) },
+    orderBy: { name: 'asc' },
+    select: { id: true, name: true, designation: true, department: { select: { id: true, name: true } } },
+  });
+  return rows.map((u) => ({
+    id: u.id,
+    name: u.name,
+    designation: u.designation,
+    department: team ? person(u.department) : null,
+    isKeyOwner: u.id === ctx.user.userId,
+  }));
 }
 
 export async function me(ctx: ApiContext): Promise<MeOut> {

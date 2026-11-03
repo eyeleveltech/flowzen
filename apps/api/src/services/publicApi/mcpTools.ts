@@ -8,10 +8,27 @@ import { ApiError, MCP_LIMIT, type ApiContext } from './core.js';
 import * as read from './records.js';
 import * as write from './writes.js';
 import {
+  companyCreateSchema,
+  companyUpdateFields,
+  contactCreateSchema,
+  contactUpdateFields,
+  dealCreateSchema,
+  dealUpdateFields,
+  dealVersionSchema,
   daySchema,
   eventCreateSchema,
   eventMoveSchema,
   leadCreateFields,
+  leadUpdateFields,
+  milestoneCreateSchema,
+  milestoneUpdateFields,
+  projectCreateSchema,
+  projectUpdateFields,
+  promoteSchema,
+  retainerCreateSchema,
+  retainerPieceCreateSchema,
+  retainerPieceUpdateFields,
+  retainerUpdateFields,
   taskCreateSchema,
   taskUpdateFields,
   touchCreateSchema,
@@ -26,8 +43,8 @@ import {
  * tool it would be refused.
  *
  * Reads are marked `readOnlyHint`; writes `readOnlyHint: false` and
- * `destructiveHint: false` (nothing here deletes), so an AI app can ask the
- * person before a write. Every answer is capped at 50 rows, carries ids and
+ * `destructiveHint: false` (nothing here deletes — a lost deal reopens, a
+ * stopped retainer resumes), so an AI app can ask the person before a write. Every answer is capped at 50 rows, carries ids and
  * links, and says plainly that text people typed is data, not instructions.
  */
 
@@ -62,6 +79,12 @@ type Tool = {
 
 const idField = (what: string) => z.string().min(1).describe(`The ${what}’s id.`);
 
+/** An edit tool called with only the id: refused, as PATCH with an empty body is. */
+const changes = <T extends object>(fields: T): T => {
+  if (!Object.values(fields).some((v) => v !== undefined)) throw new ApiError(400, 'invalid_request', 'Nothing to change.');
+  return fields;
+};
+
 export const TOOLS: Tool[] = [
   {
     name: 'search_flowzen',
@@ -72,6 +95,16 @@ export const TOOLS: Tool[] = [
     input: { q: z.string().min(2).max(100).describe('What to look for, at least two characters.') },
     annotations: READ,
     run: async (ctx, a) => ({ data: await read.search(ctx, a.q) }),
+  },
+  {
+    name: 'list_people',
+    scopes: [],
+    title: 'List the team',
+    description:
+      'The team’s working members with their ids — what assigneeIds, ownerId and attendeeIds take. Filter by words in the name.',
+    input: { q: z.string().max(100).optional().describe('Words in their name.') },
+    annotations: READ,
+    run: async (ctx, a) => ({ data: await read.listPeople(ctx, a.q ? { q: a.q } : {}) }),
   },
   {
     name: 'list_tasks',
@@ -105,7 +138,7 @@ export const TOOLS: Tool[] = [
     scopes: ['tasks:write'],
     title: 'Create a task',
     description:
-      'Creates a task, checked exactly as Flowzen’s New task form. With no people named it goes to the key’s owner; putting work on somebody else needs the owner to be allowed to assign. Writes to Flowzen.',
+      'Creates a task, checked exactly as Flowzen’s New task form. assigneeIds puts one or several people on it (the first is the lead; list_people gives ids); with nobody named it goes to the key’s owner, and putting work on others needs the owner to be allowed to assign. File it under a one-time project (projectId), a retainer (retainerId, or one piece of its work: retainerProjectId), or an internal project. Writes to Flowzen.',
     input: taskCreateSchema.shape,
     annotations: WRITE,
     run: async (ctx, a) => ({ data: await write.createTask(ctx, a) }),
@@ -115,7 +148,7 @@ export const TOOLS: Tool[] = [
     scopes: ['tasks:write'],
     title: 'Update a task',
     description:
-      'Changes a task’s title, notes, due date or time, priority, people or status (TODO, IN_PROGRESS, ON_HOLD, DONE, CANCELLED). Cannot delete. Writes to Flowzen.',
+      'Changes a task’s title, notes, due date or time, priority, people or status (TODO, IN_PROGRESS, ON_HOLD, DONE, CANCELLED). assigneeIds replaces who is on it: send everybody, the lead first. Cannot delete. Writes to Flowzen.',
     input: { id: idField('task'), ...taskUpdateFields.shape },
     annotations: WRITE,
     run: async (ctx, { id, ...fields }) => {
@@ -155,6 +188,104 @@ export const TOOLS: Tool[] = [
     },
   },
   {
+    name: 'get_project',
+    scopes: ['work:read'],
+    title: 'Get a one-time project',
+    description: 'One project by id with its milestones and progress. Its quote and milestone amounts only with money:read and money figures.',
+    input: { id: idField('project') },
+    annotations: READ,
+    run: async (ctx, a) => ({ data: await read.getProject(ctx, a.id) }),
+  },
+  {
+    name: 'get_retainer',
+    scopes: ['work:read'],
+    title: 'Get a retainer',
+    description: 'One retainer by id with its pieces of work and this month’s progress. Its fee only with money:read and money figures.',
+    input: { id: idField('retainer') },
+    annotations: READ,
+    run: async (ctx, a) => ({ data: await read.getRetainer(ctx, a.id) }),
+  },
+  {
+    name: 'create_retainer',
+    scopes: ['work:write'],
+    title: 'Start a retainer',
+    description:
+      'Starts a monthly retainer for a client (one running at a time; a prospect becomes a client when a deal is won — pass that deal as dealId). Fee in rupees before GST. Writes to Flowzen.',
+    input: retainerCreateSchema.shape,
+    annotations: WRITE,
+    run: async (ctx, a) => ({ data: await write.createRetainer(ctx, a) }),
+  },
+  {
+    name: 'update_retainer',
+    scopes: ['work:write'],
+    title: 'Edit, stop or resume a retainer',
+    description:
+      'Changes a retainer’s fee, GST, billing, start date, term or owner. status STOPPED ends it (needs stopReason); ACTIVE resumes a stopped one. Cannot delete. Writes to Flowzen.',
+    input: { id: idField('retainer'), ...retainerUpdateFields.shape },
+    annotations: WRITE,
+    run: async (ctx, { id, ...fields }) => ({ data: await write.updateRetainer(ctx, id, changes(fields)) }),
+  },
+  {
+    name: 'add_retainer_work',
+    scopes: ['work:write'],
+    title: 'Add a piece of work to a retainer',
+    description: 'A campaign or launch beside the retainer’s monthly work; tasks go under it with retainerProjectId. Writes to Flowzen.',
+    input: { retainerId: idField('retainer'), ...retainerPieceCreateSchema.shape },
+    annotations: WRITE,
+    run: async (ctx, { retainerId, ...body }) => ({ data: await write.addRetainerPiece(ctx, retainerId, body) }),
+  },
+  {
+    name: 'update_retainer_work',
+    scopes: ['work:write'],
+    title: 'Edit a piece of a retainer’s work',
+    description: 'Changes its name, dates, owner or description, or marks it DONE. Writes to Flowzen.',
+    input: { retainerId: idField('retainer'), retainerProjectId: idField('piece of work'), ...retainerPieceUpdateFields.shape },
+    annotations: WRITE,
+    run: async (ctx, { retainerId, retainerProjectId, ...fields }) => ({
+      data: await write.updateRetainerPiece(ctx, retainerId, retainerProjectId, changes(fields)),
+    }),
+  },
+  {
+    name: 'create_project',
+    scopes: ['work:write'],
+    title: 'Start a one-time project',
+    description:
+      'Starts a one-time project for a client (a prospect only for sample work), with dates and its quote in rupees before GST. With no milestones, the quote splits 40/30/30. Pass the won deal as dealId. Writes to Flowzen.',
+    input: projectCreateSchema.shape,
+    annotations: WRITE,
+    run: async (ctx, a) => ({ data: await write.createProject(ctx, a) }),
+  },
+  {
+    name: 'update_project',
+    scopes: ['work:write'],
+    title: 'Edit a one-time project',
+    description:
+      'Changes a project’s name, dates, quote, owner, priority or description, or its status: LIVE, DELIVERED or CANCELLED. Cannot delete. Writes to Flowzen.',
+    input: { id: idField('project'), ...projectUpdateFields.shape },
+    annotations: WRITE,
+    run: async (ctx, { id, ...fields }) => ({ data: await write.updateProject(ctx, id, changes(fields)) }),
+  },
+  {
+    name: 'add_milestone',
+    scopes: ['work:write'],
+    title: 'Add a billing milestone',
+    description: 'Adds a milestone to a one-time project: its name, share of the quote and amount. Writes to Flowzen.',
+    input: { projectId: idField('project'), ...milestoneCreateSchema.shape },
+    annotations: WRITE,
+    run: async (ctx, { projectId, ...body }) => ({ data: await write.addMilestone(ctx, projectId, body) }),
+  },
+  {
+    name: 'update_milestone',
+    scopes: ['work:write'],
+    title: 'Edit a billing milestone',
+    description: 'Changes a milestone’s name, share or amount. Its status moves with billing in Flowzen, not here. Writes to Flowzen.',
+    input: { projectId: idField('project'), milestoneId: idField('milestone'), ...milestoneUpdateFields.shape },
+    annotations: WRITE,
+    run: async (ctx, { projectId, milestoneId, ...fields }) => ({
+      data: await write.updateMilestone(ctx, projectId, milestoneId, changes(fields)),
+    }),
+  },
+  {
     name: 'list_companies',
     scopes: ['clients:read'],
     title: 'List companies',
@@ -175,6 +306,45 @@ export const TOOLS: Tool[] = [
     input: { id: idField('company') },
     annotations: READ,
     run: async (ctx, a) => ({ data: await read.getCompany(ctx, a.id) }),
+  },
+  {
+    name: 'create_company',
+    scopes: ['clients:write'],
+    title: 'Add a company',
+    description:
+      'Adds a company as a Prospect (a Client once a deal is won; existingClient for one from before Flowzen). Needs a city. A similar name is refused with the matches unless force is true; the same phone never goes through. Writes to Flowzen.',
+    input: companyCreateSchema.shape,
+    annotations: WRITE,
+    run: async (ctx, a) => ({ data: await write.createCompany(ctx, a) }),
+  },
+  {
+    name: 'update_company',
+    scopes: ['clients:write'],
+    title: 'Edit a company',
+    description: 'Changes a company’s name, industry, source, city, website, GSTIN, billing address, state or owner. Cannot delete. Writes to Flowzen.',
+    input: { id: idField('company'), ...companyUpdateFields.shape },
+    annotations: WRITE,
+    run: async (ctx, { id, ...fields }) => ({ data: await write.updateCompany(ctx, id, changes(fields)) }),
+  },
+  {
+    name: 'add_contact',
+    scopes: ['clients:write'],
+    title: 'Add a contact to a company',
+    description: 'Adds a person at a company: a contact, the approver or the payer. Writes to Flowzen.',
+    input: { companyId: idField('company'), ...contactCreateSchema.shape },
+    annotations: WRITE,
+    run: async (ctx, { companyId, ...contact }) => ({ data: await write.addContact(ctx, companyId, contact) }),
+  },
+  {
+    name: 'update_contact',
+    scopes: ['clients:write'],
+    title: 'Edit a contact',
+    description: 'Changes a contact’s name, role, email, phone or LinkedIn; null clears a field. Writes to Flowzen.',
+    input: { companyId: idField('company'), contactId: idField('contact'), ...contactUpdateFields.shape },
+    annotations: WRITE,
+    run: async (ctx, { companyId, contactId, ...fields }) => ({
+      data: await write.updateContact(ctx, companyId, contactId, changes(fields)),
+    }),
   },
   {
     name: 'list_leads',
@@ -209,6 +379,34 @@ export const TOOLS: Tool[] = [
     },
   },
   {
+    name: 'update_lead',
+    scopes: ['leads:write'],
+    title: 'Edit a lead or move it along',
+    description:
+      'Changes a lead’s name, industry, source, contact details or owner, its status (NOT_CONTACTED, CONTACTED, FOLLOW_UP, MEETING, INTERESTED, DEAD) or its next step. FOLLOW_UP needs remarks and a nextStepDate; MEETING needs a nextStepDate. Writes to Flowzen.',
+    input: { id: idField('lead'), ...leadUpdateFields.shape },
+    annotations: WRITE,
+    run: async (ctx, { id, ...fields }) => {
+      if (fields.remarks !== undefined && fields.status === undefined) {
+        throw new ApiError(400, 'invalid_request', 'Remarks go with a status change. To note a conversation, log a touch.');
+      }
+      return { data: await write.updateLead(ctx, id, changes(fields)) };
+    },
+  },
+  {
+    name: 'promote_lead',
+    scopes: ['clients:write'],
+    title: 'Make a lead a company',
+    description:
+      'Turns a lead marked INTERESTED into a company (a Prospect), with its contact and its next step as a follow-up task — Promote on the Outreach screen. Needs the city. A company it looks like is refused with the matches; force goes past a similar name only. Writes to Flowzen.',
+    input: { id: idField('lead'), ...promoteSchema.shape },
+    annotations: WRITE,
+    run: async (ctx, { id, ...body }) => {
+      const out = await write.promoteLead(ctx, id, body);
+      return { data: out.company, lead: out.lead, followUpTaskId: out.followUpTaskId };
+    },
+  },
+  {
     name: 'log_lead_touch',
     scopes: ['leads:write'],
     title: 'Log a touch on a lead',
@@ -233,14 +431,75 @@ export const TOOLS: Tool[] = [
     run: (ctx, a) => read.listDeals(ctx, a),
   },
   {
+    name: 'get_deal',
+    scopes: ['pipeline:read'],
+    title: 'Get a deal',
+    description: 'One deal by id with every price sent (v1, v2…), which one was won, and its probability.',
+    input: { id: idField('deal') },
+    annotations: READ,
+    run: async (ctx, a) => ({ data: await read.getDeal(ctx, a.id) }),
+  },
+  {
     name: 'log_deal_touch',
     scopes: ['pipeline:write'],
     title: 'Log a touch on a deal',
     description:
-      'Records contact with a deal’s client and optionally sets its next step. Cannot move stages, win, lose or price a deal. Writes to Flowzen.',
+      'Records contact with a deal’s client and optionally sets its next step. Writes to Flowzen.',
     input: { id: idField('deal'), ...touchCreateSchema.shape },
     annotations: WRITE,
     run: async (ctx, { id, ...touch }) => ({ data: await write.logDealTouch(ctx, id, touch) }),
+  },
+  {
+    name: 'create_deal',
+    scopes: ['pipeline:manage'],
+    title: 'Put a deal on the pipeline',
+    description:
+      'Opens a deal for a company with its first price (v1, rupees before GST: monthly fee for a RETAINER, one-time fee for a PROJECT). It starts at Proposal sent. Writes to Flowzen.',
+    input: dealCreateSchema.shape,
+    annotations: WRITE,
+    run: async (ctx, a) => ({ data: await write.createDeal(ctx, a) }),
+  },
+  {
+    name: 'add_deal_version',
+    scopes: ['pipeline:manage'],
+    title: 'Send a new price on a deal',
+    description: 'Records a new price sent to the client (v2, v3…); the deal moves to In negotiation. Writes to Flowzen.',
+    input: { id: idField('deal'), ...dealVersionSchema.shape },
+    annotations: WRITE,
+    run: async (ctx, { id, ...body }) => ({ data: await write.addDealVersion(ctx, id, body) }),
+  },
+  {
+    name: 'update_deal',
+    scopes: ['pipeline:manage'],
+    title: 'Edit a deal',
+    description:
+      'Changes a deal’s owner, kind, scope, document link, probability (0–100, null for the stage’s own) or next step; corrects its latest price (Management only); or a lost deal’s reason. Cannot delete. Writes to Flowzen.',
+    input: { id: idField('deal'), ...dealUpdateFields.shape },
+    annotations: WRITE,
+    run: async (ctx, { id, ...fields }) => ({ data: await write.updateDeal(ctx, id, changes(fields)) }),
+  },
+  {
+    name: 'move_deal',
+    scopes: ['pipeline:manage'],
+    title: 'Mark a deal Verbal yes, won, lost or reopened',
+    description:
+      'VERBAL_YES (only once a proforma is out), WON (on version, default the latest; the company becomes a client — then start its retainer or project with dealId), LOST (needs reason), or REOPEN a lost deal. A deal won by mistake: LOST, then REOPEN. Writes to Flowzen.',
+    input: {
+      id: idField('deal'),
+      to: z.enum(['VERBAL_YES', 'WON', 'LOST', 'REOPEN']),
+      version: z.number().int().min(1).optional().describe('WON: the price they accepted, by number (1 for v1).'),
+      reason: z.string().trim().min(1).max(2000).optional().describe('LOST: why.'),
+      nextStep: z.string().trim().max(300).nullable().optional().describe('VERBAL_YES: what happens next.'),
+      nextStepDate: daySchema.nullable().optional(),
+    },
+    annotations: WRITE,
+    run: async (ctx, a) => {
+      if (a.to === 'VERBAL_YES') return { data: await write.markVerbalYes(ctx, a.id, { nextStep: a.nextStep, nextStepDate: a.nextStepDate }) };
+      if (a.to === 'WON') return { data: await write.winDeal(ctx, a.id, { version: a.version }) };
+      if (a.to === 'REOPEN') return { data: await write.reopenDeal(ctx, a.id) };
+      if (!a.reason) throw new ApiError(400, 'invalid_request', 'Say why it was lost — reason.');
+      return { data: await write.loseDeal(ctx, a.id, { reason: a.reason }) };
+    },
   },
   {
     name: 'list_events',

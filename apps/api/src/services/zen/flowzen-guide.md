@@ -734,6 +734,15 @@ Flowzen can be reached by other tools with an API key from Settings → API (/se
 
 A key acts as the person who made it, narrowed to its scopes, so it never sees or does more than they can: a Head's key sees their department's tasks, and money amounts and deal values show only if that person may see them. A key stops working when it is revoked, expires, its maker leaves, or API keys are switched off.
 
-What a key can be given: read tasks; create and update tasks (no delete); read projects and retainers (no fees); read companies; read leads; add leads, change their status and next step, log a touch; read deals; log a touch on a deal and set its next step (no stage moves, won or lost); read the calendar (Google busy time only as "Busy"); book and move events (no cancelling); read invoices, proformas, payments and what is owed. Never: salaries or costs, people, Settings, deleting anything, usage, Zen, or changing money.
+What a key can be given (each is a tick box on the key):
+- **Tasks:** read; create and update, with several people on one task (the first is the lead), filed under a one-time project, a retainer or internal work.
+- **Work:** read retainers and projects (fees only with money read too); start retainers and one-time projects, change their dates, fee, owner and status, stop and resume a retainer, add pieces of retainer work and project milestones.
+- **Clients:** read companies; add and edit companies and contacts, and turn an Interested lead into a company.
+- **Leads:** read; add leads, edit their details, change their status and next step, log a touch.
+- **Pipeline:** read deals; log a touch; run deals — put one on the pipeline, send a new price, mark Verbal yes (once a proforma is out), win, lose, reopen, and change owner, scope and probability. Only Management can correct what a deal is worth.
+- **Calendar:** read (Google busy time only as "Busy"); book and move events (no cancelling).
+- **Money:** read invoices, proformas, payments and what is owed.
+
+Never, whatever is ticked: deleting anything, raising invoices or proformas or recording payments, salaries or costs, people, Settings, usage, or Zen. The same rules as the app apply: a retainer or paid project needs a won deal first, one running retainer per client, and a won deal opened by mistake is lost and then reopened, which takes it back to Verbal yes. Anybody's id for assigning work comes from the team list (/api/v1/people, or list_people over MCP).
 
 Everything done through a key is in the history as that person "via API: <key name>" — for example "Harish (via API: n8n) created the task". Tools poll for changes with ?updatedSince= rather than being pushed to.

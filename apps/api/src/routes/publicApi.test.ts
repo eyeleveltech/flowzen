@@ -216,7 +216,7 @@ describe('scopes, narrowed by what the creator can do', () => {
     expect(scopesFor(session('employee'))).toEqual(['tasks:read', 'tasks:write', 'calendar:read', 'calendar:write']);
     expect(scopesFor(session('bd'))).not.toContain('work:read');
     expect(scopesFor(session('bd'))).toContain('leads:write');
-    expect(scopesFor(session('admin'))).toHaveLength(11);
+    expect(scopesFor(session('admin'))).toHaveLength(14);
   });
 
   it('a scope whose permission the creator has lost stops working', () => {
@@ -294,7 +294,7 @@ describe('a key reads what its creator reads in the app', () => {
 
   it('no salary or cost rate is in any shape the API can answer with', async () => {
     const doc = JSON.stringify((await request(app).get(v1('/openapi.json'))).body);
-    expect(doc).not.toMatch(/monthlyCost|salary|costRate|quotedValue|monthlyValue/i);
+    expect(doc).not.toMatch(/monthlyCost|salary|costRate|estimatedCost|margin/i);
   });
 });
 
@@ -458,20 +458,244 @@ describe('adding a lead through the API', () => {
   });
 });
 
+// ── Companies, deals, retainers and projects through a key ──────────────────
+
+describe('running the pipeline through a key', () => {
+  const COMPANY = {
+    id: 'co-1',
+    name: 'Radar Clinic',
+    status: 'PROSPECT',
+    vertical: 'Healthcare & Wellness',
+    source: 'Cold Outreach',
+    city: 'Pune',
+    website: null,
+    archivedAt: null,
+    createdAt: new Date('2026-11-03T05:00:00Z'),
+    updatedAt: new Date('2026-11-03T05:00:00Z'),
+    owner: { id: 'usr-admin', name: 'Harish' },
+    people: [],
+  };
+  const DEAL = {
+    id: 'deal-1',
+    organizationId: 'org-1',
+    companyId: 'co-1',
+    company: { id: 'co-1', name: 'Radar Clinic', status: 'PROSPECT' },
+    kind: 'RETAINER',
+    stage: 'IN_NEGOTIATION',
+    outcome: null,
+    ownerId: 'usr-admin',
+    owner: { id: 'usr-admin', name: 'Harish' },
+    nextStep: null,
+    nextStepDate: null,
+    lastTouchedAt: null,
+    probabilityOverride: null,
+    verbalYesAt: null,
+    wonAt: null,
+    wonVersionId: null,
+    lostReason: null,
+    createdAt: new Date('2026-11-03T05:00:00Z'),
+    updatedAt: new Date('2026-11-03T05:00:00Z'),
+    versions: [
+      { id: 'ver-2', n: 2, sentAt: new Date('2026-11-02T05:00:00Z'), value: 60000, scopeSummary: 'Social + ads' },
+      { id: 'ver-1', n: 1, sentAt: new Date('2026-10-20T05:00:00Z'), value: 50000, scopeSummary: 'Social' },
+    ],
+  };
+
+  it('gives the three new boxes to whoever holds the permission behind them, and never to an employee', () => {
+    expect(scopesFor(session('bd'))).toEqual(expect.arrayContaining(['clients:write', 'pipeline:manage', 'work:write']));
+    for (const s of ['clients:write', 'pipeline:manage', 'work:write'] as ApiScope[]) {
+      expect(scopesFor(session('employee'))).not.toContain(s);
+    }
+    // Keys made before these boxes existed keep exactly what they had.
+    expect(effectiveScopes(['pipeline:write', 'leads:write'], session('bd'))).toEqual(['leads:write', 'pipeline:write']);
+  });
+
+  it('adds a company through the company route, with the state stored as both name and code', async () => {
+    useKey({ scopes: ['clients:write'] });
+    let underKey: unknown;
+    (prisma.company.findMany as any).mockResolvedValue([]);
+    (prisma.company.findUnique as any).mockResolvedValue(null);
+    (prisma.company.create as any).mockImplementation(async ({ data }: any) => ({ ...COMPANY, ...data, id: 'co-1' }));
+    (prisma.person.create as any).mockResolvedValue({ id: 'per-1' });
+    (prisma.company.findFirst as any).mockResolvedValue({ ...COMPANY, city: 'Mumbai' });
+    (prisma.activity.create as any).mockImplementation(async (args: any) => {
+      underKey = apiCall.getStore();
+      return { id: 'act-1', ...args };
+    });
+    const res = await request(app)
+      .post(v1('/companies'))
+      .set(...bearer)
+      .send({ name: 'Radar Clinic', industry: 'Healthcare & Wellness', city: 'Mumbai', state: '27', contact: { name: 'Dr Rao', phone: '+91 90000 11111' } })
+      .expect(201);
+    expect(res.body.data).toMatchObject({ id: 'co-1', status: 'PROSPECT', city: 'Mumbai' });
+    const { data } = (prisma.company.create as any).mock.calls[0][0];
+    expect(data).toMatchObject({ vertical: 'Healthcare & Wellness', city: 'Mumbai', stateCode: '27', stateName: 'Maharashtra', status: 'PROSPECT' });
+    expect(underKey).toEqual({ keyId: 'key-1', keyName: 'n8n' });
+  });
+
+  it('answers a company it already has with the matches, and says whether force can go past', async () => {
+    useKey({ scopes: ['clients:write'] });
+    (prisma.company.findMany as any).mockResolvedValue([{ id: 'co-9', name: 'Radar Clinic Pvt Ltd', people: [{ email: null, phone: '+91 90000 11111' }] }]);
+    const res = await request(app)
+      .post(v1('/companies'))
+      .set(...bearer)
+      .send({ name: 'Radar Clinic', industry: 'Healthcare & Wellness', city: 'Pune', contact: { name: 'Dr Rao', phone: '09000011111' } });
+    expect(res.status).toBe(409);
+    expect(res.body.error.details).toMatchObject({ canForce: false, matches: [{ id: 'co-9', name: 'Radar Clinic Pvt Ltd' }] });
+    expect(prisma.company.create).not.toHaveBeenCalled();
+  });
+
+  it('wins a deal on the version the client took, by its number', async () => {
+    useKey({ scopes: ['pipeline:manage'] });
+    (prisma.proposal.findFirst as any).mockResolvedValue(DEAL);
+    (prisma.proposalVersion.findFirst as any).mockImplementation(async ({ where }: any) => DEAL.versions.find((v) => v.id === where.id) ?? null);
+    (prisma.proposal.update as any).mockResolvedValue({ ...DEAL, outcome: 'WON' });
+    (prisma.company.update as any).mockResolvedValue({});
+    await request(app).post(v1('/deals/deal-1/win')).set(...bearer).send({ version: 1 }).expect(200);
+    expect((prisma.proposalVersion.findFirst as any).mock.calls[0][0].where).toMatchObject({ id: 'ver-1', proposalId: 'deal-1' });
+    expect((prisma.proposal.update as any).mock.calls[0][0].data).toMatchObject({ outcome: 'WON', wonVersionId: 'ver-1' });
+    expect((prisma.company.update as any).mock.calls[0][0].data).toEqual({ status: 'CLIENT' });
+
+    const none = await request(app).post(v1('/deals/deal-1/win')).set(...bearer).send({ version: 7 });
+    expect([none.status, none.body.error.message]).toEqual([404, 'This deal has no v7.']);
+  });
+
+  it('keeps the app’s rules: BD can run a deal but not change what it is worth', async () => {
+    useKey({ scopes: ['pipeline:manage'], creator: 'bd' });
+    (prisma.proposal.findFirst as any).mockResolvedValue(DEAL);
+    const res = await request(app).patch(v1('/deals/deal-1')).set(...bearer).send({ value: 1 });
+    expect([res.status, res.body.error.message]).toEqual([403, 'Only Management can change what a deal is worth.']);
+    expect(prisma.proposalVersion.update).not.toHaveBeenCalled();
+  });
+
+  it('refuses an owner who is not on the team before anything is written', async () => {
+    useKey({ scopes: ['pipeline:manage'] });
+    (prisma.user.count as any).mockResolvedValue(0);
+    const res = await request(app)
+      .post(v1('/deals'))
+      .set(...bearer)
+      .send({ companyId: 'co-1', kind: 'RETAINER', value: 50000, ownerId: 'usr-elsewhere' });
+    expect([res.status, res.body.error.message]).toEqual([400, 'That person is not on the team. GET /people lists who is.']);
+    expect(prisma.proposal.create).not.toHaveBeenCalled();
+  });
+
+  it('a retainer is for a client: a prospect is refused by the retainer route’s own words', async () => {
+    useKey({ scopes: ['work:write'] });
+    (prisma.company.findFirst as any).mockResolvedValue({ id: 'co-1', name: 'Radar Clinic', status: 'PROSPECT' });
+    const res = await request(app)
+      .post(v1('/retainers'))
+      .set(...bearer)
+      .send({ companyId: 'co-1', monthlyFee: 50000, startDate: '2026-11-01' });
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toMatch(/still a prospect\. Win a proposal for them first/);
+    expect(prisma.retainer.create).not.toHaveBeenCalled();
+  });
+
+  it('stopping a retainer needs a reason, on REST and over MCP', async () => {
+    useKey({ scopes: ['work:write'] });
+    const rest = await request(app).patch(v1('/retainers/ret-1')).set(...bearer).send({ status: 'STOPPED' });
+    expect([rest.status, rest.body.error.code]).toEqual([400, 'invalid_request']);
+
+    (prisma.retainer.findFirst as any).mockResolvedValue({ status: 'ACTIVE' });
+    const ctx = { user: session('admin'), key: { id: 'key-1', name: 'n8n', scopes: ['work:write'] }, req: {} } as any;
+    const tool = TOOLS.find((t) => t.name === 'update_retainer')!;
+    await expect(tool.run(ctx, { id: 'ret-1', status: 'STOPPED' })).rejects.toThrow(/stopReason/);
+  });
+
+  it('shows a retainer’s fee only to a key that may read money', async () => {
+    const RETAINER = {
+      id: 'ret-1',
+      status: 'ACTIVE',
+      startDate: new Date('2026-11-01T00:00:00Z'),
+      termMonths: 12,
+      renewalDate: new Date('2027-11-01T00:00:00Z'),
+      billing: 'IN_ADVANCE',
+      monthlyValue: 50000,
+      gstPercent: null,
+      stoppedAt: null,
+      stopReason: null,
+      createdAt: new Date('2026-11-03T05:00:00Z'),
+      updatedAt: new Date('2026-11-03T05:00:00Z'),
+      company: { id: 'co-1', name: 'Radar Clinic' },
+      owner: { id: 'usr-admin', name: 'Harish' },
+      projects: [{ id: 'rp-1', name: 'Monthly Retainer Work', status: 'ACTIVE', startDate: null, endDate: null }],
+      monthCards: [],
+    };
+    (prisma.retainer.findFirst as any).mockResolvedValue(RETAINER);
+
+    useKey({ scopes: ['work:read'] });
+    const plain = await request(app).get(v1('/retainers/ret-1')).set(...bearer).expect(200);
+    expect(plain.body.data).toMatchObject({ name: 'Radar Clinic retainer', monthlyFee: null, projects: [{ id: 'rp-1' }] });
+
+    useKey({ scopes: ['work:read', 'money:read'] });
+    const withMoney = await request(app).get(v1('/retainers/ret-1')).set(...bearer).expect(200);
+    expect(withMoney.body.data.monthlyFee).toBe(50000);
+
+    useKey({ scopes: ['work:read', 'money:read'], creator: 'head' });
+    const head = await request(app).get(v1('/retainers/ret-1')).set(...bearer).expect(200);
+    expect(head.body.data.monthlyFee).toBeNull();
+  });
+
+  it('files a task on a retainer’s month for its due date', async () => {
+    useKey({ scopes: ['tasks:write'] });
+    (prisma.retainer.findFirst as any).mockResolvedValue({ id: 'ret-1' });
+    (prisma.monthCard.findFirst as any).mockImplementation(async ({ where }: any) =>
+      where.month === '2026-11' || where.id === 'card-nov'
+        ? { id: 'card-nov', month: '2026-11', status: 'OPEN', retainer: { id: 'ret-1', ownerId: 'usr-admin' } }
+        : null,
+    );
+    (prisma.retainerProject.findFirst as any).mockResolvedValue({ id: 'rp-1', retainerId: 'ret-1' });
+    (prisma.user.findMany as any).mockImplementation(async ({ where }: any) => (where.id.in as string[]).map((id) => ({ id })));
+    (prisma.task.create as any).mockImplementation(async ({ data }: any) => ({ ...TASK_ROW, ...data, id: 'task-new', assignees: [] }));
+    (prisma.task.findFirst as any).mockResolvedValue({ ...TASK_ROW, id: 'task-new' });
+    const res = await request(app)
+      .post(v1('/tasks'))
+      .set(...bearer)
+      .send({ title: 'November reels', dueDate: '2026-11-20', retainerId: 'ret-1', assigneeIds: ['usr-admin', 'usr-head'] });
+    expect(res.status).toBe(201);
+    const { data } = (prisma.task.create as any).mock.calls.at(-1)[0];
+    expect(data).toMatchObject({ workType: 'MONTH_CARD', monthCardId: 'card-nov' });
+
+    const both = await request(app)
+      .post(v1('/tasks'))
+      .set(...bearer)
+      .send({ title: 'Nowhere', dueDate: '2026-11-20', retainerId: 'ret-1', projectId: 'prj-1' });
+    expect([both.status, both.body.error.code]).toEqual([400, 'invalid_request']);
+  });
+
+  it('lists the team for assigning: working people only, departments for those who may see the team', async () => {
+    useKey({ scopes: [], creator: 'employee' });
+    (prisma.user.findMany as any).mockResolvedValue([
+      { id: 'usr-emp', name: 'Sneha', designation: 'Designer', department: { id: 'dep-1', name: 'Design' } },
+      { id: 'usr-head', name: 'Dilshad', designation: 'Head of Design', department: { id: 'dep-1', name: 'Design' } },
+    ]);
+    const res = await request(app).get(v1('/people')).set(...bearer).expect(200);
+    expect(res.body.data).toEqual([
+      { id: 'usr-emp', name: 'Sneha', designation: 'Designer', department: null, isKeyOwner: true },
+      { id: 'usr-head', name: 'Dilshad', designation: 'Head of Design', department: null, isKeyOwner: false },
+    ]);
+    expect((prisma.user.findMany as any).mock.calls[0][0].where).toMatchObject({ organizationId: 'org-1', active: true });
+
+    useKey({ scopes: [], creator: 'head' });
+    const head = await request(app).get(v1('/people')).set(...bearer).expect(200);
+    expect(head.body.data[0].department).toEqual({ id: 'dep-1', name: 'Design' });
+  });
+});
+
 // ── MCP ──────────────────────────────────────────────────────────────────────
 
 describe('the MCP server', () => {
   it('lists only the tools the key’s scopes allow', () => {
-    expect(toolsFor(['tasks:read']).map((t) => t.name)).toEqual(['search_flowzen', 'list_tasks', 'get_task', 'list_projects']);
+    expect(toolsFor(['tasks:read']).map((t) => t.name)).toEqual(['search_flowzen', 'list_people', 'list_tasks', 'get_task', 'list_projects']);
     expect(toolsFor(['tasks:read', 'tasks:write']).map((t) => t.name)).toContain('create_task');
     expect(toolsFor(['tasks:read']).map((t) => t.name)).not.toContain('create_task');
-    expect(toolsFor(['money:read']).map((t) => t.name)).toEqual(['search_flowzen', 'list_invoices', 'get_receivables']);
-    expect(toolsFor([]).map((t) => t.name)).toEqual(['search_flowzen']);
+    expect(toolsFor(['money:read']).map((t) => t.name)).toEqual(['search_flowzen', 'list_people', 'list_invoices', 'get_receivables']);
+    expect(toolsFor([]).map((t) => t.name)).toEqual(['search_flowzen', 'list_people']);
   });
 
   it('marks reads read-only and writes as non-destructive writes', () => {
     for (const t of TOOLS) {
-      const writes = /^(create|update|log|move)_/.test(t.name);
+      const writes = /^(create|update|log|move|add|promote)_/.test(t.name);
       expect([t.name, t.annotations.readOnlyHint]).toEqual([t.name, !writes]);
       if (writes) expect((t.annotations as any).destructiveHint).toBe(false);
     }

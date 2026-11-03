@@ -138,7 +138,21 @@ export function refusalFrom(out: Dispatched): ApiError {
             : out.status === 409
               ? 'conflict'
               : 'refused';
-  const details = out.body?.existingTaskId ? { existingTaskId: out.body.existingTaskId } : undefined;
+  // What the app's own screen is told to show beside the sentence: the task it
+  // clashed with, or the companies a new one looks like (canForce says whether
+  // `force: true` may go past it).
+  const details = out.body?.existingTaskId
+    ? { existingTaskId: out.body.existingTaskId }
+    : Array.isArray(out.body?.data?.matches)
+      ? {
+          canForce: Boolean(out.body.data.canForce),
+          matches: out.body.data.matches.map((m: { id: string; name: string; reason?: string }) => ({
+            id: m.id,
+            name: m.name,
+            reason: m.reason ?? null,
+          })),
+        }
+      : undefined;
   return new ApiError(out.status, code, message, details);
 }
 
