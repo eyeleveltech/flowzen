@@ -1585,9 +1585,15 @@ export const api = {
      * then is to mark them a past client, which keeps all of it.
      */
     remove: (id: string) => del<{ success: boolean; archived: boolean }>(`/companies/${id}`),
+    /** A past client, active again: Client if they have ever had work with us, otherwise Prospect. */
+    reactivate: (id: string) =>
+      post<{ success: boolean; status: 'CLIENT' | 'PROSPECT' }>(`/companies/${id}/reactivate`, {}),
     addContact: (companyId: string, data: any) => post(`/companies/${companyId}/people`, data),
     updateContact: (companyId: string, personId: string, data: any) =>
       patch(`/companies/${companyId}/people/${personId}`, data),
+    /** Off the company's page — kept for the history and events that name them. */
+    removeContact: (companyId: string, personId: string) =>
+      del<{ success: boolean }>(`/companies/${companyId}/people/${personId}`),
   },
 
   outreach: {
@@ -1702,6 +1708,8 @@ export const api = {
       post<{ success: boolean; proposal: any }>(`/proposals/${id}/win`, { versionId }),
     lose: (id: string, lostReason: string) =>
       post<{ success: boolean; proposal: any }>(`/proposals/${id}/lose`, { lostReason }),
+    /** A lost deal back on the board, at the stage it was lost from. */
+    reopen: (id: string) => post<{ success: boolean; proposal: unknown; stage: string }>(`/proposals/${id}/reopen`),
     /**
      * Everything about a proposal. The figures (value, scope, link, sent date)
      * correct the winning version, or the latest, in place — a re-quote is
@@ -1720,6 +1728,8 @@ export const api = {
         sentAt?: string;
         nextStep?: string | null;
         nextStepDate?: string | null;
+        /** A lost deal only: correcting why. */
+        lostReason?: string;
       },
     ) =>
       patch<{ success: boolean; proposal: any }>(`/proposals/${id}`, body),
@@ -1768,6 +1778,8 @@ export const api = {
     sendForReview: (docId: string) => post<ProposalDocResponse>(`/proposals/documents/${docId}/review`),
     /** Management: back to the writer, with what needs changing. */
     sendBack: (docId: string, note: string) => post<ProposalDocResponse>(`/proposals/documents/${docId}/send-back`, { note }),
+    /** The writer (or Management): out of review and back to a draft, to change it. */
+    withdraw: (docId: string) => post<ProposalDocResponse>(`/proposals/documents/${docId}/withdraw`),
     /** Ask the AI to write or change something. It answers with suggestions; nothing changes until accepted. */
     askAi: (docId: string, message: string) => post<ProposalDocResponse>(`/proposals/documents/${docId}/ai`, { message }),
     /** Accept or discard an AI answer's suggestions: all of them, some, and (Management) its staged prices. */
@@ -1942,6 +1954,8 @@ export const api = {
      * long this kind of work takes.
      */
     remove: (id: string) => del<{ success: boolean }>(`/tasks/${id}`),
+    /** The Undo on the delete toast. */
+    restore: (id: string) => post<{ success: boolean }>(`/tasks/${id}/restore`),
     updateStatus: (id: string, status: string) =>
       patch<{ success: boolean; task: any }>(`/tasks/${id}/status`, { status }),
     /** On hold, waiting on the client, someone else, or — null — nothing in particular. */
@@ -2038,6 +2052,11 @@ export const api = {
      * monthly roll kept opening cards and spawning tasks for a client who had
      * gone, and MRR kept counting them.
      */
+    /** A stopped retainer running again: this month gets a card if it has none. */
+    resume: (id: string) =>
+      post<{ success: boolean; retainer: unknown; monthOpened: string | null; thisMonthClosed: boolean }>(
+        `/retainers/${id}/resume`,
+      ),
     stop: (id: string, reason: string) =>
       post<{ success: boolean; retainer: any; closedMonths: string[]; removedMonths: string[] }>(
         `/retainers/${id}/stop`,
@@ -2154,7 +2173,13 @@ export const api = {
      */
     board: (params: Record<string, string> = {}) => get<TeamBoard>(`/team/board?${new URLSearchParams(params)}`),
     capacity: (params: Record<string, string> = {}) =>
-      get<{ success: boolean; departments: Department[]; members: any[] }>(`/team/capacity?${new URLSearchParams(params)}`),
+      get<{
+        success: boolean;
+        departments: Department[];
+        members: any[];
+        /** Tasks on hold for a client, each counted once however many people share it. */
+        waitingOnClientCount?: number;
+      }>(`/team/capacity?${new URLSearchParams(params)}`),
     /**
      * Name + id only, for an owner picker — gated on nothing but being logged in, unlike capacity.
      * Everybody, so a Head can assign across departments; `scoped` narrows it to a Head's own
@@ -2208,6 +2233,9 @@ export const api = {
         };
         message?: string;
       }>('/users/invite', body),
+    /** A fresh seven-day link on a pending invitation; the link comes back either way. */
+    resendInvite: (id: string) =>
+      post<{ inviteLink: string; expiresInDays: number } & Delivery>(`/users/${id}/resend-invite`),
     /** An hour, not seven days — this is a way into a live account. */
     resetLink: (id: string) =>
       post<{ resetToken: string; link: string; expiresInMinutes: number } & Delivery>(
@@ -2406,6 +2434,9 @@ export const api = {
     update: (id: string, body: Record<string, unknown>) => patch<AssetListItem>(`/assets/${id}`, body),
     remove: (id: string) => del<{ success: boolean }>(`/assets/${id}`),
     retire: (id: string, body: Record<string, unknown>) => post<AssetListItem>(`/assets/${id}/retire`, body),
+    /** Retired, sold or lost — back in stock (it turned up, or was retired by mistake). */
+    reinstate: (id: string, body: { condition?: string; note?: string | null } = {}) =>
+      post<AssetListItem>(`/assets/${id}/reinstate`, body),
     assign: (id: string, body: Record<string, unknown>) => post(`/assets/${id}/assign`, body),
     /** `warnings`: somebody else's shoot the due-back date runs into. Never a refusal. */
     checkout: (id: string, body: Record<string, unknown>) =>
@@ -2511,6 +2542,7 @@ export const api = {
       put<{ success: boolean; preferences: PushPreferences }>('/push/preferences', prefs),
     test: () => post<{ success: boolean; devices: number }>('/push/test'),
   },
+
 
   calendar: {
     /** At most 62 days at a time; layers this person cannot see come back empty. */
@@ -3341,7 +3373,8 @@ export interface ProposalDoc {
   sentVersionId: string | null;
   floorOverride: { reason: string | null; by: string | null; at: string } | null;
   /** Set while it is with Management for review. */
-  review: { requestedAt: string; by: string | null } | null;
+  /** `byId`: who sent it — they, or Management, can take it back to a draft. */
+  review: { requestedAt: string; by: string | null; byId?: string | null } | null;
   /** How the one-time fee is paid, when set. */
   milestoneSplit: MilestoneShare[] | null;
   /** Why Management sent it back, when they did. */

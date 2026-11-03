@@ -14,6 +14,7 @@
  */
 
 import { STAGE_LABEL } from '@flowzen/shared';
+import { moneyDate } from '@/lib/money';
 
 const VERB: Record<string, string> = {
   // The company itself
@@ -27,6 +28,11 @@ const VERB: Record<string, string> = {
   meeting_logged: 'Logged a meeting',
   outreach_promoted: 'Promoted the lead to a company',
   outreach_status_changed: 'Changed the outreach status',
+  // While it was a lead — the company page shows the lead's history too.
+  outreach_added: 'Added the lead',
+  outreach_edited: 'Edited the lead',
+  touch_logged: 'Followed up',
+  last_contact_set: 'Set the last contact date',
 
   // The pipeline
   proposal_created: 'Raised a proposal',
@@ -78,6 +84,7 @@ const ENTITY: Record<string, string> = {
   MonthCard: 'Month',
   Invoice: 'Invoice',
   Task: 'Task',
+  OutreachEntry: 'Lead',
 };
 
 export const activityText = (verb: string): string =>
@@ -142,6 +149,34 @@ export const activityDetail = (a: {
   const cFrom = typeof p.companyStatusFrom === 'string' ? COMPANY[p.companyStatusFrom] : null;
   const cTo = typeof p.companyStatusTo === 'string' ? COMPANY[p.companyStatusTo] : null;
   if (cFrom && cTo) parts.push(`Company: ${cFrom} → ${cTo}`);
+
+  /*
+   * What was said while it was a lead: the follow-up's note, the remark typed
+   * with a status change, and the step agreed. This is the history that went
+   * missing the moment a lead became a company.
+   */
+  const text = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+  const sentence = (v: string) => {
+    const s = v.replace(/_/g, ' ').toLowerCase();
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  };
+  if (a.verb === 'touch_logged') {
+    const how: Record<string, string> = { CALL: 'Call', WHATSAPP: 'WhatsApp', EMAIL: 'Email', MEETING: 'Meeting', OTHER: 'Other' };
+    const note = text(p.note);
+    if (note) parts.push(`${how[String(p.channel)] ?? 'Follow-up'}: ${note}`);
+  }
+  if (a.verb === 'outreach_status_changed') {
+    if (typeof p.from === 'string' && typeof p.to === 'string') parts.push(`${sentence(p.from)} → ${sentence(p.to)}`);
+    const remark = text(p.remarks);
+    if (remark) parts.push(remark);
+  }
+  if (a.verb === 'touch_logged' || a.verb === 'outreach_status_changed') {
+    const step = text(p.nextStep);
+    const by = text(p.nextStepDate) ?? text(p.nextActionDate);
+    // A stored day, "2026-10-20", read as one: 20 Oct 2026.
+    const day = by && /^\d{4}-\d{2}-\d{2}/.test(by) ? moneyDate(by.slice(0, 10)) : by;
+    if (step) parts.push(`Next: ${step}${day ? ` by ${day}` : ''}`);
+  }
 
   return parts.length > 0 ? parts.join(' · ') : null;
 };

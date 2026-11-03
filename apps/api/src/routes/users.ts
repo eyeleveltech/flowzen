@@ -58,6 +58,7 @@ usersRouter.get('/', async (req: AuthRequest, res: Response, next) => {
         designation: true,
         active: true,
         inviteToken: true,
+        inviteTokenExpiresAt: true,
         ...(detailed
           ? { email: true, phone: true, preset: true, createdAt: true, department: { select: { id: true, name: true } } }
           : {}),
@@ -85,6 +86,10 @@ usersRouter.get('/', async (req: AuthRequest, res: Response, next) => {
               // The record, not the text — its id is what filters and pickers use.
               department: u.department ? { id: u.department.id, name: u.department.name } : null,
               joiningDate: u.createdAt.toISOString(),
+              // A pending invitation whose link has lapsed: it needs resending,
+              // not chasing — the person cannot accept it however often asked.
+              inviteExpired:
+                !u.active && Boolean(u.inviteToken) && Boolean(u.inviteTokenExpiresAt) && u.inviteTokenExpiresAt < new Date(),
             }
           : {}),
       })),
@@ -219,7 +224,17 @@ usersRouter.post('/invite', requirePermission('setup.admin'), async (req: AuthRe
 
     const existing = await prisma.user.findUnique({ where: { email: cleanEmail } });
     if (existing) {
-      res.status(400).json({ success: false, error: 'Someone with this email is already in the system.' });
+      // Say what to do instead — a bare refusal left no way forward for a
+      // lapsed invitation or somebody coming back.
+      const sameOrg = existing.organizationId === orgId;
+      const error = !sameOrg
+        ? 'Someone with this email is already in the system.'
+        : existing.active
+          ? `${existing.name} already has an account with this email.`
+          : existing.inviteToken
+            ? `${existing.name} was invited already. Use “Resend invite” under “Not signed in” on the Team page.`
+            : `${existing.name} was switched off. Use “Switch back on” under “Not signed in” on the Team page.`;
+      res.status(400).json({ success: false, error });
       return;
     }
 
@@ -294,6 +309,91 @@ usersRouter.post('/invite', requirePermission('setup.admin'), async (req: AuthRe
         emailed,
       },
       message: emailed ? `Invite emailed to ${user.email}.` : 'Invite created. Mail did not go out, so share the link yourself.',
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── Send an invitation again ────────────────────────────────────────────────
+//
+// An invitation lapses after seven days, and there was nothing to do about it.
+// Inviting the same email again was refused ("already in the system"), so a
+// person who missed the mail for a week could never join — short of somebody
+// editing the database. This issues a fresh link on the same account, and,
+// like the first invitation, returns it whether or not the mail went out.
+
+usersRouter.post('/:id/resend-invite', requirePermission('setup.admin'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const id = String(req.params.id);
+
+    const user = await prisma.user.findFirst({ where: { id, organizationId: orgId } });
+    if (!user) {
+      res.status(404).json({ success: false, error: 'Person not found' });
+      return;
+    }
+    if (user.active) {
+      res.status(409).json({ success: false, error: `${user.name} has already joined.` });
+      return;
+    }
+    // No token: they joined once and were switched off. Another invitation
+    // would hand them a new password without anybody deciding to let them back.
+    if (!user.inviteToken) {
+      res.status(409).json({
+        success: false,
+        error: `${user.name} was switched off, not invited. Switch them back on instead.`,
+      });
+      return;
+    }
+
+    const inviteToken = crypto.randomBytes(32).toString('hex');
+    const inviteTokenExpiresAt = new Date(Date.now() + INVITE_VALID_DAYS * 24 * 3600 * 1000);
+    await prisma.user.update({ where: { id }, data: { inviteToken, inviteTokenExpiresAt } });
+
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000';
+    const inviteLink = `${appUrl}/accept-invite?token=${inviteToken}`;
+
+    let emailed = false;
+    let emailFailure: 'NOT_CONFIGURED' | 'SEND_FAILED' | undefined;
+    try {
+      await sendMail(orgId, {
+        to: user.email,
+        subject: "You're invited to Flowzen",
+        html: `<p>Hi ${escapeHtml(user.name)},</p><p>You've been invited to Flowzen. <a href="${escapeHtml(inviteLink)}">Set your password</a> to get started. This link expires in ${INVITE_VALID_DAYS} days.</p>`,
+        text: `Hi ${user.name}, you've been invited to Flowzen. Set your password: ${inviteLink} (expires in ${INVITE_VALID_DAYS} days)`,
+      });
+      emailed = true;
+    } catch (e) {
+      const message = (e as Error).message;
+      emailFailure = message.includes('No mail server is configured') ? 'NOT_CONFIGURED' : 'SEND_FAILED';
+      logger.error(`Invite resend to ${user.email} failed: ${message}`);
+    }
+
+    await prisma.activity.create({
+      data: {
+        organizationId: orgId,
+        entityType: 'User',
+        entityId: id,
+        actorId: req.user!.userId,
+        verb: 'user_invite_resent',
+        payload: { name: user.name, email: user.email, emailed },
+      },
+    });
+
+    emitToOrganization(orgId, 'member:changed', { userId: id });
+
+    res.json({
+      success: true,
+      data: {
+        inviteLink,
+        expiresInDays: INVITE_VALID_DAYS,
+        emailed,
+        ...(emailFailure ? { emailFailure } : {}),
+      },
+      message: emailed
+        ? `A new invitation is on its way to ${user.email}.`
+        : 'New link created. Mail did not go out, so send it to them yourself.',
     });
   } catch (error) {
     next(error);

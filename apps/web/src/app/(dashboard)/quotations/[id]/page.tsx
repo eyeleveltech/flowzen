@@ -43,6 +43,7 @@ import { PricingPanel } from '@/components/proposals/PricingPanel';
 import { AiPanel } from '@/components/proposals/AiPanel';
 import { CompareView } from '@/components/proposals/CompareView';
 import { useConfirmStore } from '@/stores/confirm';
+import { useAuthStore } from '@/stores';
 import { usePageHeader } from '@/hooks/usePageHeader';
 
 type TabKey = 'DOCUMENT' | 'PRICING' | 'VERSIONS';
@@ -75,6 +76,7 @@ export default function ProposalPage({ params }: { params: Promise<{ id: string 
   const [sending, setSending] = useState(false);
   const [sendingBack, setSendingBack] = useState(false);
   const [reviewing, setReviewing] = useState(false);
+  const me = useAuthStore((s) => s.user);
   const [fromProforma, setFromProforma] = useState(false);
   // The Document tab's left side: the sections by hand, or the AI.
   const [mode, setMode] = useState<'SECTIONS' | 'AI'>('SECTIONS');
@@ -173,6 +175,23 @@ export default function ProposalPage({ params }: { params: Promise<{ id: string 
     }
   };
 
+  /*
+   * Out of review, back to a draft. The writer could not change a word once it
+   * was sent until Management sent it back; now whoever sent it can take it
+   * back themselves.
+   */
+  const withdraw = async (docIdToTake: string) => {
+    setReviewing(true);
+    try {
+      changed(await api.proposalDocs.withdraw(docIdToTake));
+      toast.success('Back to a draft — change it and send it again');
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Could not take it back.');
+    } finally {
+      setReviewing(false);
+    }
+  };
+
   const setLayout = async (docIdToSet: string, layout: ProposalLayout) => {
     try {
       changed(await api.proposalDocs.save(docIdToSet, { layout }));
@@ -237,6 +256,11 @@ export default function ProposalPage({ params }: { params: Promise<{ id: string 
                 Send back
               </Button>
             )}
+            {doc.status === 'IN_REVIEW' && !deal.canPrice && doc.review?.byId === me?.id && (
+              <Button icon={CornerUpLeft} onClick={() => void withdraw(doc.id)} loading={reviewing}>
+                Take back to draft
+              </Button>
+            )}
             {doc.status === 'FINAL' && !doc.sentAt && !closed && (
               <Button variant="primary" icon={Send} onClick={() => setSending(true)}>
                 Mark as sent
@@ -289,7 +313,9 @@ export default function ProposalPage({ params }: { params: Promise<{ id: string 
                 {doc.status === 'IN_REVIEW' && (
                   <p className="mb-4 rounded-xl border border-info/30 bg-info-tint px-3 py-2.5 text-xs text-body">
                     With Management for review{doc.review?.by ? `, sent by ${doc.review.by}` : ''}.{' '}
-                    {deal.canPrice ? 'Price it, then finalise or send it back.' : 'They price it and finalise it, or send it back to you.'}
+                    {deal.canPrice
+                      ? 'Price it, then finalise or send it back.'
+                      : 'They price it and finalise it, or send it back to you. Need to change something first? Take it back to a draft.'}
                   </p>
                 )}
                 {doc.status === 'DRAFT' && doc.reviewNote && (

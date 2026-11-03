@@ -341,6 +341,26 @@ describe('review', () => {
     expect((prisma.proposalDocument.updateMany as any).mock.calls[0][0].data).toMatchObject({ status: 'DRAFT', reviewNote: 'Tighten the scope' });
     expect((prisma.alert.updateMany as any).mock.calls[0][0].where).toMatchObject({ rule: 'PROPOSAL_REVIEW_REQUESTED', entityId: 'prop-1' });
   });
+
+  it('can be taken back to a draft by the writer who sent it, and the bell clears', async () => {
+    doc.status = 'IN_REVIEW';
+    doc.reviewRequestedById = 'usr-bd';
+    const res = await request(app).post('/api/proposals/documents/doc-1/withdraw').set(...as('bd'));
+    expect(res.status).toBe(200);
+    expect((prisma.proposalDocument.updateMany as any).mock.calls[0][0]).toMatchObject({
+      where: { id: 'doc-1', status: 'IN_REVIEW' },
+      data: { status: 'DRAFT' },
+    });
+    expect((prisma.alert.updateMany as any).mock.calls[0][0].where).toMatchObject({ rule: 'PROPOSAL_REVIEW_REQUESTED', entityId: 'prop-1' });
+  });
+
+  it('is not somebody else’s to take back', async () => {
+    doc.status = 'IN_REVIEW';
+    doc.reviewRequestedById = 'usr-someone-else';
+    const res = await request(app).post('/api/proposals/documents/doc-1/withdraw').set(...as('bd'));
+    expect(res.status).toBe(403);
+    expect(prisma.proposalDocument.updateMany).not.toHaveBeenCalled();
+  });
 });
 
 describe('an AI suggestion', () => {

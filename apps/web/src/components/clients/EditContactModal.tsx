@@ -22,6 +22,8 @@ import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Field, FieldSelect } from '@/components/ui/field';
 import { ErrorNote } from '@/components/ui/empty-state';
+import { CONTACT_ROLE_OPTIONS } from '@/lib/statusWords';
+import { useConfirmStore } from '@/stores/confirm';
 
 export type Contact = {
   id: string;
@@ -29,13 +31,10 @@ export type Contact = {
   role: 'APPROVER' | 'PAYER' | 'CONTACT';
   email?: string | null;
   phone?: string | null;
+  linkedin?: string | null;
 };
 
-const ROLE_OPTIONS = [
-  { value: 'CONTACT', label: 'Contact — the person you deal with' },
-  { value: 'APPROVER', label: 'Approver — signs the work off' },
-  { value: 'PAYER', label: 'Payer — who the invoice goes to' },
-];
+const ROLE_OPTIONS = CONTACT_ROLE_OPTIONS;
 
 export function EditContactModal({
   companyId,
@@ -52,7 +51,9 @@ export function EditContactModal({
   const [role, setRole] = useState<string>(contact.role ?? 'CONTACT');
   const [email, setEmail] = useState(contact.email ?? '');
   const [phone, setPhone] = useState(contact.phone ?? '');
+  const [linkedin, setLinkedin] = useState(contact.linkedin ?? '');
   const [busy, setBusy] = useState(false);
+  const confirm = useConfirmStore((s) => s.confirm);
   const [error, setError] = useState<string | null>(null);
 
   // The same check the add form makes, so a bad address is caught here rather
@@ -72,12 +73,37 @@ export function EditContactModal({
         // do not have this", which is a different fact from the old value.
         email: email.trim() || null,
         phone: phone.trim() || null,
+        linkedin: linkedin.trim() || null,
       });
       toast.success(`${name.trim()} updated`);
       onSaved();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Could not save this contact');
     } finally {
+      setBusy(false);
+    }
+  };
+
+  /*
+   * Somebody who left the client, or was added by mistake. There was no way
+   * to take a contact off, so they stayed listed — and could still be picked
+   * up as the payer on the next proforma.
+   */
+  const remove = async () => {
+    const ok = await confirm({
+      title: `Remove ${contact.name}?`,
+      message: 'They come off this company and stop being used on proformas and emails. Past events and history that name them are kept.',
+      confirmText: 'Remove contact',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    setBusy(true);
+    try {
+      await api.companies.removeContact(companyId, contact.id);
+      toast.success(`${contact.name} removed`);
+      onSaved();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Could not remove this contact');
       setBusy(false);
     }
   };
@@ -114,9 +140,20 @@ export function EditContactModal({
             />
             <Field label="Phone" type="tel" value={phone} onChange={setPhone} disabled={busy} />
           </div>
+          <Field
+            label="LinkedIn"
+            type="url"
+            value={linkedin}
+            onChange={setLinkedin}
+            disabled={busy}
+            placeholder="https://www.linkedin.com/in/…"
+          />
         </ModalBody>
 
         <ModalFooter>
+          <Button type="button" variant="ghost" className="mr-auto text-danger" onClick={() => void remove()} disabled={busy}>
+            Remove contact
+          </Button>
           <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>
             Cancel
           </Button>

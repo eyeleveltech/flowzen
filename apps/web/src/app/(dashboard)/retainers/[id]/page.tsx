@@ -43,7 +43,7 @@ import { useAuthStore } from '@/stores';
 import { useConfirmStore } from '@/stores/confirm';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { ChevronLeft, ChevronRight, CircleSlash, LockOpen, Pencil, Plus, Printer, ReceiptText, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CircleSlash, LockOpen, Pencil, Plus, Printer, ReceiptText, RotateCcw, Trash2 } from 'lucide-react';
 import { api, ApiError, formatMoney, formatDate, type OrgConfig } from '@/lib/api-v2';
 import { useTeamMembers } from '@/hooks/queries';
 import toast from 'react-hot-toast';
@@ -242,6 +242,7 @@ export default function RetainerMonthCardPage() {
   const nudgeWorkCaches = useWorkCacheNudge();
   const { user: me } = useAuthStore();
   const confirm = useConfirmStore((st) => st.confirm);
+  const [resuming, setResuming] = useState(false);
 
   const [retainer, setRetainer] = useState<Retainer | null>(null);
   const [monthCard, setMonthCard] = useState<MonthCard | null>(null);
@@ -427,6 +428,32 @@ export default function RetainerMonthCardPage() {
   useEffect(() => {
     void loadRetainer();
   }, [loadRetainer]);
+
+  const resume = async () => {
+    if (!retainer) return;
+    const ok = await confirm({
+      title: `Resume ${retainer.company.name}'s retainer?`,
+      message:
+        'It runs again at its current rate: this month gets a card if it has none, and the 1st opens each month after. The months closed when it stopped stay closed.',
+      confirmText: 'Resume it',
+    });
+    if (!ok) return;
+    setResuming(true);
+    try {
+      const res = await api.retainers.resume(retainer.id);
+      toast.success(
+        res.thisMonthClosed
+          ? 'Retainer resumed. This month was closed when it stopped — an admin can reopen it.'
+          : 'Retainer resumed',
+      );
+      await loadRetainer();
+      await loadMonthCard();
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Could not resume this retainer');
+    } finally {
+      setResuming(false);
+    }
+  };
 
   useEffect(() => {
     void loadMonthCard();
@@ -924,6 +951,15 @@ export default function RetainerMonthCardPage() {
             spawning tasks for a client who had gone, and kept counting towards
             the monthly recurring figure.
           */}
+          {/*
+            Stopping was for ever: a client who paused and came back had to be
+            set up again as a new retainer. Same gate as stopping.
+          */}
+          {retainer.status === 'STOPPED' && canWriteCompany && (
+            <Button size="sm" variant="secondary" icon={RotateCcw} loading={resuming} onClick={() => void resume()}>
+              Resume retainer
+            </Button>
+          )}
           {retainer.status === 'ACTIVE' && (
             <Button
               size="sm"

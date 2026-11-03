@@ -136,6 +136,11 @@ export function NewProformaModal({
         setBillingAddress((current) => current || ((company.billingAddress as string) ?? ''));
         setGstin((current) => current || ((company.gstin as string) ?? ''));
         setBuyerStateCode((current) => current || ((company.stateCode as string) ?? ''));
+        // Addressed to the contact marked Payer, as the monthly batch does.
+        const payer = ((company.people as { name: string; role: string; active?: boolean }[] | undefined) ?? []).find(
+          (p) => p.role === 'PAYER' && p.active !== false,
+        );
+        if (payer) setBillingContactName((current) => current || payer.name);
       })
       .catch(() => {});
     return () => {

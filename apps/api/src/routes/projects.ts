@@ -11,6 +11,7 @@ import { parsePagination } from '../utils/query.js';
 import { jobProfit, percentComplete, costRisk } from '../utils/jobProfit.js';
 import { toCsv } from '../utils/csv.js';
 import { sendCsv } from '../utils/csvResponse.js';
+import { codeWord } from '../utils/codeWords.js';
 
 export const projectsRouter = Router();
 
@@ -143,7 +144,7 @@ projectsRouter.get('/', requirePermission('work.all'), async (req: AuthRequest, 
         { label: 'Profit', value: (p) => (p.profit?.costBasis === 'none' ? '' : p.profit?.profit ?? '') },
         { label: 'Margin %', value: (p) => (p.profit?.costBasis === 'none' ? '' : p.profit?.marginPercent ?? '') },
         { label: 'Costs recorded', value: (p) => (p.profit?.costBasis === 'none' ? 'no' : 'yes') },
-        { label: 'Status', value: (p) => p.status },
+        { label: 'Status', value: (p) => codeWord(p.status) },
         { label: 'Owner', value: (p) => p.owner.name },
         { label: 'Milestone progress %', value: (p) => p.milestoneProgress },
         { label: 'Open tasks', value: (p) => p.openTasksCount },

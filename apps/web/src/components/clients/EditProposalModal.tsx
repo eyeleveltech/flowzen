@@ -43,6 +43,8 @@ type Proposal = {
   id: string;
   kind: 'RETAINER' | 'PROJECT';
   outcome: 'WON' | 'LOST' | null;
+  /** Why it was lost — asked once, then never shown or correctable until now. */
+  lostReason?: string | null;
   companyId?: string;
   owner?: { id: string; name: string } | null;
   ownerId?: string | null;
@@ -82,6 +84,7 @@ export function EditProposalModal({ proposal, companyName, onSaved, onClose }: P
       scopeSummary: version?.scopeSummary ?? '',
       fileUrl: version?.fileUrl ?? '',
       sentAt: dayOf(version?.sentAt),
+      lostReason: proposal.lostReason ?? '',
     }),
     [proposal, version],
   );
@@ -93,6 +96,8 @@ export function EditProposalModal({ proposal, companyName, onSaved, onClose }: P
   const [scopeSummary, setScopeSummary] = useState(original.scopeSummary);
   const [fileUrl, setFileUrl] = useState(original.fileUrl);
   const [sentAt, setSentAt] = useState(original.sentAt);
+  const [lostReason, setLostReason] = useState(original.lostReason);
+  const lost = proposal.outcome === 'LOST';
 
   // Only an open deal can move, so only an open deal needs the list.
   const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
@@ -116,6 +121,7 @@ export function EditProposalModal({ proposal, companyName, onSaved, onClose }: P
     ...(version && scopeSummary.trim() !== original.scopeSummary ? { scopeSummary: scopeSummary.trim() } : {}),
     ...(version && fileUrl.trim() !== original.fileUrl ? { fileUrl: fileUrl.trim() || null } : {}),
     ...(version && sentAt && sentAt !== original.sentAt ? { sentAt } : {}),
+    ...(lost && lostReason.trim() && lostReason.trim() !== original.lostReason ? { lostReason: lostReason.trim() } : {}),
   };
   const changed = Object.keys(body).length > 0;
   const moving = 'companyId' in body;
@@ -147,6 +153,16 @@ export function EditProposalModal({ proposal, companyName, onSaved, onClose }: P
       <form className="flex h-full flex-col" onSubmit={submit}>
         <ScrollingModalBody className="space-y-5">
           {error && <ErrorNote onDismiss={() => setError(null)}>{error}</ErrorNote>}
+
+          {lost && (
+            <Field
+              label="Why it was lost"
+              value={lostReason}
+              onChange={setLostReason}
+              disabled={busy}
+              hint="Shown on the client's page. The first reason stays in the history."
+            />
+          )}
 
           {/* ── The deal ── */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

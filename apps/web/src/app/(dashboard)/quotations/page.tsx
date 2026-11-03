@@ -22,6 +22,7 @@ import { ApiError } from '@/lib/api-v2';
 import toast from 'react-hot-toast';
 import { STAGE_LABEL } from '@flowzen/shared';
 import { monthLabel } from '@/lib/retainerBilling';
+import { PROFORMA_STATUS_LABEL } from '@/lib/statusWords';
 
 /**
  * `DELETED` is here rather than only in Settings → Trash because /settings
@@ -52,12 +53,7 @@ type ProformaRow = {
  * Words, not enum values. It printed the raw status, and "UNPAID" in capitals
  * next to "PAID" in capitals read as two shades of the same thing.
  */
-const PROFORMA_LABEL: Record<string, string> = {
-  UNPAID: 'Unpaid',
-  PAID: 'Paid',
-  EXPIRED: 'Expired',
-  CANCELLED: 'Cancelled',
-};
+const PROFORMA_LABEL = PROFORMA_STATUS_LABEL;
 const PROFORMA_TONE: Record<string, string> = {
   UNPAID: 'border-warning/40 bg-warning-tint text-warning-ink',
   PAID: 'border-success/30 bg-success-tint text-success',

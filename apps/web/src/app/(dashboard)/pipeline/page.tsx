@@ -14,7 +14,7 @@ import {
 } from "@hello-pangea/dnd";
 import { api, ApiError, formatMoney, fileUrl } from "@/lib/api-v2";
 import { Modal, ModalBody, ModalFooter } from "@/components/ui/modal";
-import { CalendarClock, ListChecks, MessageSquarePlus, Plus, Trash2 } from "lucide-react";
+import { CalendarClock, ListChecks, MessageSquarePlus, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { RowMenu } from "@/components/ui/row-menu";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
@@ -126,7 +126,8 @@ function getDropAction(fromStage: string, toStage: string): DropAction {
    * Checked before the order rule below, which would otherwise refuse every
    * drop onto Lost from a column to its left.
    *
-   * Nothing comes back from Lost: quoting them again is a new proposal.
+   * Lost comes back through "Reopen deal" on the card's menu, not a drag:
+   * the server puts it back at the stage it was lost from.
    */
   /*
    * Out of Won, there is one move: to Lost, and only when nothing is running.
@@ -149,7 +150,7 @@ function getDropAction(fromStage: string, toStage: string): DropAction {
     return {
       type: "INVALID",
       reason:
-        "A lost deal does not come back — quote them again as a new proposal.",
+        "Reopen a lost deal from its ⋯ menu — it goes back to the stage it was lost from.",
     };
   }
   const fromIdx = STAGE_ORDER.indexOf(fromStage);
@@ -381,6 +382,26 @@ export default function PipelinePage() {
    * Trash puts it back. Said in the confirmation, because "cannot be undone" is
    * the one thing this is not.
    */
+  /*
+   * "Mark lost" was for ever: a mis-click stayed in the win rate. The server
+   * puts it back at the stage it was lost from.
+   */
+  const handleReopen = async (card: PipelineCard) => {
+    const ok = await confirm({
+      title: `Reopen the deal with ${card.companyName}?`,
+      message: "It goes back on the board at the stage it was lost from, and stops counting as lost. Why it was lost stays in its history.",
+      confirmText: "Reopen it",
+    });
+    if (!ok) return;
+    try {
+      await api.proposals.reopen(card.id);
+      toast.success("Deal reopened");
+      await load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not reopen this deal");
+    }
+  };
+
   const handleDeleteProposal = async (card: PipelineCard) => {
     const ok = await confirm({
       title: "Delete this proposal?",
@@ -680,6 +701,12 @@ export default function PipelinePage() {
                                         icon: CalendarClock,
                                         visible: card.stage !== "WON" && card.stage !== "LOST",
                                         onSelect: () => setLastContactFor(card),
+                                      },
+                                      {
+                                        label: "Reopen deal",
+                                        icon: RotateCcw,
+                                        visible: card.stage === "LOST",
+                                        onSelect: () => void handleReopen(card),
                                       },
                                       {
                                         label: "Delete proposal",

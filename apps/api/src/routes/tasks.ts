@@ -27,6 +27,7 @@ import { findOpenTwin, twinDay, twinStatus } from '../services/taskDuplicates.js
 import { pushTaskAssigned, pushTaskEdited } from '../services/push.js';
 import { clearFocusOff, clearFocusOn, ENDS_FOCUS, focusRefusal } from '../services/taskFocus.js';
 import { NO_PROJECT_WHERE } from '../services/internalWork.js';
+import { codeWord, TASK_STATUS_WORD, WORK_TYPE_WORD } from '../utils/codeWords.js';
 
 export const tasksRouter = Router();
 
@@ -165,6 +166,11 @@ tasksRouter.get('/my', requirePermission('work.own'), async (req: AuthRequest, r
         // and saving would clear it. (workType is already above.)
         internalProjectId: t.internalProjectId,
         internalProjectName: t.internalProject?.name ?? null,
+        // What the drawer's edit form moves it between: the retainer's pieces of
+        // work, and (on an internal task) the client it is about.
+        retainerId: t.monthCard?.retainerId ?? null,
+        retainerProjectId: t.retainerProjectId,
+        companyId: t.companyId,
         workingHoursText: workingHours.formatted,
         workingMinutes: workingHours.totalMinutes,
         typeMedianMinutes,
@@ -743,7 +749,7 @@ tasksRouter.get('/all', requirePermission('work.all'), async (req: AuthRequest, 
         { label: 'Project', value: (t) => t.projectName ?? '' },
         { label: 'Assigned to', value: (t) => t.assignees.map((a) => a.name).join(', ') },
         { label: 'Designation', value: (t) => t.assignees.map((a) => a.designation ?? '').join(', ') },
-        { label: 'Status', value: (t) => t.status },
+        { label: 'Status', value: (t) => codeWord(t.status, TASK_STATUS_WORD) },
         { label: 'Assigned on', value: (t) => t.assignedAt.toISOString().slice(0, 10) },
         { label: 'Due', value: (t) => t.dueDate.toISOString().slice(0, 10) },
         { label: 'Due time', value: (t) => t.dueTime ?? '' },
@@ -930,14 +936,14 @@ tasksRouter.get('/', requirePermission('work.own'), async (req: AuthRequest, res
     if (wantsCsv) {
       const csv = toCsv(listed, [
         { label: 'Title', value: (t) => t.title },
-        { label: 'Work type', value: (t) => t.workType },
+        { label: 'Work type', value: (t) => codeWord(t.workType, WORK_TYPE_WORD) },
         { label: 'Assigned to', value: (t) => t.assignees.map((a) => a.name).join(', ') },
         // Two questions, two columns: who wanted it, and who typed it.
         { label: 'Assigned by', value: (t) => t.assignedBy?.name ?? t.creator.name },
         { label: 'Added by', value: (t) => t.creator.name },
         { label: 'Reviewer', value: (t) => t.reviewer?.name ?? '' },
-        { label: 'Type', value: (t) => t.taskType ?? '' },
-        { label: 'Status', value: (t) => t.status },
+        { label: 'Type', value: (t) => (t.taskType ? TASK_TYPE_LABEL[t.taskType] : '') },
+        { label: 'Status', value: (t) => codeWord(t.status, TASK_STATUS_WORD) },
         { label: 'Due date', value: (t) => t.dueDate.toISOString().slice(0, 10) },
         { label: 'Elapsed', value: (t) => t.workingHoursText },
         { label: 'Reopen count', value: (t) => t.reopenCount },
@@ -1348,6 +1354,13 @@ const taskEditSchema = z
      * gets filed by editing it.
      */
     internalProjectId: z.string().min(1).nullable().optional(),
+    /**
+     * The client an internal task is about — a follow-up call, a pitch — or
+     * null for none. Set on create and never changeable after, so a follow-up
+     * filed without one never showed on the client's page. Client work already
+     * says its client through its project or month.
+     */
+    companyId: z.string().min(1).nullable().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: 'Nothing to change' });
 
@@ -1435,6 +1448,26 @@ tasksRouter.patch('/:id', requirePermission('work.own'), async (req: AuthRequest
       }
     }
 
+    if (parsed.data.companyId !== undefined) {
+      if (existing.workType !== TaskWorkType.INTERNAL) {
+        res.status(400).json({
+          success: false,
+          error: 'Client work says its client through its project or month — only an internal task takes one here.',
+        });
+        return;
+      }
+      if (parsed.data.companyId) {
+        const company = await prisma.company.findFirst({
+          where: { id: parsed.data.companyId, organizationId: orgId },
+          select: { id: true },
+        });
+        if (!company) {
+          res.status(400).json({ success: false, error: 'That company is not one of yours.' });
+          return;
+        }
+      }
+    }
+
     // Same pairing rule as create: a task cannot be moved onto a project
     // belonging to a different retainer than the month it is billed in.
     if (parsed.data.retainerProjectId) {
@@ -1485,6 +1518,7 @@ tasksRouter.patch('/:id', requirePermission('work.own'), async (req: AuthRequest
         ...(parsed.data.internalProjectId !== undefined
           ? { internalProjectId: parsed.data.internalProjectId }
           : {}),
+        ...(parsed.data.companyId !== undefined ? { companyId: parsed.data.companyId } : {}),
         ...(nextPeople
           ? {
               // Replace rather than merge: the form sends the whole set, and a
@@ -1662,6 +1696,55 @@ tasksRouter.delete('/:id', requirePermission('work.own'), async (req: AuthReques
         entityId: id,
         actorId: req.user!.userId,
         verb: 'task_deleted',
+        payload: { title: task.title, assigneeId: task.assigneeId },
+      },
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/*
+ * Undo, for the few seconds after a delete.
+ *
+ * The drawer's comment promised a delete "undoable from the toast", and there
+ * was nothing behind it — a slip on the wrong row lost the task. The toast
+ * now offers Undo for a few seconds, and this puts the row back. Same people
+ * as deleting it; the activity log says who restored it.
+ */
+tasksRouter.post('/:id/restore', requirePermission('work.own'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const id = String(req.params.id);
+
+    const task = await prisma.task.findFirst({
+      // `deletedAt` at the top: lib/prisma.ts hides deleted rows unless the
+      // query names `deletedAt` there, and the access filter wraps everything
+      // it is given in an AND — so the deleted task was hidden from its own restore.
+      where: { ...(await taskChangeableWhere(req.user!, { id, organizationId: orgId })), deletedAt: { not: null } },
+    });
+    if (!task) {
+      res.status(404).json({ success: false, error: 'Deleted task not found' });
+      return;
+    }
+    if (!canRemove(req, task)) {
+      res.status(403).json({
+        success: false,
+        error: 'Only the person who created this task, the person it is assigned to, or a Head can bring it back',
+      });
+      return;
+    }
+
+    await prisma.task.update({ where: { id }, data: { deletedAt: null } });
+    await prisma.activity.create({
+      data: {
+        organizationId: orgId,
+        entityType: 'Task',
+        entityId: id,
+        actorId: req.user!.userId,
+        verb: 'task_restored',
         payload: { title: task.title, assigneeId: task.assigneeId },
       },
     });
@@ -1987,7 +2070,7 @@ tasksRouter.get('/:id', requirePermission('work.own'), async (req: AuthRequest, 
     const t = await prisma.task.findFirst({
       where: await taskReadableWhere(req.user!, { id: String(req.params.id), organizationId: orgId, deletedAt: null }),
       include: {
-        monthCard: { select: { month: true, retainer: { select: { company: { select: { name: true } } } } } },
+        monthCard: { select: { month: true, retainerId: true, retainer: { select: { company: { select: { name: true } } } } } },
         project: { select: { name: true, company: { select: { name: true } } } },
         internalProject: { select: { id: true, name: true } },
         company: { select: { name: true } },
@@ -2029,6 +2112,11 @@ tasksRouter.get('/:id', requirePermission('work.own'), async (req: AuthRequest, 
         projectName: t.project?.name ?? t.internalProject?.name ?? null,
         internalProjectId: t.internalProjectId,
         internalProjectName: t.internalProject?.name ?? null,
+        // What the drawer's edit form moves it between: the retainer's pieces of
+        // work, and (on an internal task) the client it is about.
+        retainerId: t.monthCard?.retainerId ?? null,
+        retainerProjectId: t.retainerProjectId,
+        companyId: t.companyId,
         workingHoursText: workingHours.formatted,
         workingMinutes: workingHours.totalMinutes,
         typeMedianMinutes: null,

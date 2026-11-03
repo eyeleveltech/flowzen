@@ -396,7 +396,9 @@ internalProjectsRouter.delete(
 
       const existing = await prisma.internalProject.findFirst({
         where: { id, organizationId: orgId },
-        select: { id: true, name: true, _count: { select: { tasks: true } } },
+        // Deleted tasks do not count: they are on no list, so a bucket whose
+        // only tasks had been deleted could never be deleted either.
+        select: { id: true, name: true, _count: { select: { tasks: { where: { deletedAt: null } } } } },
       });
       if (!existing) {
         res.status(404).json({ success: false, error: 'Not found' });

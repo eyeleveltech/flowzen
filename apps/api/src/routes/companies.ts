@@ -18,6 +18,7 @@ import { toCsv, parseCsv } from '../utils/csv.js';
 import { matchEnumValue, resolveIndustry, resolveLeadSource, industrySchema, leadSourceSchema } from '../utils/enums.js';
 import { sendCsv } from '../utils/csvResponse.js';
 import { withRepeatNext } from '../services/taskRepeat.js';
+import { codeWord, listWord, COMPANY_STATUS_WORD } from '../utils/codeWords.js';
 
 export const companiesRouter = Router();
 
@@ -167,10 +168,10 @@ companiesRouter.get('/', requirePermission('company.read'), async (req: AuthRequ
     if (wantsCsv) {
       const csv = toCsv(formatted, [
         { label: 'Name', value: (c) => c.name },
-        { label: 'Vertical', value: (c) => c.vertical },
-        { label: 'Source', value: (c) => c.source },
+        { label: 'Industry', value: (c) => listWord(c.vertical) },
+        { label: 'Source', value: (c) => listWord(c.source) },
         { label: 'City', value: (c) => c.city },
-        { label: 'Status', value: (c) => c.status },
+        { label: 'Status', value: (c) => codeWord(c.status, COMPANY_STATUS_WORD) },
         { label: 'Owner', value: (c) => c.owner?.name },
         { label: 'People', value: (c) => c.peopleCount },
         { label: 'Active retainer/mo', value: (c) => (c.activeRetainer?.monthlyValue != null ? Number(c.activeRetainer.monthlyValue) : '') },
@@ -273,7 +274,8 @@ companiesRouter.get('/:id', requirePermission('company.read'), async (req: AuthR
       where: { id, organizationId: orgId },
       include: {
         owner: { select: { id: true, name: true, email: true, dept: true } },
-        people: { orderBy: { createdAt: 'asc' } },
+        // A removed contact (DELETE /:id/people/:personId) leaves the page.
+        people: { where: { active: true }, orderBy: { createdAt: 'asc' } },
         proposals: {
           where: { deletedAt: null },
           orderBy: { createdAt: 'desc' },
@@ -404,7 +406,29 @@ companiesRouter.get('/:id', requirePermission('company.read'), async (req: AuthR
       select: { id: true },
     });
 
+    /*
+     * The lead this company was promoted from, and its history.
+     *
+     * Every call, note and status change logged while it was a lead sits on
+     * the outreach entry, and the outreach list hides an entry once it is
+     * promoted — so the moment a lead became a company, everything said to
+     * them before that vanished from every screen. The client's page is where
+     * somebody picking the account up looks, so that is where it is now.
+     */
+    const lead = await prisma.outreachEntry.findFirst({
+      where: { organizationId: orgId, promotedCompanyId: id },
+      select: {
+        id: true,
+        remarks: true,
+        importedAt: true,
+        lastTouchedAt: true,
+        contactPersonName: true,
+        owner: { select: { id: true, name: true } },
+      },
+    });
+
     const scopes: { type: string; ids: string[] }[] = [
+      { type: 'OutreachEntry', ids: lead ? [lead.id] : [] },
       { type: 'Proposal', ids: companyProposals.map((x) => x.id) },
       { type: 'Proforma', ids: company.proformas.map((x) => x.id) },
       { type: 'Project', ids: companyProjects.map((x) => x.id) },
@@ -494,6 +518,7 @@ companiesRouter.get('/:id', requirePermission('company.read'), async (req: AuthR
         // What each deal is worth: Management's (utils/dealValues.ts).
         proposals: company.proposals.map((p) => maskDealValues(p, canSeeDealValues(req.user!))),
         activities,
+        lead,
       },
     });
   } catch (error) {
@@ -587,13 +612,13 @@ export const IMPORT_COLUMNS = [
   { accepts: ['name', 'company', 'companyname'], required: true,
     note: 'The only column that must have a value. A row without one is reported as invalid.' },
   { accepts: ['status'], required: false,
-    note: 'PROSPECT (default), CLIENT for somebody you already work with, or PAST. A CLIENT or PAST row is recorded as a migration, never as a won deal.' },
+    note: 'Prospect (default), Client for somebody you already work with, or Past client. A Client or Past client row is recorded as a migration, never as a won deal.' },
   { accepts: ['city'], required: false,
     note: 'Defaults to Chennai if left blank — fill it in rather than letting it.' },
   { accepts: ['industry', 'vertical'], required: false,
-    note: 'HEALTHCARE, REAL_ESTATE, D2C, SPORTS, IT_AND_SAAS, RETAIL, B2B, HOSPITALITY. Anything unrecognised becomes B2B, so write SaaS rather than "IT & SaaS".' },
+    note: 'One of the industries on the lead form, written out: Technology & SaaS, Healthcare & Wellness, Real Estate & Infrastructure, E-commerce & D2C… Short words work too (SaaS, D2C, hotel, clinic, fintech). Anything unrecognised becomes Corporate & B2B.' },
   { accepts: ['source'], required: false,
-    note: 'OUTREACH (default), REFERRAL, INBOUND, PARTNER_AGENCY or NETWORK.' },
+    note: 'One of the lead form\'s sources: Cold Outreach (default), Referrals, Website / Inbound, Outsource, Networking & Events, LinkedIn, Social Media, Paid Ads, Google / SEO, Justdial, Email Marketing, Existing Clients, Founder / Personal Network or Word of Mouth. Short words work too (referral, inbound, partner).' },
   { accepts: ['contactname', 'contact'], required: false,
     note: 'The person at the company. With an email or phone, this becomes their first contact.' },
   { accepts: ['email'], required: false,
@@ -646,12 +671,12 @@ companiesRouter.get(
   (_req: AuthRequest, res: Response) => {
     const headers = IMPORT_COLUMNS.map((c) => c.accepts[0]);
     const example = [
-      'Acme Interiors', 'PROSPECT', 'Chennai', 'REAL_ESTATE', 'REFERRAL',
+      'Acme Interiors', 'Prospect', 'Chennai', 'Real Estate & Infrastructure', 'Referrals',
       'Priya Raman', 'priya@acmeinteriors.in', '9876543210',
       'acmeinteriors.in', '33AAAAA0000A1Z5', 'No. 4, Anna Salai', 'Tamil Nadu', '600002',
     ];
     const second = [
-      'Bright Foods', 'CLIENT', 'Coimbatore', 'D2C', 'PARTNER_AGENCY',
+      'Bright Foods', 'Client', 'Coimbatore', 'E-commerce & D2C', 'Outsource',
       'Suresh Kumar', '', '', '', '', '', 'Tamil Nadu', '',
     ];
 
@@ -822,7 +847,11 @@ companiesRouter.post('/import', requirePermission('company.write'), async (req: 
        * clients. The Add Company form has had this since the beginning
        * (`status`, plus the "we already work with them" tick); the file did not.
        */
-      const status = matchEnumValue(row.status, Object.values(CompanyStatus)) ?? CompanyStatus.PROSPECT;
+      const status =
+        matchEnumValue(row.status, Object.values(CompanyStatus), {
+          pastclient: CompanyStatus.PAST,
+          formerclient: CompanyStatus.PAST,
+        }) ?? CompanyStatus.PROSPECT;
 
       const billingAddress =
         [row.address, row.city, row.state, row.zip || row.pincode, row.country]
@@ -1319,6 +1348,59 @@ companiesRouter.patch('/:id', requirePermission('company.write'), async (req: Au
   }
 });
 
+// ── Bringing a past client back ─────────────────────────────────────────────
+
+/**
+ * POST /api/companies/:id/reactivate — a past client, active again.
+ *
+ * Past was a one-way door: the remove dialog makes a company past, and so does
+ * the scanner after ninety quiet days, but nothing took a person's choice back
+ * except winning a deal. It goes back by the scanner's own rule
+ * (`restorePastWithOpenDeals`): Client if it has ever had work with us — a won
+ * deal, a retainer or a project — otherwise Prospect. So a status is still
+ * derived, never picked.
+ */
+companiesRouter.post('/:id/reactivate', requirePermission('company.write'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const id = String(req.params.id);
+
+    const company = await prisma.company.findFirst({ where: { id, organizationId: orgId } });
+    if (!company) {
+      res.status(404).json({ success: false, error: 'Company not found' });
+      return;
+    }
+    if (company.status !== CompanyStatus.PAST) {
+      res.status(409).json({ success: false, error: `${company.name} isn't a past client.` });
+      return;
+    }
+
+    const [won, retainers, projects] = await Promise.all([
+      prisma.proposal.count({ where: { companyId: id, outcome: 'WON' } }),
+      prisma.retainer.count({ where: { companyId: id } }),
+      prisma.project.count({ where: { companyId: id } }),
+    ]);
+    const status = won + retainers + projects > 0 ? CompanyStatus.CLIENT : CompanyStatus.PROSPECT;
+
+    const updated = await prisma.company.update({ where: { id }, data: { status } });
+    await prisma.activity.create({
+      data: {
+        organizationId: orgId,
+        entityType: 'Company',
+        entityId: id,
+        actorId: req.user!.userId,
+        verb: 'company_updated',
+        payload: { name: updated.name, changed: changesBetween(company, updated, ['status']) } as Prisma.InputJsonValue,
+      },
+    });
+    emitToOrganization(orgId, 'lead:updated', { companyId: id });
+
+    res.json({ success: true, company: updated, status });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // ── Archiving a company ─────────────────────────────────────────────────────
 
 /**
@@ -1803,6 +1885,46 @@ companiesRouter.patch('/:id/people/:personId', requirePermission('company.write'
     });
 
     res.json({ success: true, person: updated });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/*
+ * Removing a contact — somebody who left the client, or was added by mistake.
+ *
+ * There was no way to: a contact could be added and edited, never taken off,
+ * so a person who left stayed listed (and could still be picked as the payer
+ * on a proforma). Soft, with `active` — the row stays for the calendar events
+ * and history that name them, and leaves the company's page.
+ */
+companiesRouter.delete('/:id/people/:personId', requirePermission('company.write'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const id = String(req.params.id);
+    const personId = String(req.params.personId);
+
+    const person = await prisma.person.findFirst({
+      where: { id: personId, companyId: id, active: true, company: { organizationId: orgId } },
+    });
+    if (!person) {
+      res.status(404).json({ success: false, error: 'Contact not found' });
+      return;
+    }
+
+    await prisma.person.update({ where: { id: personId }, data: { active: false } });
+    await prisma.activity.create({
+      data: {
+        organizationId: orgId,
+        entityType: 'Company',
+        entityId: id,
+        actorId: req.user!.userId,
+        verb: 'person_removed',
+        payload: { personId, name: person.name, role: person.role },
+      },
+    });
+
+    res.json({ success: true });
   } catch (error) {
     next(error);
   }

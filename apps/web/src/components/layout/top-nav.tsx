@@ -33,6 +33,7 @@ import {
   Package,
   IndianRupee,
   FileSignature,
+  Trash2,
 } from 'lucide-react';
 import { Drawer } from '@/components/ui/drawer';
 import toast from 'react-hot-toast';
@@ -83,6 +84,10 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
   const pathname = usePathname();
   const { setCommandPaletteOpen, setMobileSidebarOpen, setZenOpen, pageTitle, pageSubtitle } = useUIStore();
   const { user, logout } = useAuthStore();
+  /** Anybody who can delete something can put it back — see TrashTab for which key opens which section. */
+  const canRestore = ['pipeline.write', 'company.write', 'cost.enter', 'asset.manage', 'setup.admin'].some((k) =>
+    user?.permissions?.includes(k),
+  );
   /*
    * Management only, and hidden rather than disabled for everybody else.
    *
@@ -548,6 +553,17 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                     Settings
                   </button>
                 )}
+                {canRestore && (
+                  <button
+                    onClick={() => { router.push('/trash'); setShowUserMenu(false); }}
+                    className="flex w-full items-center gap-3 rounded-xl px-4 py-3.5 text-base text-body hover:bg-surface active:bg-subtle transition-colors"
+                  >
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-subtle">
+                      <Trash2 className="h-5 w-5 text-secondary" />
+                    </div>
+                    Trash
+                  </button>
+                )}
                 <button
                   onClick={() => { logout(); window.location.href = '/login'; }}
                   className="flex w-full items-center gap-3 rounded-xl px-4 py-3.5 text-base text-danger hover:bg-danger-tint active:bg-danger-tint transition-colors"
@@ -588,6 +604,15 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                       >
                         <Settings className="h-4 w-4 text-secondary" />
                         Settings
+                      </button>
+                    )}
+                    {canRestore && (
+                      <button
+                        onClick={() => { router.push('/trash'); setShowUserMenu(false); }}
+                        className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-body hover:bg-surface transition-colors"
+                      >
+                        <Trash2 className="h-4 w-4 text-secondary" />
+                        Trash
                       </button>
                     )}
                     <button

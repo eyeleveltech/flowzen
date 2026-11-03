@@ -159,6 +159,9 @@ export const LEGACY_SOURCE: Record<string, LeadSource> = {
   // The studio's word for it. What used to be called Partnerships is work
   // that comes in from another agency outsourcing to us.
   PARTNER_AGENCY: 'Outsource',
+  // The list's own old word for the same row. Without it, a company still
+  // carrying "Partnerships" opened Edit on Cold Outreach and saved as that.
+  Partnerships: 'Outsource',
   NETWORK: 'Networking & Events',
 };
 

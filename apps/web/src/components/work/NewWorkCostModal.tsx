@@ -12,6 +12,7 @@ import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Field, FieldSelect } from '@/components/ui/field';
 import { GstAmountFields, grossFromBase } from '@/components/work/GstAmountFields';
+import { CostTimingFields } from '@/components/work/CostTimingFields';
 import { ErrorNote } from '@/components/ui/empty-state';
 
 type Target = { kind: 'PROJECT'; projectId: string } | { kind: 'MONTH_CARD'; monthCardId: string };
@@ -61,6 +62,8 @@ export function NewWorkCostModal({ open, target, onClose, onCreated }: Props) {
   const [gstPercent, setGstPercent] = useState('');
   const [amount, setAmount] = useState('');
   const [incurredAt, setIncurredAt] = useState('');
+  const [recurring, setRecurring] = useState(false);
+  const [committedNotPaid, setCommittedNotPaid] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -72,6 +75,8 @@ export function NewWorkCostModal({ open, target, onClose, onCreated }: Props) {
       setPaidBy('');
       setAmount('');
       setIncurredAt(new Date().toISOString().slice(0, 10));
+      setRecurring(false);
+      setCommittedNotPaid(false);
       setError(null);
     }
   }, [open]);
@@ -99,6 +104,8 @@ export function NewWorkCostModal({ open, target, onClose, onCreated }: Props) {
         // The total, tax included — what actually leaves the account.
         amount: grossFromBase(amount, gstPercent),
         incurredAt,
+        recurring,
+        committedNotPaid,
       });
       onCreated();
     } catch (err) {
@@ -154,6 +161,12 @@ export function NewWorkCostModal({ open, target, onClose, onCreated }: Props) {
             onGstChange={setGstPercent}
           />
           <Field label="Date" value={incurredAt} onChange={setIncurredAt} type="date" required />
+          <CostTimingFields
+            recurring={recurring}
+            onRecurringChange={setRecurring}
+            committedNotPaid={committedNotPaid}
+            onCommittedNotPaidChange={setCommittedNotPaid}
+          />
           {error && <ErrorNote>{error}</ErrorNote>}
         </ModalBody>
         <ModalFooter>

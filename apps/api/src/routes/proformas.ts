@@ -21,6 +21,7 @@ import {
 } from '../services/documentEmail.js';
 import { buildDocumentSnapshot } from '../services/documentModel.js';
 import { documentFieldsSchema, cleanCustomFields, ORG_DOCUMENT_SELECT } from '../utils/documentSchemas.js';
+import { codeWord } from '../utils/codeWords.js';
 
 export const proformasRouter = Router();
 
@@ -104,7 +105,7 @@ proformasRouter.get('/', requireAnyPermission('pipeline.read', 'money.figures'),
         { label: 'Number', value: (pf) => pf.number },
         { label: 'Company', value: (pf) => pf.company.name },
         { label: 'Amount', value: (pf) => Number(pf.amount) },
-        { label: 'Status', value: (pf) => pf.status },
+        { label: 'Status', value: (pf) => codeWord(pf.status) },
         { label: 'Raised', value: (pf) => pf.raisedAt.toISOString().slice(0, 10) },
         { label: 'Valid till', value: (pf) => pf.validTill.toISOString().slice(0, 10) },
         { label: 'Invoice', value: (pf) => pf.invoice?.number ?? '' },
@@ -281,7 +282,8 @@ proformasRouter.post('/retainer-months', requireAnyPermission('pipeline.write', 
                   id: true,
                   name: true,
                   // Who pays: the contact marked Payer, if there is one.
-                  people: { where: { role: 'PAYER' }, select: { name: true }, take: 1 },
+                  // A removed contact no longer pays anything.
+                  people: { where: { role: 'PAYER', active: true }, select: { name: true }, take: 1 },
                 },
               },
             },

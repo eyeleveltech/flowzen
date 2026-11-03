@@ -20,7 +20,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { plural } from '@/lib/utils';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, ArrowLeftRight, LogIn, LogOut, Package, Trash2, Wrench } from 'lucide-react';
+import { ArrowLeft, ArrowLeftRight, LogIn, LogOut, Package, Pencil, RotateCcw, Trash2, Wrench } from 'lucide-react';
+import { EditAssetModal } from '@/components/assets/EditAssetModal';
 import {
   api,
   type AssetAccess,
@@ -55,6 +56,7 @@ type Dialog =
   | { kind: 'retire' }
   | { kind: 'repair' }
   | { kind: 'closeRepair'; maintenanceId: string }
+  | { kind: 'edit' }
   | null;
 
 export default function AssetDetailPage() {
@@ -123,8 +125,22 @@ export default function AssetDetailPage() {
   const openRepair = asset.maintenance.find((m) => !m.returnedAt) ?? null;
   const label = `${asset.tag} — ${asset.name}`;
 
+  /*
+   * Back into use. Retired, sold and lost were final, so a camera that turned
+   * up could only be entered again under a new tag.
+   */
+  const reinstate = async () => {
+    if (!confirm(`Bring ${asset.tag} back into use? It goes back in stock; the ${assetStatusLabel(asset.status).toLowerCase()} record stays in its history.`)) return;
+    try {
+      await api.assets.reinstate(asset.id);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not bring it back');
+    }
+  };
+
   const remove = async () => {
-    if (!confirm(`Remove ${asset.tag} from the register? It goes to Trash and can be restored.`)) return;
+    if (!confirm(`Remove ${asset.tag} from the register? It goes to Trash (in your account menu) and can be restored from there.`)) return;
     try {
       await api.assets.remove(asset.id);
       router.push('/assets');
@@ -219,7 +235,20 @@ export default function AssetDetailPage() {
                 Retire
               </Button>
             )}
+            <Button size="sm" icon={Pencil} onClick={() => setDialog({ kind: 'edit' })}>
+              Edit
+            </Button>
             <Button size="sm" variant="danger" icon={Trash2} onClick={remove} aria-label="Remove from the register" />
+          </div>
+        )}
+        {access.canManage && isClosed && (
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <Button size="sm" icon={RotateCcw} onClick={() => void reinstate()}>
+              Back into use
+            </Button>
+            <Button size="sm" icon={Pencil} onClick={() => setDialog({ kind: 'edit' })}>
+              Edit
+            </Button>
           </div>
         )}
       </div>
@@ -417,6 +446,17 @@ export default function AssetDetailPage() {
           assetLabel={label}
           onClose={() => setDialog(null)}
           onDone={() => {
+            setDialog(null);
+            void load();
+          }}
+        />
+      )}
+      {dialog?.kind === 'edit' && (
+        <EditAssetModal
+          asset={asset}
+          canSeeFigures={access.canSeeFigures}
+          onClose={() => setDialog(null)}
+          onSaved={() => {
             setDialog(null);
             void load();
           }}

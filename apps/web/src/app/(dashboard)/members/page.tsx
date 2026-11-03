@@ -27,6 +27,7 @@ import { KeyRound, Package, Pencil, Plus, ShieldCheck, UserMinus } from 'lucide-
 import { EditMemberModal } from '@/components/work/EditMemberModal';
 import { useDepartments, useTeamScope } from '@/hooks/queries';
 import { TeamScopeLine } from '@/components/work/TeamScopeLine';
+import { NotSignedInPeople } from '@/components/work/NotSignedInPeople';
 
 interface TeamMember {
   id: string;
@@ -146,7 +147,12 @@ export default function MembersPage() {
   // Derive team stats
   const totalOpen = members.reduce((s, m) => s + m.openTasksCount, 0);
   const totalOverdue = members.reduce((s, m) => s + m.overdueTasksCount, 0);
-  const totalWaiting = members.reduce((s, m) => s + m.waitingTasksCount, 0);
+  /*
+   * Client holds only, as the tile says — it summed every task on hold,
+   * colleague and internal holds included, under "not your team's delay".
+   * The per-person Waiting column below still counts every hold.
+   */
+  const waitingOnClients = data?.success ? (data.waitingOnClientCount ?? 0) : 0;
 
   /*
    * `loadPercentage` used to live here: a person's open task count against
@@ -266,9 +272,9 @@ export default function MembersPage() {
         />
         <StatTile
           label="Waiting on Clients"
-          value={totalWaiting}
+          value={waitingOnClients}
           note="not your team's delay"
-          tone={totalWaiting > 0 ? 'warning' : 'default'}
+          tone={waitingOnClients > 0 ? 'warning' : 'default'}
         />
       </StatRow>
 
@@ -461,6 +467,9 @@ export default function MembersPage() {
         </table>
         </div>
       </div>
+
+      {/* Invited-not-joined and switched-off: the table above lists active accounts only. */}
+      {canInvite && <NotSignedInPeople />}
 
       <MemberDrawer memberId={openMemberId} onClose={() => setOpenMemberId(null)} />
 

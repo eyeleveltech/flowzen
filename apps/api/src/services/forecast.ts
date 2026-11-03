@@ -312,7 +312,7 @@ export async function composeForecast(orgId: string, assumeWonId: string | null 
   }
   if ((costsOut.recurring.get(months[0].key) ?? 0) === 0) {
     warnings.push(
-      'No recurring costs are set up (rent, software, utilities…), so none are taken off. Add them as costs in Money and mark the monthly ones Recurring.',
+      'No recurring costs are set up (rent, software, utilities…), so none are taken off. Add them as costs in Money and tick “Repeats every month” on the monthly ones.',
     );
   }
 

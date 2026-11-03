@@ -205,11 +205,17 @@ describe('deleting a task', () => {
     expect(prisma.task.update).not.toHaveBeenCalled();
   });
 
-  it('cannot be put back', async () => {
-    // Deleting a task is final — there is no restore route to reach.
+  it('can be put back by the Undo on the toast, by the same people who could delete it', async () => {
+    // The Undo shown for a few seconds after a delete (30 Oct 2026).
+    (prisma.task.findFirst as any).mockResolvedValue({ ...OPEN_TASK, deletedAt: new Date() });
     const res = await request(app).post('/api/tasks/task-1/restore').set(...auth('designer'));
-    expect(res.status).toBe(404);
-    expect(prisma.task.update).not.toHaveBeenCalledWith(expect.objectContaining({ data: { deletedAt: null } }));
+    expect(res.status).toBe(200);
+    expect(prisma.task.update).toHaveBeenCalledWith(expect.objectContaining({ data: { deletedAt: null } }));
+
+    (prisma.task.update as any).mockClear();
+    const stranger = await request(app).post('/api/tasks/task-1/restore').set(...auth('other'));
+    expect(stranger.status).toBe(403);
+    expect(prisma.task.update).not.toHaveBeenCalled();
   });
 });
 

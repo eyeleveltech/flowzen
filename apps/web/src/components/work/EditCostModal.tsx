@@ -19,8 +19,9 @@ import toast from 'react-hot-toast';
 import { api, ApiError } from '@/lib/api-v2';
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
-import { Field } from '@/components/ui/field';
+import { Field, FieldSelect } from '@/components/ui/field';
 import { GstAmountFields, grossFromBase, baseFromGross } from '@/components/work/GstAmountFields';
+import { CostTimingFields, TREATMENT_OPTIONS } from '@/components/work/CostTimingFields';
 import { ErrorNote } from '@/components/ui/empty-state';
 
 export type EditableCost = {
@@ -33,6 +34,12 @@ export type EditableCost = {
   /** The rate the amount already includes, if one was recorded. */
   gstPercent?: number | null;
   incurredAt: string;
+  recurring?: boolean;
+  committedNotPaid?: boolean;
+  /** Company expense, or a partner's loan. Chosen on entry and shown nowhere until now. */
+  treatment?: string | null;
+  /** Set on a monthly copy: the repeating cost it was copied from. */
+  recurringSourceId?: string | null;
 };
 
 type Props = {
@@ -62,6 +69,10 @@ export function EditCostModal({ cost, onSaved, onClose }: Props) {
    const [gstPercent, setGstPercent] = useState(cost.gstPercent != null ? String(cost.gstPercent) : '');
    const [amount, setAmount] = useState(baseFromGross(cost.amount, cost.gstPercent));
   const [incurredAt, setIncurredAt] = useState((cost.incurredAt ?? '').slice(0, 10));
+  const [recurring, setRecurring] = useState(cost.recurring ?? false);
+  const [committedNotPaid, setCommittedNotPaid] = useState(cost.committedNotPaid ?? false);
+  const isMonthlyCopy = Boolean(cost.recurringSourceId);
+  const [treatment, setTreatment] = useState(cost.treatment ?? 'COMPANY_EXPENSE');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -86,6 +97,11 @@ export function EditCostModal({ cost, onSaved, onClose }: Props) {
         amount: grossFromBase(amount, gstPercent),
         gstPercent: gstPercent ? Number(gstPercent) : null,
         incurredAt,
+        // Only what this form was told and the person changed: a caller that
+        // did not pass them leaves the record's own values alone.
+        ...(cost.recurring !== undefined && !isMonthlyCopy && recurring !== cost.recurring ? { recurring } : {}),
+        ...(cost.committedNotPaid !== undefined && committedNotPaid !== cost.committedNotPaid ? { committedNotPaid } : {}),
+        ...(cost.treatment && treatment !== cost.treatment ? { treatment } : {}),
       });
       toast.success('Cost updated');
       onSaved();
@@ -108,6 +124,9 @@ export function EditCostModal({ cost, onSaved, onClose }: Props) {
           <Field label="Paid towards" value={category} onChange={setCategory} required />
           <Field label="Paid to" value={vendor} onChange={setVendor} required />
           <Field label="Company" value={paidBy} onChange={setPaidBy} required placeholder="Whose money it was" />
+          {cost.treatment && (
+            <FieldSelect label="Treatment" value={treatment} onChange={setTreatment} required options={TREATMENT_OPTIONS} />
+          )}
           {/* The bill's figure and its tax, with the total said out loud —
               see GstAmountFields on why the TOTAL is what gets stored. */}
           <GstAmountFields
@@ -117,6 +136,16 @@ export function EditCostModal({ cost, onSaved, onClose }: Props) {
             onGstChange={setGstPercent}
           />
           <Field label="Date" value={incurredAt} onChange={setIncurredAt} type="date" required />
+          {cost.committedNotPaid !== undefined && (
+            <CostTimingFields
+              recurring={recurring}
+              onRecurringChange={setRecurring}
+              committedNotPaid={committedNotPaid}
+              onCommittedNotPaidChange={setCommittedNotPaid}
+              isMonthlyCopy={isMonthlyCopy}
+              editing
+            />
+          )}
           {error && <ErrorNote onDismiss={() => setError(null)}>{error}</ErrorNote>}
         </ModalBody>
         <ModalFooter>

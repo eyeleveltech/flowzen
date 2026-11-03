@@ -9,6 +9,7 @@ import { toCsv } from '../utils/csv.js';
 import { sendCsv } from '../utils/csvResponse.js';
 import { monthCardRefusal } from '../utils/monthCardOpen.js';
 import { asStoredDay, moneyClock, monthBounds, orgToday } from '../utils/moneyDates.js';
+import { codeWord, COST_TYPE_WORD, COST_TREATMENT_WORD } from '../utils/codeWords.js';
 
 export const costsRouter = Router();
 
@@ -120,7 +121,7 @@ costsRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction)
 
     if (wantsCsv) {
       const csv = toCsv(data, [
-        { label: 'Type', value: (c) => c.type },
+        { label: 'Type', value: (c) => codeWord(c.type, COST_TYPE_WORD) },
         // The words the screens use: what it was for, and who got it.
         { label: 'Paid towards', value: (c) => c.category },
         { label: 'Paid to', value: (c) => c.vendor },
@@ -129,7 +130,7 @@ costsRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction)
         { label: 'Committed, not paid', value: (c) => (c.committedNotPaid ? 'Yes' : 'No') },
         { label: 'Company', value: (c) => c.paidBy },
         { label: 'GST %', value: (c) => (c.gstPercent == null ? '' : Number(c.gstPercent)) },
-        { label: 'Treatment', value: (c) => c.treatment },
+        { label: 'Treatment', value: (c) => codeWord(c.treatment, COST_TREATMENT_WORD) },
         { label: 'Entered by', value: (c) => c.enteredBy.name },
         { label: 'Recurring', value: (c) => (c.recurring ? 'Yes' : 'No') },
         { label: 'Client', value: (c) => c.monthCard?.retainer.company.name ?? c.project?.company.name ?? '' },
@@ -189,10 +190,14 @@ const createCostSchema = z.object({
 
 /**
  * GET /api/costs/trash — soft-deleted cost records, and restoring one. §16
- * mandates soft delete but never a way back to it; setup.admin only, since
- * recovery is an administrative action distinct from day-to-day cost entry.
+ * mandates soft delete but never a way back to it.
+ *
+ * `cost.enter`, the same key that deletes one. It was setup.admin, so the
+ * person who deleted a cost by mistake could not put it back, and the delete
+ * dialog's "it can be restored" meant "ask an admin". A closed month is still
+ * closed: restoring a cost onto one is refused, as entering one is.
  */
-costsRouter.get('/trash', requirePermission('setup.admin'), async (req: AuthRequest, res: Response, next: NextFunction) => {
+costsRouter.get('/trash', requirePermission('cost.enter'), async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const orgId = req.user!.organizationId;
     const costs = await prisma.cost.findMany({
@@ -206,7 +211,7 @@ costsRouter.get('/trash', requirePermission('setup.admin'), async (req: AuthRequ
   }
 });
 
-costsRouter.post('/:id/restore', requirePermission('setup.admin'), async (req: AuthRequest, res: Response, next: NextFunction) => {
+costsRouter.post('/:id/restore', requirePermission('cost.enter'), async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const orgId = req.user!.organizationId;
     const id = String(req.params.id);
@@ -214,6 +219,12 @@ costsRouter.post('/:id/restore', requirePermission('setup.admin'), async (req: A
     const existing = await prisma.cost.findFirst({ where: { id, organizationId: orgId, deletedAt: { not: null } } });
     if (!existing) {
       res.status(404).json({ success: false, error: 'Deleted cost not found' });
+      return;
+    }
+
+    const closed = await monthCardRefusal(existing.monthCardId, 'Restoring a cost onto it');
+    if (closed) {
+      res.status(400).json({ success: false, error: closed });
       return;
     }
 

@@ -39,7 +39,19 @@ import {
   FolderOpen,
   Briefcase,
   MessageSquarePlus,
+  RotateCcw,
 } from 'lucide-react';
+import { industryLabel, sourceLabel } from '@/lib/vertical';
+import { STAGE_LABEL } from '@flowzen/shared';
+import {
+  COMPANY_STATUS_LABEL,
+  CONTACT_ROLE_LABEL,
+  CONTACT_ROLE_OPTIONS,
+  PROFORMA_STATUS_LABEL,
+  PROFORMA_STATUS_TONE,
+  RETAINER_STATUS_LABEL,
+  wordFor,
+} from '@/lib/statusWords';
 import { NextStepLine, isNextStepMissing, useStudioToday } from '@/components/sales/NextStep';
 import { LastContactModal, LogTouchModal, NextStepModal, VerbalYesModal, type SalesTarget } from '@/components/sales/SalesDialogs';
 import toast from 'react-hot-toast';
@@ -202,7 +214,12 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
   const canDeletePermanently = pageConfig?.me.permissions?.includes('setup.admin') ?? false;
   // What a deal is worth is Management's: the server sends null without it.
   const canSeeDealValues = pageConfig?.me.permissions?.includes('money.figures') ?? false;
+  /** Who may cancel a proforma: selling or Accounts, the server's own rule (proformas.ts). */
+  const canChangeProformas = ['pipeline.write', 'money.figures', 'setup.admin'].some((k) =>
+    pageConfig?.me.permissions?.includes(k),
+  );
   const [removing, setRemoving] = useState(false);
+  const [reactivating, setReactivating] = useState(false);
   /*
    * Paid work needs a client. The server says so — a retainer or a project for
    * somebody who has bought nothing is the contradiction §3 exists to stop.
@@ -225,6 +242,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
   const [personRole, setPersonRole] = useState<'APPROVER' | 'PAYER' | 'CONTACT'>('CONTACT');
   const [personEmail, setPersonEmail] = useState('');
   const [personPhone, setPersonPhone] = useState('');
+  const [personLinkedin, setPersonLinkedin] = useState('');
   const [addingPerson, setAddingPerson] = useState(false);
 
   const fetchDetail = useCallback(async () => {
@@ -245,6 +263,20 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
     }
   }, [id, nudgeWorkCaches]);
 
+  const reactivate = async () => {
+    if (!company) return;
+    setReactivating(true);
+    try {
+      const { status } = await api.companies.reactivate(company.id);
+      toast.success(`${company.name} is a ${status === 'CLIENT' ? 'client' : 'prospect'} again`);
+      await fetchDetail();
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Could not make them active again');
+    } finally {
+      setReactivating(false);
+    }
+  };
+
   useEffect(() => {
     fetchDetail();
   }, [fetchDetail]);
@@ -262,11 +294,13 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
         role: personRole,
         email: personEmail.trim() || undefined,
         phone: personPhone.trim() || undefined,
+        linkedin: personLinkedin.trim() || undefined,
       });
       setIsAddPersonOpen(false);
       setPersonName('');
       setPersonEmail('');
       setPersonPhone('');
+      setPersonLinkedin('');
       await fetchDetail();
     } catch (err) {
       // The API rejects a malformed email with a readable reason ("Invalid
@@ -336,6 +370,23 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
       await fetchDetail();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Could not cancel this proforma');
+    }
+  };
+
+  /* "Mark lost" was for ever. Back at the stage it was lost from (proposals.ts). */
+  const handleReopenProposal = async (prop: { id: string }) => {
+    const ok = await confirm({
+      title: 'Reopen this deal?',
+      message: 'It goes back on the pipeline at the stage it was lost from, and stops counting as lost. Why it was lost stays in its history.',
+      confirmText: 'Reopen it',
+    });
+    if (!ok) return;
+    try {
+      await api.proposals.reopen(prop.id);
+      toast.success('Deal reopened');
+      await fetchDetail();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not reopen this deal');
     }
   };
 
@@ -449,18 +500,12 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
               <h1 className="text-2xl font-semibold tracking-tight text-primary text-pretty">
                 {company.name}
               </h1>
-              <span className={`eyebrow px-2 py-0.5 rounded-full border ${
-                company.status === 'CLIENT'
-                  ? 'bg-success-tint text-success border-success/30'
-                  : company.status === 'PROSPECT'
-                  ? 'bg-info-tint text-info border-info/30'
-                  : 'bg-subtle text-secondary border-border'
-              }`}>
-                {company.status}
-              </span>
+              <Badge tone={company.status === 'CLIENT' ? 'good' : company.status === 'PROSPECT' ? 'info' : 'neutral'}>
+                {wordFor(COMPANY_STATUS_LABEL, company.status)}
+              </Badge>
             </div>
             <p className="text-xs text-secondary mt-0.5">
-              {company.vertical?.replace(/_/g, ' ')} · {company.city}
+              {industryLabel(company.vertical)} · {company.city}
               {company.website && (
                 <> · <a href={company.website} target="_blank" rel="noreferrer" className="text-primary hover:underline">{company.website.replace(/^https?:\/\//, '')}</a></>
               )}
@@ -472,6 +517,24 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
             <Pencil className="w-3.5 h-3.5" />
             Edit
           </Button>
+          {/*
+            A past client back on the books. Past used to be one-way: the
+            Remove dialog makes them past, and nothing took it back. They
+            return as a Client if they have ever had work with us, otherwise
+            as a Prospect — the server decides, by the same rule the scanner
+            uses.
+          */}
+          {canWrite && company.status === 'PAST' && (
+            <Button
+              variant="secondary"
+              loading={reactivating}
+              title="Back to Client if they've had work with us, otherwise to Prospect"
+              onClick={() => void reactivate()}
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Make active again
+            </Button>
+          )}
           {canWrite && (
             <Button variant="ghost" onClick={() => setRemoving(true)}>
               <Trash2 className="w-3.5 h-3.5" />
@@ -549,15 +612,9 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="font-medium text-sm text-primary">{p.name}</span>
-                          <span className={`eyebrow px-2 py-0.5 rounded border ${
-                            p.role === 'APPROVER'
-                              ? 'bg-warning-tint text-warning-ink border-warning/30'
-                              : p.role === 'PAYER'
-                              ? 'bg-success-tint text-success border-success/30'
-                              : 'bg-subtle text-secondary border-border'
-                          }`}>
-                            {p.role}
-                          </span>
+                          <Badge tone={p.role === 'APPROVER' ? 'warn' : p.role === 'PAYER' ? 'good' : 'neutral'}>
+                            {wordFor(CONTACT_ROLE_LABEL, p.role)}
+                          </Badge>
                         </div>
                         <div className="flex items-center gap-4 mt-1 text-xs text-secondary">
                           {p.email && (
@@ -571,6 +628,11 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                               <Phone className="w-3 h-3 text-muted" />
                               <a href={`tel:${p.phone}`} className="hover:underline">{p.phone}</a>
                             </span>
+                          )}
+                          {p.linkedin && /^https?:\/\//i.test(p.linkedin) && (
+                            <a href={p.linkedin} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                              LinkedIn
+                            </a>
                           )}
                         </div>
                       </div>
@@ -693,14 +755,53 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                 <span className="eyebrow text-muted block">GSTIN</span>
                 <span className="text-sm font-mono text-primary">{company.gstin || 'Not registered'}</span>
               </div>
+              {/*
+                It decides the tax — same state is CGST + SGST, another is IGST —
+                and it was asked for on the edit form and shown nowhere, so a
+                wrong one was only found on a printed proforma.
+              */}
+              <div>
+                <span className="eyebrow text-muted block">State</span>
+                <span className="text-xs text-body">
+                  {company.stateName
+                    ? `${company.stateName}${company.stateCode ? ` (${company.stateCode})` : ''}`
+                    : 'Not set — Edit to add it; it decides the GST'}
+                </span>
+              </div>
               <div>
                 <span className="eyebrow text-muted block">Billing Address</span>
                 <span className="text-xs text-body leading-relaxed">{company.billingAddress || 'No billing address specified.'}</span>
               </div>
               <div>
                 <span className="eyebrow text-muted block">Source</span>
-                <span className="text-xs text-secondary">{company.source}</span>
+                <span className="text-xs text-secondary">{sourceLabel(company.source)}</span>
               </div>
+              {/*
+                The lead they were before. Its remarks and every follow-up were
+                on the outreach entry, which the outreach list hides once it is
+                promoted — so they disappeared from every screen. The history
+                is in Audit Trail now; the remarks are here.
+              */}
+              {company.lead && (
+                <div>
+                  <span className="eyebrow text-muted block">From the lead</span>
+                  <p className="text-xs text-secondary">
+                    Added {formatDate(company.lead.importedAt)}
+                    {company.lead.owner?.name ? ` by ${company.lead.owner.name}` : ''}
+                    {company.lead.lastTouchedAt ? ` · last follow-up ${formatDate(company.lead.lastTouchedAt)}` : ''}
+                  </p>
+                  {company.lead.remarks && (
+                    <p className="mt-1 whitespace-pre-line text-xs leading-relaxed text-body">{company.lead.remarks}</p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('AUDIT')}
+                    className="mt-1 rounded-sm text-xs font-medium text-secondary underline underline-offset-2 outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-primary/40"
+                  >
+                    See the calls and notes in Audit Trail
+                  </button>
+                </div>
+              )}
             </Card>
           </div>
         </div>
@@ -781,7 +882,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                       </p>
                     </div>
                     <Badge tone={r.status === 'ACTIVE' ? 'good' : 'neutral'}>
-                      {r.status === 'ACTIVE' ? 'Active' : r.status.toLowerCase()}
+                      {wordFor(RETAINER_STATUS_LABEL, r.status)}
                     </Badge>
                   </Link>
                 ))}
@@ -1031,13 +1132,10 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                       <h3 className="text-sm font-semibold text-primary">
                         {prop.kind === 'RETAINER' ? 'Monthly Retainer Proposal' : 'Project Quotation'}
                       </h3>
-                      <span className="eyebrow px-2 py-0.5 rounded bg-subtle border border-border">
-                        {prop.stage.replace(/_/g, ' ')}
-                      </span>
-                      {prop.outcome === 'LOST' && (
-                        <span className="eyebrow px-2 py-0.5 rounded bg-danger-tint border border-danger/30 text-danger">
-                          Lost
-                        </span>
+                      {prop.outcome === 'LOST' ? (
+                        <Badge tone="bad">Lost</Badge>
+                      ) : (
+                        <Badge>{wordFor(STAGE_LABEL, prop.stage)}</Badge>
                       )}
                     </div>
                     <div className="flex items-center gap-2">
@@ -1056,6 +1154,12 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                             onSelect: () => setEditingProposal(prop),
                           },
                           {
+                            label: 'Reopen deal',
+                            icon: RotateCcw,
+                            visible: prop.outcome === 'LOST',
+                            onSelect: () => void handleReopenProposal(prop),
+                          },
+                          {
                             label: 'Delete proposal',
                             icon: Trash2,
                             tone: 'danger',
@@ -1071,6 +1175,13 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                       />
                     </div>
                   </div>
+
+                  {/* Asked once when it was lost, and never shown again. */}
+                  {prop.outcome === 'LOST' && prop.lostReason && (
+                    <p className="-mt-1 text-xs text-secondary">
+                      <span className="font-medium text-body">Why it was lost:</span> {prop.lostReason}
+                    </p>
+                  )}
 
                   {/* Versions Tree */}
                   <div className="space-y-2">
@@ -1092,6 +1203,17 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                               </span>
                             )}
                             <span className="text-xs text-muted">· {formatDate(v.sentAt)}</span>
+                            {/* The link typed in three forms and shown nowhere. */}
+                            {v.fileUrl && /^https?:\/\//i.test(v.fileUrl) && (
+                              <a
+                                href={v.fileUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs font-medium text-secondary underline underline-offset-2 hover:text-primary"
+                              >
+                                Open document
+                              </a>
+                            )}
                           </div>
                           <p className="text-xs text-body mt-1">{v.scopeSummary}</p>
                         </div>
@@ -1299,11 +1421,9 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="font-mono text-sm font-semibold text-primary">{pi.number}</span>
-                        <span className={`eyebrow px-2 py-0.5 rounded border ${
-                          pi.status === 'PAID' ? 'bg-success-tint text-success border-success/30' : 'bg-warning-tint text-warning-ink border-warning/30'
-                        }`}>
-                          {pi.status}
-                        </span>
+                        <Badge tone={PROFORMA_STATUS_TONE[pi.status] ?? 'neutral'}>
+                          {wordFor(PROFORMA_STATUS_LABEL, pi.status)}
+                        </Badge>
                       </div>
                       <span className="text-xs text-secondary">Valid till {formatDate(pi.validTill)}</span>
                     </div>
@@ -1324,8 +1444,12 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                       )}
                       {/* The only way to withdraw one — see handleCancelProforma.
                           Absent once it is paid: money against it is its own
-                          record and cancelling the document does not undo it. */}
-                      {canWrite && pi.status === 'UNPAID' && (
+                          record and cancelling the document does not undo it.
+                          An EXPIRED one too: it was refused here, so its
+                          milestone stayed on Proforma raised and the expiry
+                          alert never cleared. Selling or Accounts, as the
+                          server allows. */}
+                      {canChangeProformas && (pi.status === 'UNPAID' || pi.status === 'EXPIRED') && (
                         <button
                           type="button"
                           onClick={() => void handleCancelProforma(pi)}
@@ -1466,9 +1590,9 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                   onChange={(e) => setPersonRole(e.target.value as any)}
                   className="w-full px-3 py-2 text-sm bg-white border border-border rounded-xl text-body focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:outline-none"
                 >
-                  <option value="APPROVER">APPROVER (Signs off scope/work)</option>
-                  <option value="PAYER">PAYER (Handles finance/accounts)</option>
-                  <option value="CONTACT">CONTACT (General contact)</option>
+                  {CONTACT_ROLE_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
                 </select>
               </div>
 
@@ -1509,6 +1633,17 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                     className="w-full px-3 py-2 text-sm bg-white border border-border rounded-xl text-primary placeholder:text-muted focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:outline-none"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-body mb-1" htmlFor="linkedin">LinkedIn</label>
+                <input id="linkedin"
+                  type="url"
+                  value={personLinkedin}
+                  onChange={(e) => setPersonLinkedin(e.target.value)}
+                  placeholder="https://www.linkedin.com/in/…"
+                  className="w-full px-3 py-2 text-sm bg-white border border-border rounded-xl text-primary placeholder:text-muted focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:outline-none"
+                />
               </div>
 
               <div className="pt-3 border-t border-border flex items-center justify-end gap-2">

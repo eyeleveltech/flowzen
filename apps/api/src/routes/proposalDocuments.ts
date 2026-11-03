@@ -331,7 +331,7 @@ function documentOut(doc: LoadedDocument, withPrices: boolean) {
       ? { reason: doc.floorOverrideReason, by: doc.floorOverrideBy?.name ?? null, at: doc.floorOverrideAt }
       : null,
     review: doc.reviewRequestedAt
-      ? { requestedAt: doc.reviewRequestedAt, by: doc.reviewRequestedBy?.name ?? null }
+      ? { requestedAt: doc.reviewRequestedAt, by: doc.reviewRequestedBy?.name ?? null, byId: doc.reviewRequestedById }
       : null,
     milestoneSplit: parseMilestoneSplit(doc.milestoneSplit),
     reviewNote: doc.reviewNote,
@@ -1412,6 +1412,53 @@ proposalDocumentsRouter.post('/documents/:docId/send-back', requireManagement, a
         actorId: req.user!.userId,
         verb: 'proposal_document_sent_back',
         payload: { n: doc.n, note: parsed.data.note },
+      },
+    });
+    const fresh = await prisma.proposalDocument.findUniqueOrThrow({ where: { id: doc.id }, include: documentInclude });
+    await respondWithDocument(req, res, fresh);
+  } catch (e) {
+    next(e);
+  }
+});
+
+/*
+ * Taking it back out of review.
+ *
+ * Once sent, the writer could not change a word until Management sent it back
+ * — so a typo spotted a minute later, or a scope the client changed that
+ * afternoon, waited on somebody else's queue. The person who sent it (or
+ * Management) can now withdraw it to a draft; the bell clears with it.
+ */
+proposalDocumentsRouter.post('/documents/:docId/withdraw', requirePermission('pipeline.write'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const doc = await loadDocument(req, res);
+    if (!doc) return;
+    if (doc.status !== 'IN_REVIEW') {
+      res.status(409).json({ success: false, error: `v${doc.n} is not in review.` });
+      return;
+    }
+    if (!isManagement(req) && doc.reviewRequestedById !== req.user!.userId) {
+      res.status(403).json({ success: false, error: 'Only the person who sent it for review, or Management, can take it back.' });
+      return;
+    }
+    const orgId = req.user!.organizationId;
+    const { count } = await prisma.proposalDocument.updateMany({
+      where: { id: doc.id, status: 'IN_REVIEW' },
+      data: { status: 'DRAFT', reviewRequestedAt: null, reviewRequestedById: null },
+    });
+    if (!count) {
+      res.status(409).json({ success: false, error: `v${doc.n} just changed. Reload to see it.` });
+      return;
+    }
+    await resolveReviewAlert(orgId, doc.proposalId);
+    await prisma.activity.create({
+      data: {
+        organizationId: orgId,
+        entityType: 'Proposal',
+        entityId: doc.proposalId,
+        actorId: req.user!.userId,
+        verb: 'proposal_document_review_withdrawn',
+        payload: { n: doc.n },
       },
     });
     const fresh = await prisma.proposalDocument.findUniqueOrThrow({ where: { id: doc.id }, include: documentInclude });

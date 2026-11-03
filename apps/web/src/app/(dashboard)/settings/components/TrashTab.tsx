@@ -10,8 +10,13 @@
  *
  * ─── On permissions ─────────────────────────────────────────────────────────
  *
- * The routes are not one tier. Projects, costs and assets are setup.admin;
- * proposals are pipeline.write; leads are company.write. The old
+ * The routes are not one tier: whoever can delete a thing can put it back.
+ * Proposals are pipeline.write, leads company.write, costs cost.enter, assets
+ * asset.manage, projects setup.admin (only an admin can delete one). Costs and
+ * assets were setup.admin until 30 Oct 2026, and this lived only in Settings,
+ * which nobody but an admin can open — so every "it can be restored" in a
+ * delete dialog meant "ask an admin". It is also its own page now, /trash,
+ * linked from the account menu. The old
  * version fetched all of them and swallowed every failure into an empty array,
  * so somebody without setup.admin was told "Nothing in the trash" when the
  * truth was "you cannot see it" — the one answer a recovery screen must never
@@ -111,8 +116,8 @@ const SECTIONS: Section[] = [
   {
     key: 'costs',
     heading: 'Costs',
-    permission: 'setup.admin',
-    needs: 'admin',
+    permission: 'cost.enter',
+    needs: 'cost entry',
     noun: 'Cost',
     load: async () =>
       (await api.costs.trash()).costs.map((c: any) => ({
@@ -126,8 +131,8 @@ const SECTIONS: Section[] = [
   {
     key: 'assets',
     heading: 'Assets',
-    permission: 'setup.admin',
-    needs: 'admin',
+    permission: 'asset.manage',
+    needs: 'asset management',
     noun: 'Asset',
     load: async () =>
       (await api.assets.trash()).assets.map((a: any) => ({
@@ -149,8 +154,10 @@ export function TrashTab() {
   const [failed, setFailed] = useState<string[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  const allowed = SECTIONS.filter((s) => !s.permission || perms.includes(s.permission));
-  const withheld = SECTIONS.filter((s) => s.permission && !perms.includes(s.permission));
+  // setup.admin answers yes to everything on the server, so it does here.
+  const can = (s: Section) => !s.permission || perms.includes(s.permission) || perms.includes('setup.admin');
+  const allowed = SECTIONS.filter(can);
+  const withheld = SECTIONS.filter((s) => !can(s));
 
   const load = useCallback(async () => {
     const broke: string[] = [];
@@ -193,11 +200,24 @@ export function TrashTab() {
 
   const total = Object.values(rows).reduce((n, list) => n + list.length, 0);
 
+  if (allowed.length === 0) {
+    return (
+      <Card>
+        <EmptyState
+          title="Nothing here for you to restore"
+          hint="Trash holds deleted proposals, leads, costs, assets and projects. Putting one back needs the access that deleted it."
+        />
+      </Card>
+    );
+  }
+
   const NotShown = () =>
     withheld.length === 0 ? null : (
       <p className="text-micro text-secondary">
-        {withheld.map((s) => s.heading.toLowerCase()).join(', ')} are not shown here — putting those back needs{' '}
-        {withheld[0].needs} access.
+        {withheld
+          .map((s, i) => `${i === 0 ? s.heading : s.heading.toLowerCase()} (${s.needs} access)`)
+          .join(', ')}{' '}
+        {withheld.length === 1 ? 'is' : 'are'} not shown here — putting one back needs the access in brackets.
       </p>
     );
 

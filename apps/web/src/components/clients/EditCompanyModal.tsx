@@ -20,13 +20,7 @@ import { Field, FieldSelect } from '@/components/ui/field';
 import { ErrorNote } from '@/components/ui/empty-state';
 import { personOptions } from '@/lib/people';
 import { STATE_OPTIONS } from '@/components/documents/DocumentFields';
-
-const VERTICALS = [
-  'HEALTHCARE', 'REAL_ESTATE', 'D2C', 'SPORTS', 'IT_AND_SAAS', 'RETAIL', 'B2B', 'HOSPITALITY',
-] as const;
-const SOURCES = ['OUTREACH', 'REFERRAL', 'INBOUND', 'PARTNER_AGENCY', 'NETWORK'] as const;
-
-const titleCase = (s: string) => s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+import { INDUSTRY_OPTIONS, SOURCE_OPTIONS, industryOption, sourceOption } from '@/lib/vertical';
 
 type Company = {
   id: string;
@@ -54,8 +48,16 @@ export function EditCompanyModal({ company, onConfirm, onCancel }: Props) {
   const [members, setMembers] = useState<{ value: string; label: string }[]>([]);
 
   const [name, setName] = useState(company.name ?? '');
-  const [vertical, setVertical] = useState(company.vertical ?? 'B2B');
-  const [source, setSource] = useState(company.source ?? 'OUTREACH');
+  /*
+   * The same industry and source lists the lead form uses (lib/vertical).
+   *
+   * This form kept its own eight-item list of the old codes — HEALTHCARE,
+   * IT_AND_SAAS — long after a company's industry became one of sixty-seven
+   * names. The industry a lead was created with, and carried onto the company,
+   * matched none of them, so Edit opened showing no industry at all.
+   */
+  const [vertical, setVertical] = useState(() => industryOption(company.vertical));
+  const [source, setSource] = useState(() => sourceOption(company.source));
   const [city, setCity] = useState(company.city ?? '');
   const [website, setWebsite] = useState(company.website ?? '');
   const [gstin, setGstin] = useState(company.gstin ?? '');
@@ -79,7 +81,8 @@ export function EditCompanyModal({ company, onConfirm, onCancel }: Props) {
     try {
       await api.companies.update(company.id, {
         name: name.trim(),
-        vertical,
+        // Unchanged when it was never one of the list and nobody picked one.
+        ...(vertical ? { vertical } : {}),
         source,
         city: city.trim(),
         website: website.trim() || null,
@@ -116,14 +119,15 @@ export function EditCompanyModal({ company, onConfirm, onCancel }: Props) {
               label="Industry"
               value={vertical}
               onChange={setVertical}
-              options={VERTICALS.map((v) => ({ value: v, label: titleCase(v) }))}
+              options={INDUSTRY_OPTIONS}
+              placeholder="Select industry…"
               disabled={busy}
             />
             <FieldSelect
               label="Source"
               value={source}
               onChange={setSource}
-              options={SOURCES.map((s) => ({ value: s, label: titleCase(s) }))}
+              options={SOURCE_OPTIONS}
               disabled={busy}
             />
           </div>

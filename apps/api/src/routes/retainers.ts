@@ -12,6 +12,7 @@ import { parsePagination } from '../utils/query.js';
 import { toCsv } from '../utils/csv.js';
 import { sendCsv } from '../utils/csvResponse.js';
 import { changesBetween } from '../utils/activityDiff.js';
+import { codeWord } from '../utils/codeWords.js';
 
 export const retainersRouter = Router();
 
@@ -290,7 +291,7 @@ retainersRouter.get('/', requirePermission('work.all'), async (req: AuthRequest,
         { label: 'Start date', value: (r) => r.startDate.toISOString().slice(0, 10) },
         { label: 'Term (months)', value: (r) => r.termMonths ?? '' },
         { label: 'Renewal date', value: (r) => (r.renewalDate ? r.renewalDate.toISOString().slice(0, 10) : '') },
-        { label: 'Status', value: (r) => r.status },
+        { label: 'Status', value: (r) => codeWord(r.status) },
         { label: 'Owner', value: (r) => r.owner.name },
         { label: 'No fixed term risk', value: (r) => (r.noFixedTermRisk ? 'Yes' : 'No') },
         { label: 'Projects running', value: (r) => r.activeProjectCount },
@@ -1323,6 +1324,106 @@ retainersRouter.post('/:id/stop', requirePermission('company.write'), async (req
   }
 });
 
+// ── 5b. Resume a stopped Retainer ───────────────────────────────────────────
+//
+// Stopping was for ever. A client who paused for a quarter and came back had
+// to be set up as a brand-new retainer — its projects, rate, owner and history
+// left behind on the old one. This puts the same retainer back on.
+//
+// Its stopped months stay closed: their work and billing are settled, and
+// reopening one is the admin's month reopen. This month gets a card if it has
+// none, as a new retainer would; the 1st-of-month roll does the rest. The
+// company is a client again — it has a live retainer.
+
+retainersRouter.post('/:id/resume', requirePermission('company.write'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const id = String(req.params.id);
+
+    const retainer = await prisma.retainer.findFirst({
+      where: { id, organizationId: orgId },
+      include: { company: { select: { id: true, name: true, status: true, archivedAt: true } } },
+    });
+    if (!retainer) {
+      res.status(404).json({ success: false, error: 'Retainer not found' });
+      return;
+    }
+    if (retainer.status !== RetainerStatus.STOPPED) {
+      res.status(409).json({ success: false, error: 'This retainer is already running.' });
+      return;
+    }
+    if (retainer.company.archivedAt) {
+      res.status(409).json({
+        success: false,
+        error: `${retainer.company.name} has been removed. Make the company active again first.`,
+      });
+      return;
+    }
+    // One live retainer per client, as when starting one.
+    const running = await prisma.retainer.findFirst({
+      where: { companyId: retainer.companyId, organizationId: orgId, status: RetainerStatus.ACTIVE },
+      select: { id: true },
+    });
+    if (running) {
+      res.status(409).json({
+        success: false,
+        error: `${retainer.company.name} already has an active retainer. End that one before resuming this.`,
+      });
+      return;
+    }
+
+    const thisMonth = monthKey(new Date());
+    const started = monthKey(retainer.startDate) <= thisMonth;
+    const card = started
+      ? await prisma.monthCard.findUnique({ where: { retainerId_month: { retainerId: id, month: thisMonth } } })
+      : null;
+
+    const resumed = await prisma.$transaction(async (tx) => {
+      const updated = await tx.retainer.update({
+        where: { id },
+        data: { status: RetainerStatus.ACTIVE, stoppedAt: null, stopReason: null },
+      });
+      const opened =
+        started && !card
+          ? await tx.monthCard.create({
+              data: { retainerId: id, month: thisMonth, revenue: retainer.monthlyValue, status: 'OPEN' },
+            })
+          : null;
+      const becameClient = retainer.company.status !== CompanyStatus.CLIENT;
+      if (becameClient) {
+        await tx.company.update({ where: { id: retainer.companyId }, data: { status: CompanyStatus.CLIENT } });
+      }
+      await tx.activity.create({
+        data: {
+          organizationId: orgId,
+          entityType: 'Retainer',
+          entityId: id,
+          actorId: req.user!.userId,
+          verb: 'retainer_resumed',
+          payload: {
+            companyName: retainer.company.name,
+            // Why it had stopped, kept with the row that undid it.
+            stoppedFor: retainer.stopReason,
+            ...(opened ? { monthOpened: thisMonth } : {}),
+            ...(becameClient ? { companyStatusFrom: retainer.company.status, companyStatusTo: CompanyStatus.CLIENT } : {}),
+          },
+        },
+      });
+      return { updated, opened };
+    });
+
+    res.json({
+      success: true,
+      retainer: resumed.updated,
+      // Said back, so the screen can tell somebody this month's card is closed.
+      monthOpened: resumed.opened ? thisMonth : null,
+      thisMonthClosed: Boolean(card && card.status === 'CLOSED'),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // ── 6. Edit a Retainer ──────────────────────────────────────────────────────
 //
 // A retainer could be started and stopped but never corrected, so a rate
@@ -1408,7 +1509,7 @@ retainersRouter.patch('/:id', requirePermission('company.write'), async (req: Au
     if (existing.status !== RetainerStatus.ACTIVE) {
       res.status(400).json({
         success: false,
-        error: 'This retainer has been stopped. Start a new one rather than editing a closed arrangement.',
+        error: 'This retainer has been stopped. Resume it first to change it.',
       });
       return;
     }

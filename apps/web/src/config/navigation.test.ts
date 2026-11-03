@@ -215,7 +215,9 @@ describe('every screen in the app is behind the guard, not just the listed ones'
   const DASHBOARD = join(HERE, '..', 'app', '(dashboard)');
 
   /** Deliberately open, each for a reason — same three the sidebar allows. */
-  const OPEN = new Set(['/my-work', '/profile', '/assets']);
+  // Trash: each section asks for the access that deleted it (TrashTab), and
+  // the server refuses the rest — there is no one permission for the page.
+  const OPEN = new Set(['/my-work', '/profile', '/assets', '/trash']);
 
   it('gates every route under (dashboard) that is not deliberately open', () => {
     const routes = readdirSync(DASHBOARD, { withFileTypes: true })

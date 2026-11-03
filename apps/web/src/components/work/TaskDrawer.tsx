@@ -31,7 +31,7 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { Pencil, Trash2 } from 'lucide-react';
 import { api, formatDate, type InternalProject } from '@/lib/api-v2';
-import { useConfirmStore } from '@/stores';
+import { useAuthStore, useConfirmStore } from '@/stores';
 import { Drawer } from '@/components/ui/drawer';
 import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
@@ -58,6 +58,13 @@ export type DrawerTask = {
   workType?: string;
   /** Which piece of the studio's own work it is filed under, if any. */
   internalProjectId?: string | null;
+  /** The piece of retainer work it sits in. */
+  retainerProjectId?: string | null;
+  /** Its retainer: All tasks sends it flat, My Work inside its month card. */
+  retainerId?: string | null;
+  monthCard?: { retainerId?: string | null } | null;
+  /** The client. On an internal task, the one it is about, if any. */
+  companyId?: string | null;
   priority: string;
   dueDate: string;
   /** Optional, "17:30". */
@@ -163,6 +170,16 @@ export function TaskDrawer({
   const [internalProjects, setInternalProjects] = useState<InternalProject[]>([]);
   const [internalProjectId, setInternalProjectId] = useState('');
   /*
+   * Which piece of a retainer's work it sits in, and which client an internal
+   * task is about. Both were set when the task was made and fixed after — a
+   * task filed under the wrong campaign, or a follow-up made without its
+   * client, stayed that way.
+   */
+  const [retainerProjects, setRetainerProjects] = useState<{ id: string; name: string; status: string }[]>([]);
+  const [retainerProjectId, setRetainerProjectId] = useState('');
+  const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
+  const [clientId, setClientId] = useState('');
+  /*
    * What was just saved, shown at once.
    *
    * The drawer showed the task it was handed, and a save only told the screen
@@ -192,7 +209,33 @@ export function TaskDrawer({
     setPriority(taskProp?.priority ?? 'MEDIUM');
     setNotes(taskProp?.notes ?? '');
     setInternalProjectId(taskProp?.internalProjectId ?? '');
+    setRetainerProjectId(taskProp?.retainerProjectId ?? '');
+    setClientId(taskProp?.companyId ?? '');
   }, [taskProp]);
+
+  const retainerOf = taskProp?.retainerId ?? taskProp?.monthCard?.retainerId ?? null;
+  // Which piece of a client's work a task sits in is a head's call — the same
+  // `work.all` that lists a retainer's projects at all.
+  const canRefile = useAuthStore((s) =>
+    Boolean(s.user?.permissions?.some((p) => p === 'work.all' || p === 'setup.admin')),
+  );
+  useEffect(() => {
+    if (taskProp?.workType !== 'MONTH_CARD' || !retainerOf || !canRefile) return;
+    void api.retainers
+      .projects(retainerOf)
+      .then((res) => setRetainerProjects(res.projects))
+      .catch(() => {});
+  }, [taskProp?.workType, retainerOf, canRefile]);
+
+  // Only when the row said which client it has — otherwise a save would clear one.
+  const knowsClient = taskProp?.workType === 'INTERNAL' && taskProp.companyId !== undefined;
+  useEffect(() => {
+    if (!knowsClient) return;
+    void api.companies
+      .list()
+      .then((res) => setClients(res.companies))
+      .catch(() => {});
+  }, [knowsClient]);
 
   // Only for an internal task, and only the open buckets. Nothing else has a
   // use for this list, and asking for it on every task would be a request per
@@ -231,6 +274,11 @@ export function TaskDrawer({
         // than cleared by every save.
         taskType: taskType || null,
         ...(task.workType === 'INTERNAL' ? { internalProjectId: internalProjectId || null } : {}),
+        // Only when changed here, and only when the row said what it was.
+        ...(retainerProjects.length > 0 && retainerProjectId !== (task.retainerProjectId ?? '')
+          ? { retainerProjectId: retainerProjectId || null }
+          : {}),
+        ...(knowsClient && clientId !== (task.companyId ?? '') ? { companyId: clientId || null } : {}),
         // Sent whenever there is a set. The server refuses a reassignment from
         // somebody who may not make one, which is the check that counts.
         ...(assigneeIds.length > 0 ? { assigneeIds } : {}),
@@ -250,6 +298,13 @@ export function TaskDrawer({
         notes: notes.trim() || null,
         taskType: row?.taskType ?? (taskType || null),
         ...(task.workType === 'INTERNAL' ? { internalProjectId: internalProjectId || null } : {}),
+        ...(retainerProjects.length > 0 ? { retainerProjectId: retainerProjectId || null } : {}),
+        ...(knowsClient
+          ? {
+              companyId: clientId || null,
+              clientName: clients.find((c) => c.id === clientId)?.name ?? (clientId ? task.clientName : 'Internal'),
+            }
+          : {}),
         ...(team.length > 0 ? { assignees: team, assignee: team[0] } : {}),
         ...(assignedById && person(assignedById) ? { assignedBy: person(assignedById) } : {}),
       });
@@ -284,7 +339,7 @@ export function TaskDrawer({
   const remove = async () => {
     const ok = await confirm({
       title: 'Delete this task?',
-      message: `"${task.title}" will be deleted. This can't be undone.`,
+      message: `"${task.title}" will be deleted. You can undo it for a few seconds afterwards.`,
       confirmText: 'Delete',
       variant: 'danger',
     });
@@ -294,7 +349,32 @@ export function TaskDrawer({
       await api.tasks.remove(task.id);
       onClose();
       onChanged();
-      toast.success('Task deleted');
+      // Undo for a few seconds — the moment you want it back is the second after it goes.
+      const id = task.id;
+      toast.success(
+        (t) => (
+          <span className="flex items-center gap-3">
+            Task deleted
+            <button
+              type="button"
+              className="font-semibold underline underline-offset-2"
+              onClick={() => {
+                toast.dismiss(t.id);
+                void api.tasks
+                  .restore(id)
+                  .then(() => {
+                    toast.success('Task brought back');
+                    onChanged();
+                  })
+                  .catch((e) => toast.error(e instanceof Error ? e.message : 'Could not bring it back'));
+              }}
+            >
+              Undo
+            </button>
+          </span>
+        ),
+        { duration: 8000 },
+      );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not delete that task');
     }
@@ -361,6 +441,29 @@ export function TaskDrawer({
                     ...internalProjects.map((ip) => ({ value: ip.id, label: ip.name })),
                   ]}
                   hint="An internal project, or No project for a one-off studio job."
+                />
+              )}
+              {task.workType === 'MONTH_CARD' && retainerProjects.length > 0 && (
+                <FieldSelect
+                  label="Retainer project"
+                  value={retainerProjectId || 'none'}
+                  onChange={(v) => setRetainerProjectId(v === 'none' ? '' : v)}
+                  options={[
+                    { value: 'none', label: 'Not under a project' },
+                    ...retainerProjects
+                      .filter((rp) => rp.status === 'ACTIVE' || rp.id === task.retainerProjectId)
+                      .map((rp) => ({ value: rp.id, label: rp.name })),
+                  ]}
+                  hint="Which piece of this client's work it belongs to."
+                />
+              )}
+              {knowsClient && clients.length > 0 && (
+                <FieldSelect
+                  label="Client it is about"
+                  value={clientId || 'none'}
+                  onChange={(v) => setClientId(v === 'none' ? '' : v)}
+                  options={[{ value: 'none', label: 'None — studio work' }, ...clients.map((c) => ({ value: c.id, label: c.name }))]}
+                  hint="A follow-up or pitch shows on that client's page. Not billed to them."
                 />
               )}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

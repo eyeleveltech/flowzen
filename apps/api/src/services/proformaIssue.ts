@@ -216,7 +216,14 @@ export async function issueProforma(orgId: string, actorId: string, input: Profo
   // company. It is fetched anyway now, for the buyer state to default from.
   const company = await prisma.company.findFirst({
     where: { id: companyId, organizationId: orgId },
-    select: { billingAddress: true, gstin: true, stateName: true, stateCode: true },
+    select: {
+      billingAddress: true,
+      gstin: true,
+      stateName: true,
+      stateCode: true,
+      // Who pays — what the monthly batch already addresses its proformas to.
+      people: { where: { role: 'PAYER', active: true }, orderBy: { createdAt: 'asc' }, select: { name: true }, take: 1 },
+    },
   });
   if (!company) throw new ProformaRefusal(404, 'Company not found');
 
@@ -239,7 +246,9 @@ export async function issueProforma(orgId: string, actorId: string, input: Profo
     gstRatePercent,
     buyer: {
       name: billingName,
-      contactName: billingContactName,
+      // Left blank: the contact marked Payer. A hand-raised proforma ignored
+      // the role and went out addressed to nobody in particular.
+      contactName: billingContactName || company.people[0]?.name || null,
       address: billingAddress || company.billingAddress,
       gstin: gstin || company.gstin,
       stateName: billingStateName ?? company.stateName,

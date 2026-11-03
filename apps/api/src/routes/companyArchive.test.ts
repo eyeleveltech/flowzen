@@ -145,3 +145,41 @@ describe('removing a company', () => {
     expect(res.status).toBe(404);
   });
 });
+
+/**
+ * Bringing a past client back. Past was one-way: the remove dialog made a
+ * company past and nothing took it back. It returns by the scanner's rule —
+ * Client if it has ever had work with us, otherwise Prospect.
+ */
+describe('making a past client active again', () => {
+  const reactivate = () => request(app).post('/api/companies/co-1/reactivate').set(...auth());
+
+  beforeEach(() => {
+    (prisma.company.findFirst as any).mockResolvedValue(company({ status: 'PAST' }));
+    (prisma.company.update as any).mockImplementation(async ({ data }: any) => company(data));
+    (prisma.activity.create as any).mockResolvedValue({});
+  });
+
+  it('is a client again when they have had work with us', async () => {
+    holds({ retainer: 1 });
+    const res = await reactivate();
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('CLIENT');
+    expect((prisma.company.update as any).mock.calls[0][0].data).toEqual({ status: 'CLIENT' });
+    // Logged as the edit form logs a status change, so the history reads "Past client → Client".
+    expect((prisma.activity.create as any).mock.calls[0][0].data.payload.changed).toEqual({ status: { from: 'PAST', to: 'CLIENT' } });
+  });
+
+  it('is a prospect again when they never had any', async () => {
+    holds();
+    const res = await reactivate();
+    expect(res.body.status).toBe('PROSPECT');
+  });
+
+  it('refuses a company that is not a past client', async () => {
+    (prisma.company.findFirst as any).mockResolvedValue(company({ status: 'CLIENT' }));
+    const res = await reactivate();
+    expect(res.status).toBe(409);
+    expect(prisma.company.update).not.toHaveBeenCalled();
+  });
+});

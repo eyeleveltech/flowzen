@@ -101,6 +101,11 @@ teamRouter.get('/capacity', requirePermission('work.team'), async (req: AuthRequ
                 assignedAt: true,
                 completedAt: true,
                 waitingTotalMinutes: true,
+                // Who it is waiting on, and whether it has a client to wait on.
+                waitingOn: true,
+                monthCardId: true,
+                projectId: true,
+                companyId: true,
               },
             },
           },
@@ -112,11 +117,21 @@ teamRouter.get('/capacity', requirePermission('work.team'), async (req: AuthRequ
     const calendar = await loadWorkCalendar(orgId);
     const todayStr = now.toISOString().slice(0, 10);
 
+    /*
+     * The tile above the table said "Waiting on Clients — not your team's
+     * delay" and counted every task on hold, including the ones waiting on a
+     * colleague or on us. The brief counts client holds only; so does this.
+     * Each task once, however many people share it — a total of per-person
+     * counts would count a three-person task three times.
+     */
+    const onClient = new Set<string>();
+
     const formatted = members.map((m) => {
       const mine = m.taskAssignments.map((a) => a.task);
       const openTasks = mine.filter((t) => t.status !== 'DONE' && t.status !== 'CANCELLED');
       const overdueTasks = openTasks.filter((t) => new Date(t.dueDate).toISOString().slice(0, 10) < todayStr);
       const waitingTasks = mine.filter((t) => t.status === 'ON_HOLD');
+      for (const t of waitingTasks) if (waitingOnShown(t) === 'CLIENT') onClient.add(t.id);
       const completedTasks = mine.filter((t) => t.status === 'DONE');
 
       // Calculate average turnaround in working hours for completed tasks
@@ -182,6 +197,7 @@ teamRouter.get('/capacity', requirePermission('work.team'), async (req: AuthRequ
       success: true,
       departments,
       members: formatted,
+      waitingOnClientCount: onClient.size,
     });
   } catch (error) {
     next(error);

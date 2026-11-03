@@ -867,7 +867,7 @@ export default function SettingsPage() {
         {tab === 'team' && (
           <SectionCard
             title="The people here"
-            description="Read-only — inviting somebody, editing their details and changing what they can reach all happen on the Team screen."
+            description="Read-only — inviting somebody, resending an invitation, switching somebody back on, editing their details and changing what they can reach all happen on the Team screen."
             aside={
               <Link href="/members">
                 <Button size="sm">Open Team</Button>

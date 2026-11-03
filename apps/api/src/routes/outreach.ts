@@ -2,7 +2,7 @@ import { Router, type Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, requirePermission, type AuthRequest } from '../middleware/auth.js';
-import { CompanyStatus, OutreachStatus, Prisma } from '@prisma/client';
+import { CompanyStatus, OutreachStatus, Prisma, TaskStatus, TaskWorkType } from '@prisma/client';
 import { DEFAULT_LEAD_SOURCE } from '@flowzen/shared';
 import { parsePagination } from '../utils/query.js';
 import { toCsv, parseCsv } from '../utils/csv.js';
@@ -25,6 +25,7 @@ import {
   studioToday,
   touchSchema,
 } from '../services/salesFollowUp.js';
+import { codeWord, listWord } from '../utils/codeWords.js';
 
 export const outreachRouter = Router();
 
@@ -157,10 +158,10 @@ outreachRouter.get('/', requirePermission('company.read'), async (req: AuthReque
     if (wantsCsv) {
       const csv = toCsv(entries, [
         { label: 'Name', value: (e) => e.name },
-        { label: 'Vertical', value: (e) => e.vertical },
-        { label: 'Source', value: (e) => e.source },
+        { label: 'Industry', value: (e) => listWord(e.vertical) },
+        { label: 'Source', value: (e) => listWord(e.source) },
         { label: 'Owner', value: (e) => e.owner?.name ?? '' },
-        { label: 'Status', value: (e) => e.status },
+        { label: 'Status', value: (e) => codeWord(e.status) },
         { label: 'Promoted to', value: (e) => e.promotedCompany?.name ?? '' },
         { label: 'Imported', value: (e) => e.importedAt.toISOString().slice(0, 10) },
       ]);
@@ -702,7 +703,13 @@ async function setLeadLastContact(orgId: string, actorId: string, ids: string[],
  */
 const promoteSchema = z.object({
   companyName: z.string().trim().min(1).max(200).optional(),
-  city: z.string().default('Chennai'),
+  /*
+   * Asked, not assumed. It defaulted to Chennai, so every client outside it
+   * was filed there unless somebody noticed the prefilled box.
+   */
+  city: z.string().trim().min(1, 'Say which city they are in').max(120),
+  /** What the contact is: Contact, Approver or Payer. It was always written as Contact. */
+  contactRole: z.enum(['CONTACT', 'APPROVER', 'PAYER']).default('CONTACT'),
   vertical: industrySchema.optional(),
   ownerId: z.string().min(1).optional(),
   contactName: z.string().optional(),
@@ -851,7 +858,7 @@ outreachRouter.post('/:id/promote', requirePermission('company.write'), async (r
       res.status(400).json({ success: false, error: parsed.error.issues[0].message });
       return;
     }
-    const { companyName, city, vertical, ownerId, contactName, contactEmail, contactPhone, force } = parsed.data;
+    const { companyName, city, vertical, ownerId, contactName, contactEmail, contactPhone, contactRole, force } = parsed.data;
 
     // Everything falls back to what the lead already knows.
     const name = (companyName || entry.name).trim();
@@ -889,6 +896,9 @@ outreachRouter.post('/:id/promote', requirePermission('company.write'), async (r
       return;
     }
 
+    // Read before the transaction: the follow-up's due date when none was agreed.
+    const promotedOn = await studioToday(orgId);
+
     const result = await prisma.$transaction(async (tx) => {
       const company = await tx.company.create({
         data: {
@@ -897,7 +907,7 @@ outreachRouter.post('/:id/promote', requirePermission('company.write'), async (r
           vertical: useVertical,
           source: entry.source,
           ownerId: useOwner,
-          city: city || 'Chennai',
+          city,
           status: CompanyStatus.PROSPECT,
         },
       });
@@ -912,9 +922,40 @@ outreachRouter.post('/:id/promote', requirePermission('company.write'), async (r
             name: personName || name,
             email: personEmail || null,
             phone: personPhone || null,
-            role: 'CONTACT',
+            role: contactRole,
           },
         });
+      }
+
+      /*
+       * The step agreed with them, kept.
+       *
+       * A lead's next step lives on the lead, and the lead leaves every list
+       * the moment it is promoted — so "send the deck by Friday" vanished at
+       * exactly the point the deal got real. It becomes a follow-up task for
+       * the owner, on the company, the same shape the company form and
+       * "Schedule a follow-up" write. No date was agreed: due today.
+       */
+      let followUpTaskId: string | null = null;
+      const step = entry.nextStep?.trim();
+      if (step) {
+        const followUp = await tx.task.create({
+          data: {
+            organizationId: orgId,
+            title: `${step} — ${name}`,
+            workType: TaskWorkType.INTERNAL,
+            companyId: company.id,
+            assigneeId: useOwner,
+            createdById: req.user!.userId,
+            assignedById: req.user!.userId,
+            dueDate: entry.nextActionDate ?? asStoredDay(promotedOn),
+            assignedAt: new Date(),
+            status: TaskStatus.TODO,
+            notes: `The next step agreed while ${entry.name} was a lead.`,
+            assignees: { create: { userId: useOwner } },
+          },
+        });
+        followUpTaskId = followUp.id;
       }
 
       /*
@@ -941,11 +982,11 @@ outreachRouter.post('/:id/promote', requirePermission('company.write'), async (r
           entityId: company.id,
           actorId: req.user!.userId,
           verb: 'outreach_promoted',
-          payload: { outreachId: entry.id, companyName: company.name },
+          payload: { outreachId: entry.id, companyName: company.name, ...(followUpTaskId ? { followUpTaskId } : {}) },
         },
       });
 
-      return { company, entry: updatedEntry };
+      return { company, entry: updatedEntry, followUpTaskId };
     });
 
     res.status(201).json({ success: true, ...result });

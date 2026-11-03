@@ -25,6 +25,7 @@ import {
   cleanCustomFields,
   ORG_DOCUMENT_SELECT,
 } from '../utils/documentSchemas.js';
+import { codeWord } from '../utils/codeWords.js';
 
 export const invoicesRouter = Router();
 
@@ -153,7 +154,7 @@ invoicesRouter.get('/', requirePermission('money.status'), async (req: AuthReque
       const csv = toCsv(data, [
         { label: 'Number', value: (i) => i.number },
         { label: 'Company', value: (i) => i.company.name },
-        { label: 'Status', value: (i) => i.status },
+        { label: 'Status', value: (i) => codeWord(i.status) },
         { label: 'Amount', value: (i) => i.amount ?? '' },
         { label: 'GST', value: (i) => i.gstAmount ?? '' },
         { label: 'Total paid', value: (i) => i.totalPaid ?? '' },

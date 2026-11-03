@@ -33,6 +33,7 @@ import {
   touchSchema,
 } from '../services/salesFollowUp.js';
 import { ACTIVE_DEAL_WHERE, activeDealTotals, isActiveDeal } from '../services/activeDeal.js';
+import { codeWord, STAGE_WORD } from '../utils/codeWords.js';
 
 export const proposalsRouter = Router();
 
@@ -475,10 +476,10 @@ proposalsRouter.get('/', requirePermission('pipeline.read'), async (req: AuthReq
     if (wantsCsv) {
       const csv = toCsv(proposals, [
         { label: 'Company', value: (p) => p.company.name },
-        { label: 'Kind', value: (p) => p.kind },
+        { label: 'Kind', value: (p) => codeWord(p.kind) },
         { label: 'Owner', value: (p) => p.owner.name },
-        { label: 'Stage', value: (p) => p.stage },
-        { label: 'Outcome', value: (p) => p.outcome ?? '' },
+        { label: 'Stage', value: (p) => codeWord(p.stage, STAGE_WORD) },
+        { label: 'Outcome', value: (p) => codeWord(p.outcome) },
         { label: 'Latest version value', value: (p) => (showValues && p.versions[0] ? Number(p.versions[0].value) : '') },
         { label: 'Lost reason', value: (p) => p.lostReason ?? '' },
         { label: 'Created', value: (p) => p.createdAt.toISOString().slice(0, 10) },
@@ -906,7 +907,7 @@ proposalsRouter.post('/:id/win', requirePermission('pipeline.write'), async (req
         error:
           proposal.outcome === ProposalOutcome.WON
             ? 'This deal is already won.'
-            : 'This deal was marked lost. Quote them again as a new proposal rather than reopening this one.',
+            : 'This deal was marked lost. Reopen it first, then win it.',
       });
       return;
     }
@@ -1154,6 +1155,92 @@ proposalsRouter.post('/:id/lose', requirePermission('pipeline.write'), async (re
   }
 });
 
+// ── 7b. Reopen a lost deal ──────────────────────────────────────────────────
+//
+// "Mark lost" was for ever. A mis-click, or a client who came back a week
+// later, left a deal counted as a defeat in the win rate with no way out but a
+// new proposal — which loses every version and note on this one.
+//
+// It goes back to the stage it was lost from, while that was a live stage. A
+// deal lost after it was won (its work already stopped) goes back to Verbal
+// yes — they did agree once — rather than to Won, which would claim work
+// that is not running. One lost before stages were recorded goes back to
+// Proposal sent. The reason it was lost stays in Activity, with this.
+
+const LIVE_STAGES: ProposalStage[] = [
+  ProposalStage.PROSPECT,
+  ProposalStage.PROPOSAL_SENT,
+  ProposalStage.IN_NEGOTIATION,
+  ProposalStage.PROFORMA_ISSUED,
+  ProposalStage.VERBAL_YES,
+];
+
+proposalsRouter.post('/:id/reopen', requirePermission('pipeline.write'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const id = String(req.params.id);
+
+    const existing = await prisma.proposal.findFirst({
+      where: { id, organizationId: orgId, deletedAt: null },
+      select: { id: true, outcome: true, lostReason: true, company: { select: { name: true, archivedAt: true } } },
+    });
+    if (!existing) {
+      res.status(404).json({ success: false, error: 'Proposal not found' });
+      return;
+    }
+    if (existing.outcome !== ProposalOutcome.LOST) {
+      res.status(409).json({ success: false, error: 'Only a lost deal can be reopened.' });
+      return;
+    }
+    if (existing.company.archivedAt) {
+      res.status(409).json({
+        success: false,
+        error: `${existing.company.name} has been removed. Make the company active again first.`,
+      });
+      return;
+    }
+
+    const lostRow = await prisma.activity.findFirst({
+      where: { organizationId: orgId, entityType: 'Proposal', entityId: id, verb: 'proposal_lost' },
+      orderBy: { at: 'desc' },
+      select: { payload: true },
+    });
+    const lostFrom = (lostRow?.payload as { lostFromStage?: string } | null)?.lostFromStage;
+    const stageTo = LIVE_STAGES.includes(lostFrom as ProposalStage)
+      ? (lostFrom as ProposalStage)
+      : lostFrom === ProposalStage.WON
+        ? ProposalStage.VERBAL_YES
+        : ProposalStage.PROPOSAL_SENT;
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const proposal = await tx.proposal.update({
+        where: { id },
+        data: { outcome: null, stage: stageTo, lostReason: null, lastTouchedAt: new Date() },
+      });
+      await tx.activity.create({
+        data: {
+          organizationId: orgId,
+          entityType: 'Proposal',
+          entityId: id,
+          actorId: req.user!.userId,
+          verb: 'proposal_reopened',
+          payload: {
+            companyName: existing.company.name,
+            stageFrom: ProposalStage.LOST,
+            stageTo,
+            lostReason: existing.lostReason,
+          },
+        },
+      });
+      return proposal;
+    });
+
+    res.json({ success: true, proposal: updated, stage: stageTo });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // ── 8. Edit a Proposal ──────────────────────────────────────────────────────
 //
 // Everything about it, in one form.
@@ -1181,6 +1268,8 @@ const proposalEditSchema = z
     value: z.number().min(0, 'The value cannot be negative').optional(),
     scopeSummary: z.string().max(5000).optional(),
     fileUrl: z.string().trim().max(2000).nullable().optional(),
+    /** Why it was lost — asked once when it was marked lost, and then never shown or correctable. */
+    lostReason: z.string().trim().min(1, 'Say why it was lost').max(2000).optional(),
     sentAt: z
       .string()
       .refine((v) => !Number.isNaN(Date.parse(v)), 'That date is not a real date')
@@ -1203,7 +1292,7 @@ proposalsRouter.patch('/:id', requirePermission('pipeline.write'), async (req: A
 
     const orgId = req.user!.organizationId;
     const id = String(req.params.id);
-    const { ownerId, kind, companyId, value, scopeSummary, fileUrl, sentAt, nextStep, nextStepDate } = parsed.data;
+    const { ownerId, kind, companyId, value, scopeSummary, fileUrl, sentAt, nextStep, nextStepDate, lostReason } = parsed.data;
 
     // Changing a figure means seeing it first.
     if (value !== undefined && !canSeeDealValues(req.user!)) {
@@ -1226,6 +1315,12 @@ proposalsRouter.patch('/:id', requirePermission('pipeline.write'), async (req: A
 
     // The version being corrected: the one that won, or the one on the table.
     const version = existing.wonVersion ?? existing.versions[0] ?? null;
+
+    if (lostReason !== undefined && existing.outcome !== ProposalOutcome.LOST) {
+      res.status(400).json({ success: false, error: 'Only a lost deal has a reason it was lost.' });
+      return;
+    }
+    const lostReasonChanged = lostReason !== undefined && lostReason !== (existing.lostReason ?? '');
 
     const ownerChanged = ownerId !== undefined && ownerId !== existing.ownerId;
     const kindChanged = kind !== undefined && kind !== existing.kind;
@@ -1274,7 +1369,7 @@ proposalsRouter.patch('/:id', requirePermission('pipeline.write'), async (req: A
         (step.data.nextStepDate ? dayKey(step.data.nextStepDate) : null) !==
           (existing.nextStepDate ? dayKey(existing.nextStepDate) : null));
 
-    if (!ownerChanged && !kindChanged && !companyChanged && !versionChanged && !stepChanged) {
+    if (!ownerChanged && !kindChanged && !companyChanged && !versionChanged && !stepChanged && !lostReasonChanged) {
       const { company: _company, versions: _versions, wonVersion: _won, ...unchanged } = existing;
       res.json({ success: true, proposal: unchanged });
       return;
@@ -1336,10 +1431,11 @@ proposalsRouter.patch('/:id', requirePermission('pipeline.write'), async (req: A
 
     const updated = await prisma.$transaction(async (tx) => {
       const proposal =
-        ownerChanged || kindChanged || companyChanged || stepChanged
+        ownerChanged || kindChanged || companyChanged || stepChanged || lostReasonChanged
           ? await tx.proposal.update({
               where: { id },
               data: {
+                ...(lostReasonChanged ? { lostReason } : {}),
                 ...(ownerChanged ? { ownerId } : {}),
                 ...(kindChanged ? { kind } : {}),
                 ...(companyChanged ? { companyId } : {}),
@@ -1354,7 +1450,7 @@ proposalsRouter.patch('/:id', requirePermission('pipeline.write'), async (req: A
           : version;
 
       const changed = {
-        ...changesBetween(existing, proposal, ['ownerId', 'kind', 'nextStep', 'nextStepDate']),
+        ...changesBetween(existing, proposal, ['ownerId', 'kind', 'nextStep', 'nextStepDate', 'lostReason']),
         ...(companyChanged && newCompany ? { company: { from: existing.company.name, to: newCompany.name } } : {}),
         ...(versionChanged && version && correctedVersion
           ? changesBetween(version, correctedVersion, ['value', 'scopeSummary', 'fileUrl', 'sentAt'])

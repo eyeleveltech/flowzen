@@ -17,6 +17,7 @@ import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Field, FieldSelect } from '@/components/ui/field';
 import { GstAmountFields, grossFromBase } from '@/components/work/GstAmountFields';
+import { CostTimingFields, TREATMENT_OPTIONS } from '@/components/work/CostTimingFields';
 import { ErrorNote } from '@/components/ui/empty-state';
 
 type CostType = 'DIRECT' | 'COMPANY' | 'CAPITAL';
@@ -30,11 +31,6 @@ const COMPANY_CATEGORIES = ['Office rent', 'Internet and utilities', 'Software',
 // Same escape hatch as the project and retainer form — see NewWorkCostModal.
 const OTHER_CATEGORY = 'Other';
 
-const TREATMENT_OPTIONS = [
-  { value: 'COMPANY_EXPENSE', label: 'Company expense' },
-  { value: 'AKMAL_LOAN', label: 'Akmal loan' },
-  { value: 'N_J_MACSON_LOAN', label: 'N J Macson loan' },
-];
 
 export function NewCostModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const [type, setType] = useState<CostType>('DIRECT');
@@ -53,6 +49,8 @@ export function NewCostModal({ onClose, onCreated }: { onClose: () => void; onCr
   /** The rate on the bill. '' is no GST, which is not 0%. */
   const [gstPercent, setGstPercent] = useState('');
   const [treatment, setTreatment] = useState('COMPANY_EXPENSE');
+  const [recurring, setRecurring] = useState(false);
+  const [committedNotPaid, setCommittedNotPaid] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -115,6 +113,8 @@ export function NewCostModal({ onClose, onCreated }: { onClose: () => void; onCr
         // The money that actually leaves, which is what every figure reads.
         gstPercent: gstPercent ? Number(gstPercent) : null,
         treatment,
+        recurring,
+        committedNotPaid,
         workType: type === 'DIRECT' ? selectedTarget?.workType : undefined,
         monthCardId: type === 'DIRECT' ? selectedTarget?.monthCardId : undefined,
         projectId: type === 'DIRECT' ? selectedTarget?.projectId : undefined,
@@ -208,6 +208,12 @@ export function NewCostModal({ onClose, onCreated }: { onClose: () => void; onCr
             <Field label="Company" value={paidBy} onChange={setPaidBy} required placeholder="Whose money it was" />
             <FieldSelect label="Treatment" value={treatment} onChange={setTreatment} required options={TREATMENT_OPTIONS} />
           </div>
+          <CostTimingFields
+            recurring={recurring}
+            onRecurringChange={setRecurring}
+            committedNotPaid={committedNotPaid}
+            onCommittedNotPaidChange={setCommittedNotPaid}
+          />
           {error && <ErrorNote>{error}</ErrorNote>}
         </ModalBody>
         <ModalFooter>

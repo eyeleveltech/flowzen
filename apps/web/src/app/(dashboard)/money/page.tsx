@@ -7,11 +7,13 @@ import { LoadError, Note } from '@/components/ui/empty-state';
 import { plural } from '@/lib/utils';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Trash2 } from 'lucide-react';
+import { Pencil, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api, fileUrl, formatMoney, type ProjectProfitRow, type ProjectProfitTotals } from '@/lib/api-v2';
 import { NewInvoiceModal } from '@/components/work/NewInvoiceModal';
 import { NewCostModal } from '@/components/work/NewCostModal';
+import { EditCostModal } from '@/components/work/EditCostModal';
+import { treatmentLabel } from '@/components/work/CostTimingFields';
 import { RecordPaymentModal } from '@/components/work/RecordPaymentModal';
 import { InvoiceActions } from '@/components/work/InvoiceActions';
 import { useIsAdmin } from '@/components/work/PaidInvoiceLock';
@@ -74,7 +76,11 @@ interface CostRow {
   amount: number | null;
   incurredAt: string;
   paidBy: string;
+  gstPercent: number | null;
   recurring: boolean;
+  recurringSourceId: string | null;
+  committedNotPaid: boolean;
+  treatment: string;
   confirmed: boolean;
   monthCard?: { retainer: { company: { name: string } } } | null;
   project?: { company: { name: string }; name: string } | null;
@@ -161,6 +167,13 @@ export default function MoneyPage() {
   const [documentInvoice, setDocumentInvoice] = useState<Invoice | null>(null);
   const [emailingInvoice, setEmailingInvoice] = useState<Invoice | null>(null);
   const [confirmingCost, setConfirmingCost] = useState<string | null>(null);
+  /*
+   * Company costs could be deleted here but not corrected — the edit form
+   * lived only on a project or month card, which a company cost has neither
+   * of. A wrong rent figure had to be deleted, and only an admin could bring
+   * it back from Trash.
+   */
+  const [editingCost, setEditingCost] = useState<CostRow | null>(null);
 
   // ── The period, for the figures at the top ──
   const [period, setPeriod] = useState<PeriodKey>('this-fy');
@@ -248,7 +261,7 @@ export default function MoneyPage() {
   const removeCost = async (c: CostRow) => {
     const ok = await confirmDialog({
       title: 'Delete this cost?',
-      message: `${c.category} — ${c.vendor}, ${c.amount != null ? formatMoney(c.amount) : 'no amount'}. It will be removed from the register immediately.`,
+      message: `${c.category} — ${c.vendor}, ${c.amount != null ? formatMoney(c.amount) : 'no amount'}. It comes off the register now; Trash, in your account menu, puts it back.`,
       confirmText: 'Delete cost',
       variant: 'danger',
     });
@@ -611,6 +624,11 @@ export default function MoneyPage() {
                         <td className="font-semibold text-primary">
                           {c.category}
                           {c.recurring && <span className="ml-1.5 text-micro text-secondary font-normal">↻ recurring</span>}
+                          {c.committedNotPaid && <span className="ml-1.5 text-micro text-warning-ink font-normal">not paid yet</span>}
+                          {/* A partner's loan, not the firm's money — chosen on entry and shown nowhere before. */}
+                          {c.treatment && c.treatment !== 'COMPANY_EXPENSE' && (
+                            <span className="ml-1.5 text-micro text-secondary font-normal">{treatmentLabel(c.treatment)}</span>
+                          )}
                         </td>
                         <td className="">
                           <span className={`text-micro font-medium px-2 py-0.5 rounded ${COST_TYPE_STYLE[c.type] ?? ''}`}>
@@ -632,6 +650,15 @@ export default function MoneyPage() {
                                 {confirmingCost === c.id ? 'Confirming…' : 'Confirm draft'}
                               </button>
                             )}
+                            <button
+                              onClick={() => setEditingCost(c)}
+                              disabled={confirmingCost === c.id || c.amount == null}
+                              title="Edit cost"
+                              aria-label="Edit cost"
+                              className="rounded-lg p-1.5 text-secondary hover:bg-subtle hover:text-primary transition-colors disabled:opacity-50"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </button>
                             <button
                               onClick={() => void removeCost(c)}
                               disabled={confirmingCost === c.id}
@@ -972,6 +999,17 @@ export default function MoneyPage() {
           onClose={() => setCreatingCost(false)}
           onCreated={() => {
             setCreatingCost(false);
+            void loadCosts();
+          }}
+        />
+      )}
+
+      {editingCost && (
+        <EditCostModal
+          cost={editingCost}
+          onClose={() => setEditingCost(null)}
+          onSaved={() => {
+            setEditingCost(null);
             void loadCosts();
           }}
         />

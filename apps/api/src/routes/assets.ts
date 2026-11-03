@@ -596,10 +596,13 @@ assetsRouter.get(
  * Same shape as the cost register's, and for the same reason: §16 mandates
  * soft delete, and a soft delete with no restore is a hard delete with extra
  * rows.
+ *
+ * `asset.manage`, the key that removes one — the person told "it goes to
+ * Trash and can be restored" is the one who can now restore it.
  */
 assetsRouter.get(
   '/trash',
-  requirePermission('setup.admin'),
+  requirePermission('asset.manage'),
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const assets = await prisma.asset.findMany({
@@ -616,7 +619,7 @@ assetsRouter.get(
 
 assetsRouter.post(
   '/:id/restore',
-  requirePermission('setup.admin'),
+  requirePermission('asset.manage'),
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const orgId = req.user!.organizationId;
@@ -1176,6 +1179,66 @@ assetsRouter.post(
       await logAsset(orgId, req.user!.userId, id, 'asset.retired', {
         tag: updated.tag,
         outcome: parsed.data.outcome,
+      });
+
+      res.json({ success: true, data: present(updated, hasPermission(req.user!, 'money.figures')) });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+/*
+ * Back into use: a lost camera that turned up, a laptop retired by mistake, a
+ * sale that fell through. Retired, sold and lost were final, so the register
+ * could only be put right by entering the same item again under a new tag.
+ * It comes back in stock; the disposal it undoes stays in its history.
+ */
+const reinstateSchema = z.object({
+  condition: z.nativeEnum(AssetCondition).optional(),
+  note: z.string().max(500).optional().nullable(),
+});
+
+assetsRouter.post(
+  '/:id/reinstate',
+  requirePermission('asset.manage'),
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const parsed = reinstateSchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        res.status(400).json({ success: false, error: parsed.error.issues[0].message });
+        return;
+      }
+      const orgId = req.user!.organizationId;
+      const id = String(req.params.id);
+
+      const existing = await prisma.asset.findFirst({ where: { id, organizationId: orgId, deletedAt: null } });
+      if (!existing) {
+        res.status(404).json({ success: false, error: 'Asset not found' });
+        return;
+      }
+      if (!['RETIRED', 'SOLD', 'LOST'].includes(existing.status)) {
+        res.status(409).json({ success: false, error: `${existing.tag} is already in use.` });
+        return;
+      }
+
+      const updated = await prisma.asset.update({
+        where: { id },
+        data: {
+          status: AssetStatus.IN_STOCK,
+          disposedAt: null,
+          disposalValue: null,
+          disposalNote: null,
+          ...(parsed.data.condition ? { condition: parsed.data.condition } : {}),
+        },
+        include: { currentHolder: holderSelect },
+      });
+
+      await logAsset(orgId, req.user!.userId, id, 'asset.reinstated', {
+        tag: updated.tag,
+        from: existing.status,
+        disposedAt: existing.disposedAt,
+        note: parsed.data.note?.trim() || null,
       });
 
       res.json({ success: true, data: present(updated, hasPermission(req.user!, 'money.figures')) });

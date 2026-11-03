@@ -6,7 +6,8 @@ import { ShowMore } from '@/components/ui/show-more';
 import { ErrorNote } from '@/components/ui/empty-state';
 import { useRouter, useSearchParams } from 'next/navigation';
 import toast from 'react-hot-toast';
-import { ApiError, api, fileUrl, type DuplicateVerdict } from '@/lib/api-v2';
+import { ApiError, api, fileUrl, formatDate, type DuplicateVerdict } from '@/lib/api-v2';
+import { CONTACT_ROLE_LABEL, CONTACT_ROLE_OPTIONS } from '@/lib/statusWords';
 import { DuplicateNotice } from '@/components/clients/DuplicateNotice';
 import { useTeamMembers } from '@/hooks/queries';
 import { ExportCsvButton } from '@/components/ui/export-csv-button';
@@ -313,7 +314,8 @@ export default function OutreachPage() {
 
   // Promote modal state
   const [promotingEntry, setPromotingEntry] = useState<OutreachItem | null>(null);
-  const [promoteCity, setPromoteCity] = useState('Chennai');
+  const [promoteCity, setPromoteCity] = useState('');
+  const [promoteContactRole, setPromoteContactRole] = useState('CONTACT');
   const [promoteName, setPromoteName] = useState('');
   const [promoteVertical, setPromoteVertical] = useState('');
   const [promoteOwnerId, setPromoteOwnerId] = useState('');
@@ -412,7 +414,7 @@ export default function OutreachPage() {
     const ok = await confirm({
       title: `Delete ${entry.name}?`,
       message:
-        'It comes off the outreach list and out of every count. Nothing is destroyed — Settings → Trash puts it back. ' +
+        'It comes off the outreach list and out of every count. Nothing is destroyed — Trash, in your account menu, puts it back. ' +
         'To record a lead that went nowhere, mark it Dead instead: that is what the Dead tab counts.',
       confirmText: 'Delete',
       variant: 'danger',
@@ -496,7 +498,10 @@ export default function OutreachPage() {
 
   const openPromote = (entry: OutreachItem) => {
     setPromotingEntry(entry);
-    setPromoteCity('Chennai');
+    // Asked, not assumed — it was prefilled Chennai, so every client
+    // elsewhere was filed there unless somebody noticed.
+    setPromoteCity('');
+    setPromoteContactRole('CONTACT');
     // Pre-filled from the lead and editable. Everything here was collected
     // while the lead was cold; the person promoting it has just met them and
     // is the one who knows the legal name and the right number.
@@ -510,12 +515,13 @@ export default function OutreachPage() {
   };
 
   const confirmPromote = async () => {
-    if (!promotingEntry || !promoteVertical) return;
+    if (!promotingEntry || !promoteVertical || !promoteCity.trim()) return;
     setPromoting(true);
     setPromoteVerdict(null);
     try {
       const res = await api.outreach.promote(promotingEntry.id, {
-        city: promoteCity.trim() || 'Chennai',
+        city: promoteCity.trim(),
+        contactRole: promoteContactRole,
         companyName: promoteName.trim() || undefined,
         vertical: promoteVertical || undefined,
         ownerId: promoteOwnerId || undefined,
@@ -1070,8 +1076,17 @@ export default function OutreachPage() {
       >
         <ModalBody>
           <Field label="Company name" value={promoteName} onChange={setPromoteName} required placeholder="Their legal name" />
-          <Field label="City" value={promoteCity} onChange={setPromoteCity} placeholder="Chennai" />
-          <Field label="Contact person" value={promoteContactName} onChange={setPromoteContactName} placeholder="Who we deal with" />
+          <Field label="City" value={promoteCity} onChange={setPromoteCity} required placeholder="Where they are, e.g. Coimbatore" />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Contact person" value={promoteContactName} onChange={setPromoteContactName} placeholder="Who we deal with" />
+            <FieldSelect
+              label="Their role"
+              value={promoteContactRole}
+              onChange={setPromoteContactRole}
+              // The short word — the half-width box cuts the explanations off.
+              options={CONTACT_ROLE_OPTIONS.map((o) => ({ value: o.value, label: CONTACT_ROLE_LABEL[o.value] }))}
+            />
+          </div>
           {/* Both carried over from the lead but editable here. The vertical
               was often a guess when the name was scraped, and the owner of a
               cold lead is not always who ends up running the account. */}
@@ -1096,6 +1111,14 @@ export default function OutreachPage() {
             <Field label="Contact email" type="email" value={promoteContactEmail} onChange={setPromoteContactEmail} placeholder="Optional" />
             <Field label="Contact phone" value={promoteContactPhone} onChange={setPromoteContactPhone} placeholder="Optional" />
           </div>
+          {/* The lead's next step does not vanish with the lead. */}
+          {promotingEntry?.nextStep?.trim() && (
+            <p className="rounded-xl border border-border bg-subtle/40 px-3 py-2.5 text-xs text-body">
+              Their next step — “{promotingEntry.nextStep.trim()}”
+              {promotingEntry.nextActionDate ? ` by ${formatDate(promotingEntry.nextActionDate)}` : ''} — becomes a
+              follow-up task for the owner, on the new company.
+            </p>
+          )}
           {/* A near-name clash can be overridden; a matching phone or email is
               the same company and cannot be. The server decides which. */}
           {promoteVerdict && (
@@ -1109,7 +1132,7 @@ export default function OutreachPage() {
         </ModalBody>
         <ModalFooter>
           <Button variant="ghost" disabled={promoting} onClick={() => setPromotingEntry(null)}>Cancel</Button>
-          <Button variant="primary" loading={promoting} disabled={!promoteVertical} onClick={() => void confirmPromote()}>
+          <Button variant="primary" loading={promoting} disabled={!promoteVertical || !promoteCity.trim()} onClick={() => void confirmPromote()}>
             Promote
           </Button>
         </ModalFooter>

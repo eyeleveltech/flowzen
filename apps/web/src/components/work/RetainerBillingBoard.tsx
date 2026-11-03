@@ -26,6 +26,7 @@ import { ErrorNote } from '@/components/ui/empty-state';
 import { TableRowsSkeleton } from '@/components/ui/skeleton-loaders';
 import { BillingNext } from '@/components/work/RetainerBilling';
 import { BILLING_LABEL, monthLabel } from '@/lib/retainerBilling';
+import { PROFORMA_STATUS_LABEL, PROFORMA_STATUS_TONE } from '@/lib/statusWords';
 
 const money = (v: number) => formatMoney(v, 'INR', 'en-IN');
 
@@ -281,13 +282,6 @@ function GroupHeading({ label }: { label: string }) {
   );
 }
 
-const PF_TONE: Record<string, 'good' | 'warn' | 'bad' | 'neutral'> = {
-  UNPAID: 'warn',
-  PAID: 'good',
-  EXPIRED: 'bad',
-  CANCELLED: 'neutral',
-};
-const PF_WORD: Record<string, string> = { UNPAID: 'Unpaid', PAID: 'Paid', EXPIRED: 'Expired', CANCELLED: 'Cancelled' };
 
 function BoardRow({
   r,
@@ -332,7 +326,7 @@ function BoardRow({
         {r.proforma ? (
           <span className="flex flex-col items-start gap-0.5">
             <span className="text-sm text-primary">{r.proforma.number}</span>
-            <Badge tone={PF_TONE[r.proforma.status]}>{PF_WORD[r.proforma.status]}</Badge>
+            <Badge tone={PROFORMA_STATUS_TONE[r.proforma.status]}>{PROFORMA_STATUS_LABEL[r.proforma.status]}</Badge>
           </span>
         ) : (
           <span className="text-xs text-secondary">{r.invoice ? '—' : 'Not raised'}</span>
