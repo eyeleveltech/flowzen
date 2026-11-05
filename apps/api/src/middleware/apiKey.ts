@@ -14,6 +14,7 @@ import {
   type ApiScope,
 } from '../services/apiKeys.js';
 import { logger } from '../utils/logger.js';
+import { ACCESS_PREFIX, resolveAccessToken, wwwAuthenticate } from '../services/oauth.js';
 
 /**
  * The door to /api/v1 and /api/mcp (API Plan 1, decisions 2 and 6).
@@ -27,10 +28,16 @@ import { logger } from '../utils/logger.js';
  * Once through, the request runs as the key's creator, exactly as if they had
  * made it in the app, and `req.apiKey.scopes` says which of their powers the
  * key carries.
+ *
+ * /api/mcp has a second door (API Plan 2): an access token from "Sign in with
+ * Flowzen" (`fz_at_…`), which Claude.ai and ChatGPT get through OAuth. It runs
+ * as the person who signed in, with the scopes they ticked, and its 401s carry
+ * the `WWW-Authenticate` pointer those apps follow to find the sign-in.
  */
 
 export interface ApiRequest extends AuthRequest {
-  apiKey?: { id: string; name: string; prefix: string; scopes: ApiScope[] };
+  /** Who is calling: a key (its id and name) or a connected app (its grant's id and the app's name). */
+  apiKey?: { kind: 'key' | 'connector'; id: string; name: string; prefix: string; scopes: ApiScope[] };
   /** The route pattern served, for the request log: "/v1/tasks/:id". Never the path itself. */
   apiRoute?: string;
 }
@@ -61,100 +68,159 @@ const quietly = (what: string, write: () => unknown) => {
     .catch((e) => logger.error(`API ${what}: ${e instanceof Error ? e.message : e}`));
 };
 
-export async function apiKeyAuth(req: ApiRequest, res: Response, next: NextFunction): Promise<void> {
-  try {
-    if (keyInUrl(req.query)) {
-      sendApiError(
-        res,
-        401,
-        'key_in_url',
-        'API keys are never accepted in the address. Send it as the header "Authorization: Bearer <key>" — and treat a key that has been put in a URL as exposed: revoke it and make a new one.',
-      );
-      return;
-    }
+/**
+ * The door, for one of the two addresses. `connectors` is true on /api/mcp,
+ * where a connected app's access token is accepted too and a 401 tells the app
+ * where to sign in.
+ */
+export const apiAuth = ({ connectors }: { connectors: boolean }) =>
+  async function apiAuthGate(req: ApiRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      // On the MCP door, every 401 carries the pointer an OAuth client follows
+      // (the apps only read it on a 401); `error` says whether a token was bad.
+      const refuse = (status: number, code: string, message: string) => {
+        if (connectors && status === 401) {
+          res.setHeader('WWW-Authenticate', wwwAuthenticate(code === 'missing_key' ? undefined : 'invalid_token', message));
+        }
+        sendApiError(res, status, code, message);
+      };
 
-    // Behind Apache, `secure` comes from X-Forwarded-Proto (trust proxy 1).
-    if (process.env.NODE_ENV === 'production' && !req.secure) {
-      sendApiError(
-        res,
-        403,
-        'https_required',
-        'The API only answers over HTTPS. If it already is HTTPS, the proxy in front must send "X-Forwarded-Proto: https".',
-      );
-      return;
-    }
+      if (keyInUrl(req.query)) {
+        refuse(
+          401,
+          'key_in_url',
+          'API keys are never accepted in the address. Send it as the header "Authorization: Bearer <key>" — and treat a key that has been put in a URL as exposed: revoke it and make a new one.',
+        );
+        return;
+      }
 
-    const header = req.headers.authorization ?? '';
-    const token = /^Bearer\s+(\S+)\s*$/i.exec(header)?.[1];
-    if (!token) {
-      sendApiError(res, 401, 'missing_key', 'Send an API key as the header "Authorization: Bearer fz_live_…". Make one in Settings → API.');
-      return;
-    }
-    if (!token.startsWith(KEY_PREFIX) || !KEY_PATTERN.test(token)) {
-      sendApiError(
-        res,
-        401,
-        'invalid_key',
-        'That is not a Flowzen API key. Keys start with "fz_live_"; a signed-in session does not work here.',
-      );
-      return;
-    }
+      // Behind Apache, `secure` comes from X-Forwarded-Proto (trust proxy 1).
+      if (process.env.NODE_ENV === 'production' && !req.secure) {
+        refuse(
+          403,
+          'https_required',
+          'The API only answers over HTTPS. If it already is HTTPS, the proxy in front must send "X-Forwarded-Proto: https".',
+        );
+        return;
+      }
 
-    const keyHash = hashKey(token);
-    const key = await prisma.apiKey.findUnique({
-      where: { keyHash },
-      include: {
-        organization: { select: { apiEnabled: true } },
-        createdBy: {
-          select: { id: true, organizationId: true, email: true, name: true, preset: true, permissions: true, active: true },
-        },
-      },
-    });
-    if (!key || !sameHash(key.keyHash, keyHash)) {
-      sendApiError(res, 401, 'invalid_key', 'That API key is not recognised.');
-      return;
-    }
-    if (!key.organization.apiEnabled) {
-      sendApiError(res, 401, 'api_disabled', 'API keys are switched off for this organisation. An admin can turn them on in Settings → API.');
-      return;
-    }
-    if (key.revokedAt) {
-      sendApiError(res, 401, 'key_revoked', 'This API key has been revoked.');
-      return;
-    }
-    const now = new Date();
-    if (key.expiresAt && key.expiresAt <= now) {
-      sendApiError(res, 401, 'key_expired', 'This API key has expired. Make a new one in Settings → API.');
-      return;
-    }
-    if (!key.createdBy.active) {
-      sendApiError(
-        res,
-        401,
-        'creator_inactive',
-        'The person who made this API key no longer has access to Flowzen, so the key has stopped working.',
-      );
-      return;
-    }
+      const header = req.headers.authorization ?? '';
+      const token = /^Bearer\s+(\S+)\s*$/i.exec(header)?.[1];
+      if (!token) {
+        refuse(
+          401,
+          'missing_key',
+          connectors
+            ? 'Sign in, or send an API key as the header "Authorization: Bearer fz_live_…" (Settings → API).'
+            : 'Send an API key as the header "Authorization: Bearer fz_live_…". Make one in Settings → API.',
+        );
+        return;
+      }
 
-    req.user = sessionOf(key.createdBy);
-    req.apiKey = { id: key.id, name: key.name, prefix: key.prefix, scopes: effectiveScopes(key.scopes, req.user) };
+      if (token.startsWith(ACCESS_PREFIX)) {
+        if (!connectors) {
+          refuse(401, 'invalid_key', 'That is a connected app’s token, which only opens /api/mcp. The REST API takes an API key.');
+          return;
+        }
+        await connectorAuth(token, req, res, next, refuse);
+        return;
+      }
 
-    const ip = req.ip ?? null;
-    if (!key.lastUsedAt || now.getTime() - key.lastUsedAt.getTime() > LAST_USED_EVERY_MS || key.lastUsedIp !== ip) {
-      quietly('last used', () => prisma.apiKey.update({ where: { id: key.id }, data: { lastUsedAt: now, lastUsedIp: ip } }));
-    }
+      if (!token.startsWith(KEY_PREFIX) || !KEY_PATTERN.test(token)) {
+        refuse(
+          401,
+          'invalid_key',
+          'That is not a Flowzen API key. Keys start with "fz_live_"; a signed-in session does not work here.',
+        );
+        return;
+      }
 
-    // Everything after this, the writes included, knows which key it is under.
-    apiCall.run({ keyId: key.id, keyName: key.name }, () => next());
-  } catch (e) {
-    if (e instanceof ApiKeysUnavailable) {
-      logger.error(e.message);
-      sendApiError(res, 503, 'api_not_configured', 'API keys are not set up on this server yet.');
-      return;
+      await keyAuth(token, req, res, next, refuse);
+    } catch (e) {
+      if (e instanceof ApiKeysUnavailable) {
+        logger.error(e.message);
+        sendApiError(res, 503, 'api_not_configured', 'API keys are not set up on this server yet.');
+        return;
+      }
+      next(e);
     }
-    next(e);
+  };
+
+/** /api/v1: keys only. */
+export const apiKeyAuth = apiAuth({ connectors: false });
+/** /api/mcp: keys, and connected apps' tokens. */
+export const mcpAuth = apiAuth({ connectors: true });
+
+type Refuse = (status: number, code: string, message: string) => void;
+
+/** A connected app's access token (API Plan 2): the grant it sits under, and the person who consented. */
+async function connectorAuth(token: string, req: ApiRequest, _res: Response, next: NextFunction, refuse: Refuse): Promise<void> {
+  const found = await resolveAccessToken(token);
+  if (!found.ok) {
+    refuse(401, found.code, found.message);
+    return;
   }
+  const { caller } = found;
+  req.user = caller.user;
+  req.apiKey = { kind: 'connector', id: caller.grantId, name: caller.appName, prefix: 'connector', scopes: effectiveScopes(caller.scopes, caller.user) };
+
+  const now = new Date();
+  const ip = req.ip ?? null;
+  if (caller.stale) {
+    quietly('last used', () =>
+      Promise.all([
+        prisma.oAuthGrant.update({ where: { id: caller.grantId }, data: { lastUsedAt: now, lastUsedIp: ip } }),
+        prisma.oAuthToken.updateMany({ where: { tokenHash: hashKey(token) }, data: { lastUsedAt: now } }),
+      ]),
+    );
+  }
+  apiCall.run({ kind: 'connector', keyId: caller.grantId, keyName: caller.appName }, () => next());
+}
+
+/** An API key (API Plan 1): the row behind it, and every reason it may not be used. */
+async function keyAuth(token: string, req: ApiRequest, _res: Response, next: NextFunction, refuse: Refuse): Promise<void> {
+  const keyHash = hashKey(token);
+  const key = await prisma.apiKey.findUnique({
+    where: { keyHash },
+    include: {
+      organization: { select: { apiEnabled: true } },
+      createdBy: {
+        select: { id: true, organizationId: true, email: true, name: true, preset: true, permissions: true, active: true },
+      },
+    },
+  });
+  if (!key || !sameHash(key.keyHash, keyHash)) {
+    refuse(401, 'invalid_key', 'That API key is not recognised.');
+    return;
+  }
+  if (!key.organization.apiEnabled) {
+    refuse(401, 'api_disabled', 'API keys are switched off for this organisation. An admin can turn them on in Settings → API.');
+    return;
+  }
+  if (key.revokedAt) {
+    refuse(401, 'key_revoked', 'This API key has been revoked.');
+    return;
+  }
+  const now = new Date();
+  if (key.expiresAt && key.expiresAt <= now) {
+    refuse(401, 'key_expired', 'This API key has expired. Make a new one in Settings → API.');
+    return;
+  }
+  if (!key.createdBy.active) {
+    refuse(401, 'creator_inactive', 'The person who made this API key no longer has access to Flowzen, so the key has stopped working.');
+    return;
+  }
+
+  req.user = sessionOf(key.createdBy);
+  req.apiKey = { kind: 'key', id: key.id, name: key.name, prefix: key.prefix, scopes: effectiveScopes(key.scopes, req.user) };
+
+  const ip = req.ip ?? null;
+  if (!key.lastUsedAt || now.getTime() - key.lastUsedAt.getTime() > LAST_USED_EVERY_MS || key.lastUsedIp !== ip) {
+    quietly('last used', () => prisma.apiKey.update({ where: { id: key.id }, data: { lastUsedAt: now, lastUsedIp: ip } }));
+  }
+
+  // Everything after this, the writes included, knows which key it is under.
+  apiCall.run({ kind: 'key', keyId: key.id, keyName: key.name }, () => next());
 }
 
 /** A scope the key must carry. */
@@ -164,11 +230,14 @@ export function requireScope(...anyOf: ApiScope[]) {
       next();
       return;
     }
+    const scopes = anyOf.map((s) => `'${s}'`).join(' or ');
     sendApiError(
       res,
       403,
       'insufficient_scope',
-      `This API key needs the ${anyOf.map((s) => `'${s}'`).join(' or ')} scope for this. An admin can add it in Settings → API.`,
+      req.apiKey?.kind === 'connector'
+        ? `This connection was not given the ${scopes} scope. Connect Flowzen again and tick it.`
+        : `This API key needs the ${scopes} scope for this. An admin can add it in Settings → API.`,
       { required: anyOf },
     );
   };
@@ -256,11 +325,11 @@ export function apiRequestLog(req: ApiRequest, res: Response, next: NextFunction
   const started = Date.now();
   res.on('finish', () => {
     if ((res as Response & { [SKIP_LOG]?: boolean })[SKIP_LOG] || !req.apiKey) return;
-    const apiKeyId = req.apiKey.id;
+    const by = req.apiKey.kind === 'connector' ? { grantId: req.apiKey.id } : { apiKeyId: req.apiKey.id };
     quietly('request log', () =>
       prisma.apiRequestLog.create({
         data: {
-          apiKeyId,
+          ...by,
           method: req.method,
           route: (req.apiRoute ?? '(no such route)').slice(0, 200),
           status: res.statusCode,

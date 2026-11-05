@@ -11,10 +11,14 @@ import type { ApiRequest } from '../../middleware/apiKey.js';
  * the functions built on this, so a task reads the same through either door.
  */
 
-/** Who a call runs as: the key's creator, carrying the key's scopes. */
+/**
+ * Who a call runs as: the key's creator, carrying the key's scopes — or, for
+ * a connected app (API Plan 2), the person who signed in, carrying what they
+ * ticked. `kind` says which; `id` is the key's or the grant's.
+ */
 export type ApiContext = {
   user: UserSession;
-  key: { id: string; name: string; prefix: string; scopes: ApiScope[] };
+  key: { kind: 'key' | 'connector'; id: string; name: string; prefix: string; scopes: ApiScope[] };
   /** The request itself, for running a write through the app's own route. */
   req: ApiRequest;
 };

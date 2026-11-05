@@ -211,6 +211,7 @@ model Organization {
   pushSubscriptions          PushSubscription[]
   pushOutbox                 PushOutbox[]
   apiKeys                    ApiKey[]
+  oauthGrants                OAuthGrant[]
 
   /// "EL" -> EL/CAM/001. The stickers get printed once, so this is a setting
   /// rather than a constant, but changing it does not renumber what exists.
@@ -324,6 +325,8 @@ model User {
   clientRatesApproved        ClientRate[]         @relation("ClientRateApprovedBy")
   apiKeysCreated             ApiKey[]             @relation("ApiKeyCreatedBy")
   apiKeysRevoked             ApiKey[]             @relation("ApiKeyRevokedBy")
+  oauthGrants                OAuthGrant[]         @relation("OAuthGrantUser")
+  oauthGrantsRevoked         OAuthGrant[]         @relation("OAuthGrantRevokedBy")
 
   @@index([organizationId, active])
   @@index([focusTaskId])
@@ -2614,7 +2617,9 @@ model ApiKey {
 /// days (workers/apiCleanup.cron.ts).
 model ApiRequestLog {
   id         String   @id @default(cuid())
-  apiKeyId   String
+  /// One of the two is set: the key, or the connected app's grant (API Plan 2).
+  apiKeyId   String?
+  grantId    String?
   at         DateTime @default(now())
   method     String
   /// The pattern, "/v1/tasks/:id" — never the path with real ids in it.
@@ -2622,11 +2627,118 @@ model ApiRequestLog {
   status     Int
   durationMs Int
 
-  apiKey ApiKey @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+  apiKey ApiKey?     @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+  grant  OAuthGrant? @relation(fields: [grantId], references: [id], onDelete: Cascade)
 
   @@index([apiKeyId, at])
+  @@index([grantId, at])
   @@index([at])
   @@map("api_request_logs")
+}
+
+/// ─── "Sign in with Flowzen" (API Plan 2) ─────────────────────────────────────
+///
+/// Claude.ai and ChatGPT connect to /api/mcp through OAuth rather than a pasted
+/// key: the person signs in to Flowzen, ticks what the app may do, and the app
+/// gets tokens that act as them. Everything after the sign-in is Plan 1's — the
+/// same scopes, the same permission check on every call, the same log.
+
+/// An OAuth client: who is asking. Either read from the client's own metadata
+/// document (CIMD — Claude's and ChatGPT's published identities) or registered
+/// here through Dynamic Client Registration. Public clients only, no secrets.
+model OAuthClient {
+  id           String   @id @default(cuid())
+  /// What the client calls itself in the protocol: the metadata URL for CIMD,
+  /// or the id this server issued ("fzc_…") for DCR.
+  clientId     String   @unique
+  kind         String // CIMD | DCR
+  name         String
+  /// Where its sign-in may be sent back to. Exact match, except loopback
+  /// addresses (Claude Code), which match on any port.
+  redirectUris String[]
+  clientUri    String?
+  /// When the metadata document was last read (CIMD), for re-reading it.
+  fetchedAt    DateTime?
+  createdAt    DateTime @default(now())
+  lastUsedAt   DateTime?
+
+  grants OAuthGrant[]
+
+  @@map("oauth_clients")
+}
+
+/// A person's consent to an app: "Claude may read my tasks and create them".
+/// One row per person and app; the connected-apps list in Settings → API.
+/// Revoking it refuses every token under it on their next request.
+model OAuthGrant {
+  id             String    @id @default(cuid())
+  organizationId String
+  userId         String
+  clientId       String
+  /// The scopes ticked on the consent screen (services/apiKeys.ts). Re-checked
+  /// against the person's permissions on every request, like a key's.
+  scopes         String[]
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  lastUsedAt     DateTime?
+  lastUsedIp     String?
+  revokedAt      DateTime?
+  revokedById    String?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation("OAuthGrantUser", fields: [userId], references: [id], onDelete: Cascade)
+  client       OAuthClient  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  revokedBy    User?        @relation("OAuthGrantRevokedBy", fields: [revokedById], references: [id], onDelete: SetNull)
+  codes        OAuthCode[]
+  tokens       OAuthToken[]
+  requests     ApiRequestLog[]
+
+  @@index([userId, clientId])
+  @@index([organizationId, revokedAt])
+  @@map("oauth_grants")
+}
+
+/// The one-time code handed back after consent, exchanged for tokens within
+/// minutes. Only its hash is kept, with the PKCE challenge it must answer.
+model OAuthCode {
+  id            String    @id @default(cuid())
+  grantId       String
+  codeHash      String    @unique
+  redirectUri   String
+  codeChallenge String
+  /// The scopes this sign-in asked for — what the tokens from it carry.
+  scopes        String[]
+  expiresAt     DateTime
+  usedAt        DateTime?
+  createdAt     DateTime  @default(now())
+
+  grant OAuthGrant @relation(fields: [grantId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@map("oauth_codes")
+}
+
+/// An access token (an hour) or a refresh token (rotated on every use). Only
+/// hashes, like keys: the database alone cannot be turned into working tokens.
+model OAuthToken {
+  id           String    @id @default(cuid())
+  grantId      String
+  kind         String // ACCESS | REFRESH
+  tokenHash    String    @unique
+  scopes       String[]
+  expiresAt    DateTime
+  createdAt    DateTime  @default(now())
+  lastUsedAt   DateTime?
+  revokedAt    DateTime?
+  /// For a refresh token: the one that replaced it. A replaced token presented
+  /// again is a stolen one, and the whole grant is revoked.
+  replacedById String?
+
+  grant OAuthGrant @relation(fields: [grantId], references: [id], onDelete: Cascade)
+
+  @@index([grantId, kind])
+  @@index([expiresAt])
+  @@map("oauth_tokens")
 }
 
 /// What a POST answered, by its Idempotency-Key, so an automation's retry gets

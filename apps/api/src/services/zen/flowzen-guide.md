@@ -426,12 +426,13 @@ The "Phone notifications" switch. When it is on, people turn them on from Profil
 
 ### Settings → API
 
-Setup access only. Keys for AI agents (Claude, ChatGPT) and automation tools (n8n, Make, Zapier). See "The API" below for what a key can do.
-- **Allow API keys:** off by default. Off refuses every key at once; the keys are kept.
+Everyone sees it; the keys on it are Setup access only. See "The API" below for what a key or a connected app can do.
+- **Connected apps:** the apps that signed in with Flowzen (Claude.ai, Claude Desktop or mobile, ChatGPT) — which app, who it acts as, what it may do, when it was connected and last used, with **Revoke** (works at once). Each person sees their own; Setup access sees everyone's and can revoke any.
+- **Allow API keys:** off by default. Off refuses every key and every connected app at once; the keys are kept.
 - **New key:** a name, what it can do (ticked scopes — only ones the person making it can do themselves), and when it expires (30 days, 90 days, 1 year or never). The key is shown once, with Copy: it cannot be shown again, so a lost key is revoked and replaced.
 - **Each key:** its visible start (fz_live_ab12…), scopes, who made it and when, last used (time and address), expiry and status. Actions: Usage (its last 100 calls, kept 30 days, never what was sent), Rename or edit scopes, and Revoke (works at once, cannot be undone).
 - At most 20 working keys. Everyone with Setup access gets a bell when a key is made or revoked.
-- **Connect:** the addresses, copy-paste examples for curl, n8n, Make, Zapier, Claude Code and Claude Desktop, and the list of endpoints and MCP tools.
+- **Connect:** the addresses, the steps for Claude.ai and ChatGPT (sign in, no key), copy-paste examples for curl, n8n, Make, Zapier, Claude Code and Claude Desktop, and the list of endpoints and MCP tools.
 
 ### Settings → Team
 
@@ -728,11 +729,11 @@ Management only. Zen can look up:
 It can draft a task for the person to create — or several at once from one message (up to 25 on one card, each with Add or Leave out, then one button adds them) — and remember how they like things done. It cannot change anything, and it never sees salaries: salary costs are one summed line, and profit it works out leaves people cost out. Anything it cannot look up — meetings and shoots, the time split itself, usage — it should say so and give the screen's link.
 
 ## The API
-Flowzen can be reached by other tools with an API key from Settings → API (/settings?tab=api):
-- **AI agents** connect over MCP at /api/mcp — Claude Code, Claude Desktop, or any MCP client.
-- **Automation tools** (n8n, Make, Zapier) use the REST API at /api/v1. Its full description is /api/v1/openapi.json.
+Flowzen can be reached by other tools, two ways:
+- **Sign in with Flowzen** — for Claude.ai, Claude Desktop, Claude mobile and ChatGPT. The person adds Flowzen as a custom connector with the address /api/mcp, chooses "Sign in", signs in to Flowzen, and ticks what the app may do. No key to copy. Anybody can connect their own account; what they can give the app is limited to what they can do themselves. Their connections are listed under Settings → API → Connected apps, where they (or Setup access) can revoke one.
+- **An API key** from Settings → API (/settings?tab=api), Setup access only — for Claude Code, Claude Desktop's config file, or any MCP client over MCP at /api/mcp, and for **automation tools** (n8n, Make, Zapier) over the REST API at /api/v1. Its full description is /api/v1/openapi.json.
 
-A key acts as the person who made it, narrowed to its scopes, so it never sees or does more than they can: a Head's key sees their department's tasks, and money amounts and deal values show only if that person may see them. A key stops working when it is revoked, expires, its maker leaves, or API keys are switched off.
+A key or a connected app acts as the person behind it, narrowed to its scopes, so it never sees or does more than they can: a Head's sees their department's tasks, and money amounts and deal values show only if that person may see them. A key stops working when it is revoked, expires, its maker leaves, or API keys are switched off; a connected app stops when it is revoked, the person leaves, or API keys are switched off.
 
 What a key can be given (each is a tick box on the key):
 - **Tasks:** read; create and update, with several people on one task (the first is the lead), filed under a one-time project, a retainer or internal work.
@@ -745,4 +746,4 @@ What a key can be given (each is a tick box on the key):
 
 Never, whatever is ticked: deleting anything, raising invoices or proformas or recording payments, salaries or costs, people, Settings, usage, or Zen. The same rules as the app apply: a retainer or paid project needs a won deal first, one running retainer per client, and a won deal opened by mistake is lost and then reopened, which takes it back to Verbal yes. Anybody's id for assigning work comes from the team list (/api/v1/people, or list_people over MCP).
 
-Everything done through a key is in the history as that person "via API: <key name>" — for example "Harish (via API: n8n) created the task". Tools poll for changes with ?updatedSince= rather than being pushed to.
+Everything done through a key is in the history as that person "via API: <key name>" — for example "Harish (via API: n8n) created the task"; through a connected app, "via Claude connector". Tools poll for changes with ?updatedSince= rather than being pushed to.

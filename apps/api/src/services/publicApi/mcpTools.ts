@@ -605,7 +605,7 @@ export function buildMcpServer(ctx: ApiContext): McpServer {
       async (args: unknown) => {
         try {
           // The key's context, explicitly: writes inside say "via API: <key>".
-          const payload = await apiCall.run({ keyId: ctx.key.id, keyName: ctx.key.name }, () => tool.run(ctx, args));
+          const payload = await apiCall.run({ kind: ctx.key.kind, keyId: ctx.key.id, keyName: ctx.key.name }, () => tool.run(ctx, args));
           return answer(payload);
         } catch (e) {
           return refusal(e);

@@ -62,7 +62,7 @@ export const SETTINGS_GROUPS = [
       { key: 'zen', label: 'Zen assistant', caption: 'The AI behind Zen and proposal writing, and what Zen remembers.', icon: Sparkles },
       { key: 'email', label: 'Email', caption: 'How Flowzen sends mail.', icon: Mail },
       { key: 'integrations', label: 'Integrations', caption: 'Google Calendar and phone notifications.', icon: Plug },
-      { key: 'api', label: 'API', caption: 'Keys for AI agents and automation tools, and how to connect them.', icon: KeyRound },
+      { key: 'api', label: 'API', caption: 'Apps signed in with Flowzen, keys for automation tools, and how to connect them.', icon: KeyRound },
     ],
   },
   {

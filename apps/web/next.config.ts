@@ -20,13 +20,21 @@ const nextConfig: NextConfig = {
     ];
   },
   async rewrites() {
+    const api = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
     return [
       {
         source: '/api/:path*',
-        destination: process.env.NEXT_PUBLIC_API_URL 
-          ? `${process.env.NEXT_PUBLIC_API_URL}/:path*`
-          : 'http://localhost:4000/api/:path*',
+        destination: `${api}/:path*`,
       },
+      /*
+       * OAuth discovery for "Sign in with Flowzen" (API Plan 2). Claude.ai and
+       * ChatGPT read these at the site's root, which is this app's; the API
+       * answers them under /api/.well-known, so they are passed through here
+       * and no proxy in front needs a new rule.
+       */
+      { source: '/.well-known/oauth-authorization-server', destination: `${api}/.well-known/oauth-authorization-server` },
+      { source: '/.well-known/oauth-protected-resource', destination: `${api}/.well-known/oauth-protected-resource` },
+      { source: '/.well-known/oauth-protected-resource/:path*', destination: `${api}/.well-known/oauth-protected-resource/:path*` },
     ];
   },
 };

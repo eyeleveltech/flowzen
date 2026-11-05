@@ -538,6 +538,10 @@ const ACTION: Record<string, string> = {
   'ApiKey.api_key_scopes_changed': 'changed what an API key can do',
   'Organization.api_keys_switched': 'switched API keys',
 
+  // Connected apps (API Plan 2): Claude.ai or ChatGPT signed in with Flowzen.
+  'User.connector_connected': 'connected an app for',
+  'User.connector_revoked': 'disconnected an app for',
+
   // The organisation
   'Organization.organisation_updated': 'changed the organisation settings',
   'Organization.document_settings_updated': 'changed the document settings',
@@ -578,6 +582,8 @@ const SELF_ACTION: Record<string, string> = {
   'User.password_changed': 'changed their password',
   'User.password_reset': 'reset their password',
   'User.password_reset_requested': 'asked for a password reset',
+  'User.connector_connected': 'connected an app',
+  'User.connector_revoked': 'disconnected an app',
 };
 
 const actionFor = (entityType: string, verb: string): string => {
@@ -869,6 +875,12 @@ export function detailLines(
     if (Array.isArray(p.scopes)) lines.push(p.scopes.length ? (p.scopes as string[]).join(', ') : 'No scopes');
   }
   if (verb === 'api_keys_switched') lines.push(p.enabled ? 'On' : 'Off');
+
+  // Connected apps: which app, and what it was allowed.
+  if (verb === 'connector_connected' || verb === 'connector_revoked') {
+    if (str(p.app)) lines.push(String(p.app));
+    if (Array.isArray(p.scopes) && p.scopes.length) lines.push((p.scopes as string[]).join(', '));
+  }
 
   // Sign-ins: where from.
   if (str(p.device) || str(p.ip)) lines.push([str(p.device), str(p.ip)].filter(Boolean).join(' · '));

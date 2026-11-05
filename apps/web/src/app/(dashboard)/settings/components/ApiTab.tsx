@@ -1,26 +1,41 @@
 'use client';
 
 /**
- * Settings → API (API Plan 1): keys for AI agents and automation tools.
+ * Settings → API: apps signed in with Flowzen, and keys for automation tools.
  *
- * Management makes a key here and hands it to Claude or ChatGPT (over MCP, at
- * /api/mcp) or to n8n, Make or Zapier (the REST API, /api/v1). A key acts as
- * whoever made it, narrowed to the scopes ticked on it, so it can never see or
- * do more than they can — and the server re-checks that on every request.
+ * Two ways in. Claude.ai, Claude Desktop, Claude mobile and ChatGPT **sign in
+ * with Flowzen** (API Plan 2): the person adds Flowzen as a connector, signs
+ * in, ticks what the app may do, and the app gets tokens that act as them.
+ * Each person's connections are listed here with Revoke; an admin sees
+ * everyone's.
  *
- * The key is shown once, when it is made. After that only its visible start
- * ("fz_live_ab12cd34…") is ever shown again: the server keeps a hash, not the
- * key, so there is nothing to show.
+ * Everything else takes a **key** (API Plan 1): Management makes one here and
+ * hands it to Claude Code, Claude Desktop's config file, or n8n, Make or
+ * Zapier (the REST API, /api/v1). A key acts as whoever made it, narrowed to
+ * the scopes ticked on it, so it can never see or do more than they can — and
+ * the server re-checks that on every request. The key is shown once, when it
+ * is made: the server keeps a hash, not the key, so there is nothing to show
+ * again.
  *
- * `setup.admin` only — the tab is hidden from everybody else, and the routes
- * behind it refuse them too.
+ * The tab is everyone's, for their own connected apps. The keys, the switch
+ * and the connection guide are `setup.admin`'s, and the routes behind them
+ * refuse anybody else.
  */
 
 import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Ban, Check, Copy, History, KeyRound, Pencil, Plus, ShieldCheck } from 'lucide-react';
-import { api, ApiError, publicApiBase, type ApiKeyRow, type ApiKeysPage, type ApiScopeInfo } from '@/lib/api-v2';
+import { Ban, Check, Copy, History, KeyRound, Pencil, Plus, Plug, ShieldCheck } from 'lucide-react';
+import {
+  api,
+  ApiError,
+  publicApiBase,
+  type ApiKeyCall,
+  type ApiKeyRow,
+  type ApiKeysPage,
+  type ApiScopeInfo,
+  type ConnectedApp,
+} from '@/lib/api-v2';
 import { SectionCard } from '@/components/ui/section-card';
 import { Toggle } from '@/components/ui/toggle';
 import { Button } from '@/components/ui/button';
@@ -44,13 +59,8 @@ const STATUS: Record<ApiKeyRow['status'], { label: string; tone: 'good' | 'bad' 
   expired: { label: 'Expired', tone: 'neutral' },
 };
 
-export function ApiTab({ tz, locale }: { tz: string; locale: string }) {
-  const { data, isPending, error } = useQuery({ queryKey: KEY, queryFn: () => api.apiKeys.list() });
-  const [creating, setCreating] = useState(false);
-  const [shown, setShown] = useState<{ key: string; name: string } | null>(null);
-  const [editing, setEditing] = useState<ApiKeyRow | null>(null);
-  const [usage, setUsage] = useState<ApiKeyRow | null>(null);
-
+/** "5 Nov 2026, 14:07" and "5 Nov 2026" on the organisation's clock. */
+function useWhen(tz: string, locale: string) {
   const when = useMemo(
     () => (iso: string) =>
       new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: tz }).format(
@@ -62,6 +72,28 @@ export function ApiTab({ tz, locale }: { tz: string; locale: string }) {
     () => (iso: string) => new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short', year: 'numeric', timeZone: tz }).format(new Date(iso)),
     [locale, tz],
   );
+  return { when, dayOf };
+}
+
+export function ApiTab({ tz, locale, admin }: { tz: string; locale: string; admin: boolean }) {
+  const { when, dayOf } = useWhen(tz, locale);
+  if (!admin) {
+    return (
+      <div className="space-y-6">
+        <ConnectedAppsCard when={when} dayOf={dayOf} />
+        <SignInCard />
+      </div>
+    );
+  }
+  return <AdminApiTab when={when} dayOf={dayOf} />;
+}
+
+function AdminApiTab({ when, dayOf }: { when: (iso: string) => string; dayOf: (iso: string) => string }) {
+  const { data, isPending, error } = useQuery({ queryKey: KEY, queryFn: () => api.apiKeys.list() });
+  const [creating, setCreating] = useState(false);
+  const [shown, setShown] = useState<{ key: string; name: string } | null>(null);
+  const [editing, setEditing] = useState<ApiKeyRow | null>(null);
+  const [usage, setUsage] = useState<ApiKeyRow | null>(null);
 
   if (isPending) return <PageSkeleton />;
   if (error || !data) return <ErrorNote>{error instanceof ApiError ? error.message : 'Could not load the API keys.'}</ErrorNote>;
@@ -69,6 +101,8 @@ export function ApiTab({ tz, locale }: { tz: string; locale: string }) {
   return (
     <div className="space-y-6">
       <MasterSwitch enabled={data.enabled} />
+
+      <ConnectedAppsCard when={when} dayOf={dayOf} />
 
       {!data.configured && (
         <Note tone="warn">
@@ -132,8 +166,157 @@ export function ApiTab({ tz, locale }: { tz: string; locale: string }) {
       )}
       {shown && <ShowKeyModal shown={shown} onClose={() => setShown(null)} />}
       {editing && <EditKeyModal row={editing} scopes={data.scopes} onClose={() => setEditing(null)} />}
-      {usage && <UsageModal row={usage} when={when} keepDays={data.logKeepDays} onClose={() => setUsage(null)} />}
+      {usage && (
+        <UsageModal
+          title={`Usage of "${usage.name}"`}
+          load={() => api.apiKeys.usage(usage.id)}
+          queryKey={[...KEY, usage.id, 'usage']}
+          when={when}
+          keepDays={data.logKeepDays}
+          onClose={() => setUsage(null)}
+        />
+      )}
     </div>
+  );
+}
+
+// ── Connected apps (API Plan 2) ──────────────────────────────────────────────
+
+const APPS_KEY = ['connected-apps'] as const;
+
+/** The apps that signed in with Flowzen — mine, or everyone's for an admin — with Revoke. */
+function ConnectedAppsCard({ when, dayOf }: { when: (iso: string) => string; dayOf: (iso: string) => string }) {
+  const { data, isPending, error } = useQuery({ queryKey: APPS_KEY, queryFn: () => api.oauth.grants() });
+  const [usage, setUsage] = useState<ConnectedApp | null>(null);
+
+  return (
+    <SectionCard
+      title="Connected apps"
+      description={
+        data?.all
+          ? 'Everyone’s sign-ins from Claude.ai, Claude Desktop, Claude mobile and ChatGPT. Each acts as the person who connected it, with only what they ticked.'
+          : 'Your sign-ins from Claude.ai, Claude Desktop, Claude mobile and ChatGPT. Each acts as you, with only what you ticked.'
+      }
+    >
+      {isPending ? (
+        <p className="text-sm text-secondary">Loading…</p>
+      ) : error || !data ? (
+        <ErrorNote>{error instanceof ApiError ? error.message : 'Could not load the connected apps.'}</ErrorNote>
+      ) : data.grants.length === 0 ? (
+        <p className="text-sm text-secondary">
+          Nothing connected yet. In Claude.ai, add Flowzen as a custom connector with the address{' '}
+          <code className="font-mono text-xs">{data.mcpUrl}</code> and choose <span className="font-medium">Sign in now</span>.
+        </p>
+      ) : (
+        <ul className="-mx-5 divide-y divide-line sm:-mx-6">
+          {[...data.grants]
+            .sort((a, b) => Number(b.status === 'active') - Number(a.status === 'active'))
+            .map((g) => (
+              <ConnectedAppItem key={g.id} row={g} showPerson={data.all} scopes={data.scopes} when={when} dayOf={dayOf} onUsage={() => setUsage(g)} />
+            ))}
+        </ul>
+      )}
+      {usage && (
+        <UsageModal
+          title={`Usage of ${usage.app.name}${data?.all ? ` (${usage.person.name})` : ''}`}
+          load={() => api.oauth.grantUsage(usage.id)}
+          queryKey={[...APPS_KEY, usage.id, 'usage']}
+          when={when}
+          keepDays={30}
+          onClose={() => setUsage(null)}
+        />
+      )}
+    </SectionCard>
+  );
+}
+
+function ConnectedAppItem({
+  row,
+  showPerson,
+  scopes,
+  when,
+  dayOf,
+  onUsage,
+}: {
+  row: ConnectedApp;
+  showPerson: boolean;
+  scopes: ApiScopeInfo[];
+  when: (iso: string) => string;
+  dayOf: (iso: string) => string;
+  onUsage: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const confirm = useConfirmStore((s) => s.confirm);
+  const active = row.status === 'active';
+  const labelOf = (key: string) => scopes.find((s) => s.key === key)?.label ?? key;
+
+  const revoke = async () => {
+    const ok = await confirm({
+      title: `Disconnect ${row.app.name}?`,
+      message: `${row.app.name} stops working in Flowzen${showPerson ? ` as ${row.person.name}` : ''} on its very next request. Connecting again means signing in again.`,
+      confirmText: 'Disconnect',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    try {
+      await api.oauth.revokeGrant(row.id);
+      await queryClient.invalidateQueries({ queryKey: APPS_KEY });
+      toast.success(`${row.app.name} disconnected`);
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Could not disconnect it');
+    }
+  };
+
+  return (
+    <li className={cn('px-5 py-4 sm:px-6', !active && 'opacity-70')}>
+      <div className="flex items-start gap-3">
+        <Plug className="mt-0.5 h-4 w-4 shrink-0 text-secondary" />
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium text-primary">{row.app.name}</span>
+            <Badge tone={active ? 'good' : 'bad'}>{active ? 'Connected' : 'Disconnected'}</Badge>
+            <code className="font-mono text-xs text-secondary">{row.app.host}</code>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {row.scopes.map((s) => (
+              <span key={s} title={labelOf(s)} className="rounded-md border border-line bg-subtle px-1.5 py-0.5 font-mono text-micro text-body-soft">
+                {s}
+              </span>
+            ))}
+          </div>
+          <p className="text-xs text-secondary">
+            {showPerson ? `Acts as ${row.person.name}` : 'Acts as you'}
+            {!row.person.active && ' (no longer here, so it does not work)'} · Connected {dayOf(row.createdAt)}
+            {' · '}
+            {row.lastUsedAt ? `Last used ${when(row.lastUsedAt)}${row.lastUsedIp ? ` from ${row.lastUsedIp}` : ''}` : 'Never used'}
+            {row.revokedAt && ` · Disconnected ${dayOf(row.revokedAt)}${row.revokedBy ? ` by ${row.revokedBy.name}` : ''}`}
+          </p>
+        </div>
+        <RowMenu
+          label={`Actions for ${row.app.name}`}
+          actions={[
+            { label: 'Usage', icon: History, onSelect: onUsage },
+            { label: 'Disconnect', icon: Ban, onSelect: () => void revoke(), tone: 'danger', visible: active },
+          ]}
+        />
+      </div>
+    </li>
+  );
+}
+
+/** For somebody without setup access: how to connect their own Claude or ChatGPT. */
+function SignInCard() {
+  const base = publicApiBase();
+  const steps = examples(base);
+  return (
+    <SectionCard title="Connect Claude or ChatGPT" description="No key needed: the app signs in as you, and you tick what it may do.">
+      <div className="space-y-4">
+        <p className="text-sm text-secondary">{steps.claudeAi.intro}</p>
+        <CodeBlock code={steps.claudeAi.code} />
+        <p className="text-sm text-secondary">{steps.chatgpt.intro}</p>
+        <CodeBlock code={steps.chatgpt.code} />
+      </div>
+    </SectionCard>
   );
 }
 
@@ -164,8 +347,9 @@ function MasterSwitch({ enabled }: { enabled: boolean }) {
       title="Allow API keys"
       description={
         <>
-          Lets AI agents (Claude, ChatGPT) and automation tools (n8n, Make, Zapier) read and update Flowzen with a key made
-          below. Off refuses every key at once; the keys are kept, so turning it back on needs nothing re-issued.
+          Lets AI agents (Claude, ChatGPT) and automation tools (n8n, Make, Zapier) read and update Flowzen — signed in, or
+          with a key made below. Off refuses every key and every connected app at once; they are kept, so turning it back on
+          needs nothing re-issued.
         </>
       }
     >
@@ -173,7 +357,7 @@ function MasterSwitch({ enabled }: { enabled: boolean }) {
         <div>
           <p className="text-sm font-medium text-primary">{on ? 'On' : 'Off'}</p>
           <p className="text-xs text-secondary">
-            {on ? 'Working keys are accepted.' : 'Every key is refused with "api_disabled".'}
+            {on ? 'Working keys and connected apps are accepted.' : 'Every key and connected app is refused with "api_disabled".'}
           </p>
         </div>
         <Toggle checked={on} onChange={(v) => !saving && void change(v)} label="Allow API keys" labelClassName="sr-only" />
@@ -473,22 +657,26 @@ function EditKeyModal({ row, scopes, onClose }: { row: ApiKeyRow; scopes: ApiSco
   );
 }
 
-/** The last 100 calls: when, what, and how it went. Never what was sent. */
+/** The last 100 calls of a key or a connected app: when, what, and how it went. Never what was sent. */
 function UsageModal({
-  row,
+  title,
+  load,
+  queryKey,
   when,
   keepDays,
   onClose,
 }: {
-  row: ApiKeyRow;
+  title: string;
+  load: () => Promise<{ calls: ApiKeyCall[] }>;
+  queryKey: readonly unknown[];
   when: (iso: string) => string;
   keepDays: number;
   onClose: () => void;
 }) {
-  const { data, isPending, error } = useQuery({ queryKey: [...KEY, row.id, 'usage'], queryFn: () => api.apiKeys.usage(row.id) });
+  const { data, isPending, error } = useQuery({ queryKey, queryFn: load });
   const tone = (status: number) => (status < 300 ? 'text-success' : status < 500 ? 'text-warning-ink' : 'text-danger');
   return (
-    <Modal open onClose={onClose} title={`Usage of "${row.name}"`} description={`The last 100 calls. Kept ${keepDays} days; what was sent is never kept.`} size="lg">
+    <Modal open onClose={onClose} title={title} description={`The last 100 calls. Kept ${keepDays} days; what was sent is never kept.`} size="lg">
       <ModalBody>
         {isPending ? (
           <p className="text-sm text-secondary">Loading…</p>
@@ -531,9 +719,11 @@ function UsageModal({
 
 // ── How to connect ───────────────────────────────────────────────────────────
 
-type Example = 'curl' | 'n8n' | 'make' | 'zapier' | 'claudeCode' | 'claudeDesktop';
+type Example = 'claudeAi' | 'chatgpt' | 'curl' | 'n8n' | 'make' | 'zapier' | 'claudeCode' | 'claudeDesktop';
 
 const EXAMPLES: { key: Example; label: string }[] = [
+  { key: 'claudeAi', label: 'Claude.ai' },
+  { key: 'chatgpt', label: 'ChatGPT' },
   { key: 'curl', label: 'curl' },
   { key: 'n8n', label: 'n8n' },
   { key: 'make', label: 'Make' },
@@ -547,6 +737,31 @@ function examples(base: string): Record<Example, { intro: string; code: string }
   const v1 = `${base}/v1`;
   const mcp = `${base}/mcp`;
   return {
+    claudeAi: {
+      intro:
+        'Claude.ai, Claude Desktop and Claude mobile sign in with Flowzen — no key. Each person connects their own account and ticks what Claude may do; it shows under Connected apps, where it can be disconnected.',
+      code: [
+        'Claude.ai → Customize → Connectors → Add custom connector',
+        '  Name:            Flowzen',
+        `  MCP server URL:  ${mcp}`,
+        '  Authentication:  Sign in now',
+        '  OAuth client:    Use Claude’s published identity',
+        '→ Add, then Connect: sign in to Flowzen, tick what Claude may do, Allow.',
+        '',
+        'On a Team or Enterprise plan an Owner adds it under Organization settings → Connectors;',
+        'each person then presses Connect and signs in as themselves.',
+      ].join('\n'),
+    },
+    chatgpt: {
+      intro: 'ChatGPT connects the same way: it signs in as you and asks what it may do.',
+      code: [
+        'ChatGPT → Settings → Connectors → Create (developer mode)',
+        '  Name:            Flowzen',
+        `  MCP server URL:  ${mcp}`,
+        '  Authentication:  OAuth',
+        '→ Create, then sign in to Flowzen, tick what ChatGPT may do, Allow.',
+      ].join('\n'),
+    },
     curl: {
       intro: 'Read your open tasks, then create one. The Idempotency-Key makes a retry safe: the same key within 24 hours never creates twice.',
       code: [
@@ -656,7 +871,7 @@ function CodeBlock({ code }: { code: string }) {
 }
 
 function ConnectCard({ data }: { data: ApiKeysPage }) {
-  const [tab, setTab] = useState<Example>('curl');
+  const [tab, setTab] = useState<Example>('claudeAi');
   const base = publicApiBase();
   const all = examples(base);
   const current = all[tab];
@@ -665,7 +880,7 @@ function ConnectCard({ data }: { data: ApiKeysPage }) {
   return (
     <SectionCard
       title="Connect"
-      description="Where to point a tool, with copy-paste examples. Replace <your key> with a key from above."
+      description="Where to point a tool, with the steps for each. Claude.ai and ChatGPT sign in; the rest take a key from above in place of <your key>."
     >
       <div className="space-y-6">
         <dl className="grid gap-3 text-sm sm:grid-cols-3">

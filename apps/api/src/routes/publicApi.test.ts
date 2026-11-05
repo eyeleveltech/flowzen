@@ -368,7 +368,7 @@ describe('creating a task through the API', () => {
     expect(res.body.data).toMatchObject({ id: 'task-new', title: 'Send the October report', dueDate: '2026-11-10' });
     const { data } = (prisma.task.create as any).mock.calls.at(-1)[0];
     expect(data).toMatchObject({ createdById: 'usr-admin', workType: 'INTERNAL', priority: 'HIGH' });
-    expect(underKey).toEqual({ keyId: 'key-1', keyName: 'n8n' });
+    expect(underKey).toEqual({ kind: 'key', keyId: 'key-1', keyName: 'n8n' });
   });
 
   it('keeps the app’s rules: an employee’s key cannot put work on somebody else', async () => {
@@ -530,7 +530,7 @@ describe('running the pipeline through a key', () => {
     expect(res.body.data).toMatchObject({ id: 'co-1', status: 'PROSPECT', city: 'Mumbai' });
     const { data } = (prisma.company.create as any).mock.calls[0][0];
     expect(data).toMatchObject({ vertical: 'Healthcare & Wellness', city: 'Mumbai', stateCode: '27', stateName: 'Maharashtra', status: 'PROSPECT' });
-    expect(underKey).toEqual({ keyId: 'key-1', keyName: 'n8n' });
+    expect(underKey).toEqual({ kind: 'key', keyId: 'key-1', keyName: 'n8n' });
   });
 
   it('answers a company it already has with the matches, and says whether force can go past', async () => {
@@ -775,14 +775,21 @@ describe('the request log', () => {
     expect(JSON.stringify(data)).not.toMatch(/secret|private/);
   });
 
-  it('is trimmed after 30 days, and retries after 24 hours', async () => {
+  it('is trimmed after 30 days, and retries after 24 hours — and sign-in leftovers after a week', async () => {
     (prisma.apiRequestLog.deleteMany as any).mockResolvedValue({ count: 3 });
     (prisma.apiIdempotency.deleteMany as any).mockResolvedValue({ count: 1 });
     (prisma.alert.updateMany as any).mockResolvedValue({ count: 0 });
+    (prisma.oAuthCode.deleteMany as any).mockResolvedValue({ count: 2 });
+    (prisma.oAuthToken.deleteMany as any).mockResolvedValue({ count: 4 });
+    (prisma.oAuthClient.deleteMany as any).mockResolvedValue({ count: 1 });
     const now = new Date('2026-11-03T00:00:00Z');
-    await cleanUpApi(now);
+    const out = await cleanUpApi(now);
     expect((prisma.apiRequestLog.deleteMany as any).mock.calls[0][0].where.at.lt).toEqual(new Date('2026-10-04T00:00:00Z'));
     expect((prisma.apiIdempotency.deleteMany as any).mock.calls[0][0].where.createdAt.lt).toEqual(new Date('2026-11-02T00:00:00Z'));
+    expect((prisma.oAuthCode.deleteMany as any).mock.calls[0][0].where.expiresAt.lt).toEqual(new Date('2026-10-27T00:00:00Z'));
+    // A client only goes once nobody is connected through it.
+    expect((prisma.oAuthClient.deleteMany as any).mock.calls[0][0].where).toMatchObject({ grants: { none: {} } });
+    expect(out).toMatchObject({ codes: 2, tokens: 4, clients: 1 });
   });
 });
 
@@ -790,7 +797,7 @@ describe('"via API" on the history', () => {
   it('stamps the key on an Activity row only while a key’s request is running', () => {
     const row = { entityType: 'Task', payload: { title: 'x' } };
     expect(stampVia(row, undefined)).toBe(row);
-    const stamped = apiCall.run({ keyId: 'key-1', keyName: 'n8n' }, () => stampVia(row));
+    const stamped = apiCall.run({ kind: 'key', keyId: 'key-1', keyName: 'n8n' }, () => stampVia(row));
     expect(stamped.payload).toEqual({ title: 'x', via: 'API key: n8n', apiKeyId: 'key-1' });
     expect(viaWords(stamped.payload)).toBe('via API: n8n');
     expect(viaWords({ title: 'x' })).toBeNull();

@@ -2546,6 +2546,16 @@ export const api = {
   },
 
   /** Settings → API: the switch, and making, changing and revoking API keys (setup.admin). */
+  oauth: {
+    /** What the consent screen shows. A 400 carries `data: { fatal, redirectTo }` — see the page. */
+    authorizeInfo: (params: OAuthAuthorizeParams) => get<OAuthAuthorizeInfo>(`/oauth/authorize?${new URLSearchParams(params as Record<string, string>)}`),
+    decide: (body: { decision: 'allow' | 'deny'; scopes: string[]; params: OAuthAuthorizeParams }) =>
+      post<{ success: boolean; redirectTo: string }>('/oauth/authorize', body),
+    grants: () => getFull<ConnectedAppsPage>('/oauth/grants'),
+    revokeGrant: (id: string) => postFull<{ success: boolean; grant: ConnectedApp }>(`/oauth/grants/${id}/revoke`),
+    grantUsage: (id: string) => getFull<{ success: boolean; calls: ApiKeyCall[] }>(`/oauth/grants/${id}/usage`),
+  },
+
   apiKeys: {
     list: () => get<ApiKeysPage>('/api-keys'),
     setEnabled: (enabled: boolean) => patch<{ success: boolean; enabled: boolean }>('/api-keys/settings', { enabled }),
@@ -3487,6 +3497,50 @@ export interface ApiKeyCall {
   route: string;
   status: number;
   durationMs: number;
+}
+
+/** "Sign in with Flowzen" (API Plan 2): the consent screen, and the connected apps. */
+export interface OAuthAuthorizeInfo {
+  app: { name: string; host: string; returnsTo: string };
+  me: { id: string; name: string; email: string };
+  resource: string;
+  scopes: ApiScopeInfo[];
+  /** Asked for, but not something this person can do. */
+  notYours: string[];
+}
+
+/** The sign-in request as the app sent it, passed back untouched with the answer. */
+export type OAuthAuthorizeParams = {
+  client_id: string;
+  redirect_uri?: string;
+  response_type?: string;
+  state?: string;
+  code_challenge?: string;
+  code_challenge_method?: string;
+  scope?: string;
+  resource?: string;
+};
+
+export interface ConnectedApp {
+  id: string;
+  app: { name: string; host: string; kind: string };
+  person: { id: string; name: string; active: boolean };
+  scopes: string[];
+  createdAt: string;
+  lastUsedAt: string | null;
+  lastUsedIp: string | null;
+  revokedAt: string | null;
+  revokedBy: { id: string; name: string } | null;
+  status: 'active' | 'revoked';
+}
+
+export interface ConnectedAppsPage {
+  /** True for an admin, who sees everyone's; otherwise only this person's. */
+  all: boolean;
+  me: string;
+  mcpUrl: string;
+  scopes: ApiScopeInfo[];
+  grants: ConnectedApp[];
 }
 
 /**

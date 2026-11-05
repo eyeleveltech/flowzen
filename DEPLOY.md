@@ -120,3 +120,16 @@ n8n/Make/Zapier (REST at `/api/v1`, described at `/api/v1/openapi.json`).
    (`a2enmod headers` if `RequestHeader` is unknown.) Without the first line every key gets
    `403 https_required`.
 3. In Flowzen: **Settings → API** → switch **Allow API keys** on, then **New key**.
+4. **"Sign in with Flowzen"** (Claude.ai, Claude Desktop/mobile, ChatGPT — API Plan 2) needs
+   nothing more on the server: the sign-in pages live under the app, the OAuth discovery files
+   (`/.well-known/oauth-*`) are passed from the web app to the API by a Next.js rewrite, and the
+   same `API_KEY_PEPPER` hashes the tokens. The **Allow API keys** switch covers these sign-ins too.
+   Check after deploying: `curl -s https://project.eyelevelstudio.in/.well-known/oauth-authorization-server`
+   must answer JSON with `"issuer": "https://project.eyelevelstudio.in"`. If Apache serves
+   `/.well-known/` itself (an `Alias` for Let's Encrypt, say), add above it:
+   ```apache
+   ProxyPass        /.well-known/oauth-authorization-server http://127.0.0.1:4000/.well-known/oauth-authorization-server
+   ProxyPass        /.well-known/oauth-protected-resource  http://127.0.0.1:4000/.well-known/oauth-protected-resource
+   ```
+   Then in Claude.ai: Customize → Connectors → Add custom connector → URL
+   `https://project.eyelevelstudio.in/api/mcp` → **Sign in now** → **Use Claude's published identity**.

@@ -1,6 +1,6 @@
 import express, { Router, type Response } from 'express';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { apiKeyAuth, apiRateLimit, apiRequestLog, type ApiRequest } from '../middleware/apiKey.js';
+import { mcpAuth, apiRateLimit, apiRequestLog, type ApiRequest } from '../middleware/apiKey.js';
 import { buildMcpServer } from '../services/publicApi/mcpTools.js';
 import { contextOf, apiErrorHandler } from './apiV1.js';
 import { logger } from '../utils/logger.js';
@@ -14,9 +14,10 @@ import { logger } from '../utils/logger.js';
  * GET (the optional server-to-client stream) is refused — stateless servers
  * have nothing to send on it.
  *
- * The same Bearer key, rate limit and request log as /api/v1. Answers are
- * plain JSON rather than an event stream, which nothing between here and the
- * agent can hold back.
+ * The same Bearer key, rate limit and request log as /api/v1 — or an access
+ * token from "Sign in with Flowzen" (API Plan 2), which is how Claude.ai and
+ * ChatGPT connect. Answers are plain JSON rather than an event stream, which
+ * nothing between here and the agent can hold back.
  */
 
 export const mcpRouter = Router();
@@ -38,7 +39,7 @@ mcpRouter.use((req: ApiRequest, _res, next) => {
   } else req.apiRoute = '/mcp';
   next();
 });
-mcpRouter.use(apiKeyAuth, apiRequestLog, apiRateLimit);
+mcpRouter.use(mcpAuth, apiRequestLog, apiRateLimit);
 
 const rpcError = (res: Response, status: number, code: number, message: string) =>
   res.status(status).json({ jsonrpc: '2.0', error: { code, message }, id: null });

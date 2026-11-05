@@ -46,6 +46,7 @@ import { usageRouter } from './routes/usage.js';
 import { apiKeysRouter } from './routes/apiKeys.js';
 import { apiV1Router } from './routes/apiV1.js';
 import { mcpRouter } from './routes/mcp.js';
+import { oauthRouter, wellKnownRouter } from './routes/oauth.js';
 import { startAgencyHealthScanner } from './workers/scanner.cron.js';
 import { startMonthCardScheduler } from './workers/monthCard.cron.js';
 import { startAllocationScheduler } from './workers/allocation.cron.js';
@@ -123,6 +124,15 @@ app.use(
 // Each API key has its own, tighter limit inside (middleware/apiKey.ts).
 app.use('/api/v1', apiV1Router);
 app.use('/api/mcp', mcpRouter);
+
+/**
+ * "Sign in with Flowzen" (API Plan 2): OAuth discovery for the MCP endpoint.
+ * At the root, where the standard puts it, and under /api, which is the path
+ * the proxy already routes here — the web app forwards the root one to it.
+ */
+app.use('/.well-known', wellKnownRouter);
+app.use('/api/.well-known', wellKnownRouter);
+app.use('/api/oauth', oauthRouter);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString(), version: 2 });
