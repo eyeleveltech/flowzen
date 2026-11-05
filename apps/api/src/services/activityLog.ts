@@ -57,7 +57,7 @@ const CLIENT_ORG_VERBS = ['outreach_imported'];
 const PEOPLE_ORG_VERBS = ['allocations_confirmed'];
 
 const WORK_TYPES = ['Project', 'Retainer', 'MonthCard', 'InternalProject', 'CalendarEvent'];
-const MONEY_TYPES = ['Invoice', 'Proforma', 'Cost'];
+const MONEY_TYPES = ['Invoice', 'Proforma', 'Cost', 'SubscriptionInvoice', 'SubscriptionPlatform'];
 const CLIENT_TYPES = ['Company', 'Proposal', 'OutreachEntry'];
 
 export function areaWhere(area: string): Prisma.ActivityWhereInput | null {
@@ -487,6 +487,12 @@ const ACTION: Record<string, string> = {
   'Cost.cleanup_moved_month': 'moved a cost to its own month in the money clean-up:',
   'Cost.cleanup_undone': 'undid the money clean-up on a cost:',
 
+  // Subscriptions: platform invoices and their platforms.
+  'SubscriptionInvoice.subscription_invoice_added': 'saved a subscription invoice:',
+  'SubscriptionInvoice.subscription_invoice_updated': 'corrected a subscription invoice:',
+  'SubscriptionInvoice.subscription_invoice_deleted': 'deleted a subscription invoice:',
+  'SubscriptionPlatform.subscription_platform_updated': 'changed a subscription platform:',
+
   // Assets
   // Meetings and shoots
   'CalendarEvent.event_created': 'booked',
@@ -866,6 +872,14 @@ export function detailLines(
   }
   if (verb === 'approval_timings_updated' && str(p.remind)) {
     lines.push(`Remind after ${p.remind} · escalate after ${str(p.escalate)}`);
+  }
+
+  // Subscriptions: which platform and invoice, and what it came to.
+  if (entityType === 'SubscriptionInvoice' || entityType === 'SubscriptionPlatform') {
+    const bits = [str(p.platform), str(p.invoiceNumber), str(p.amount), str(p.name)].filter(Boolean) as string[];
+    if (bits.length) lines.push(bits.join(' · '));
+    if (typeof p.inr === 'number') lines.push(`₹${p.inr.toLocaleString('en-IN')}${p.estimated ? ' (estimated)' : ''}`);
+    if (str(p.status)) lines.push(String(p.status) === 'CANCELLED' ? 'Cancelled' : 'Active');
   }
 
   // API keys: which one, and what it may do.

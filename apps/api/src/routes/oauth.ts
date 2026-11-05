@@ -9,6 +9,7 @@ import {
   OAuthError,
   authorizationServerMetadata,
   authorizeParamsSchema,
+  cannotConnect,
   checkAuthorize,
   consent,
   deniedRedirect,
@@ -143,6 +144,18 @@ const log = (req: AuthRequest, verb: string, userId: string, payload: Prisma.Inp
     data: { organizationId: req.user!.organizationId, entityType: 'User', entityId: userId, actorId: req.user!.userId, verb, payload },
   });
 
+/**
+ * Who may connect an app at all: Management, and whoever they switched
+ * "Connect AI apps" on for. Refused before the app or its address is even
+ * looked at, so a person without it gets one plain sentence.
+ */
+const mayConnect = (req: AuthRequest, res: Response): boolean => {
+  const why = cannotConnect(req.user!);
+  if (!why) return true;
+  res.status(403).json({ success: false, error: why, data: { fatal: true, redirectTo: null } });
+  return false;
+};
+
 /** The sign-in's parameters, as the browser carried them to /oauth/authorize. */
 const readParams = (raw: unknown) => {
   const parsed = authorizeParamsSchema.safeParse(raw);
@@ -165,6 +178,7 @@ const hostOf = (url: string) => {
 oauthRouter.get('/authorize', authenticate, async (req: AuthRequest, res, next) => {
   try {
     noStore(res);
+    if (!mayConnect(req, res)) return;
     const params = readParams(req.query);
     if (!params) {
       res.status(400).json({ success: false, error: 'This sign-in link is incomplete. Start again from the app.', data: { fatal: true, redirectTo: null } });
@@ -205,6 +219,7 @@ const decisionSchema = z.object({
 oauthRouter.post('/authorize', authenticate, async (req: AuthRequest, res, next) => {
   try {
     noStore(res);
+    if (!mayConnect(req, res)) return;
     const parsed = decisionSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ success: false, error: parsed.error.issues[0]?.message ?? 'The answer is not valid.' });
@@ -269,6 +284,9 @@ oauthRouter.get('/grants', authenticate, async (req: AuthRequest, res, next) => 
       success: true,
       all: seesAll(req),
       me: req.user!.userId,
+      /** Whether this person may connect an app at all, and if not, why. */
+      canConnect: !cannotConnect(req.user!),
+      cannotConnectWhy: cannotConnect(req.user!),
       mcpUrl: mcpUrl(),
       scopes: API_SCOPES.map((s) => ({ key: s.key, group: s.group, label: s.label, description: s.description })),
       grants: rows.map(grantView),

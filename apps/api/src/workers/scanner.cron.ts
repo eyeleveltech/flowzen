@@ -12,6 +12,7 @@ import { expireLapsedProformas } from '../services/proformaExpiry.js';
 import { asStoredDay, moneyClock, orgToday } from '../utils/moneyDates.js';
 import { dealStaleness } from '../services/salesFollowUp.js';
 import { ACTIVE_DEAL_WHERE, isActiveDeal } from '../services/activeDeal.js';
+import { subscriptionAlertsFor } from '../services/subscriptions.js';
 
 function median(values: number[]): number {
   if (values.length === 0) return 0;
@@ -734,6 +735,11 @@ export async function evaluateAgencyHealthRules(organizationId: string): Promise
       message: `${ip.name} passed its target date (${target}) with ${open} task${open === 1 ? '' : 's'} still open.`,
     });
   }
+
+  // Subscriptions (Subscriptions plan, decision 8): a renewal in the next
+  // week, a price that went up, an invoice that should have arrived by now.
+  // Worked out from the invoices alone; a cancelled platform is silent.
+  alerts.push(...(await subscriptionAlertsFor(organizationId, now)));
 
   return alerts;
 }

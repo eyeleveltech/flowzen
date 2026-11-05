@@ -8,6 +8,7 @@ import { dealStaleness, nextStepState, studioToday } from './salesFollowUp.js';
 import { ACTIVE_DEAL_WHERE } from './activeDeal.js';
 import { BOARD_PERSON_SELECT, composeTeamBoard } from './teamBoard.js';
 import { allDepartmentPeople, composeDepartmentOverview, composeDepartmentWork } from './departmentPage.js';
+import { subscriptionsView } from './subscriptions.js';
 
 /**
  * What Zen may look up, and how.
@@ -185,6 +186,12 @@ export const ZEN_TOOLS = [
         limit: { type: 'number' },
       },
     },
+  },
+  {
+    name: 'getSubscriptions',
+    description:
+      'What the studio spends on software platforms (Adobe, Canva, Google Workspace…), from their uploaded invoices: spent this month and this financial year, the monthly run-rate, what renews in the next 30 days, and each platform\'s plan, billing cycle, last invoice, monthly cost and next renewal. Rupee figures marked estimated come from the USD rate in Settings. Never the invoice files themselves.',
+    parameters: { type: 'object', properties: {} },
   },
   ...ZEN_LOOKUPS,
 ] as const satisfies readonly AiTool[];
@@ -726,6 +733,29 @@ export async function runZenTool(
       return args.holder
         ? mapped.filter((a) => a.heldBy?.toLowerCase().includes(String(args.holder).toLowerCase()))
         : mapped;
+    }
+
+    case 'getSubscriptions': {
+      const view = await subscriptionsView(organizationId);
+      return {
+        today: view.today,
+        usdInrRate: view.rate.usdInrRate,
+        totals: view.totals,
+        renewingSoon: view.renewingSoon.map((r) => ({ platform: r.name, renews: r.nextRenewal, lastInvoice: r.lastInvoice })),
+        platforms: view.platforms.map((p) => ({
+          name: p.name,
+          status: p.status,
+          plan: p.plan,
+          cycle: p.cycle,
+          lastInvoice: p.lastInvoice,
+          monthlyInr: p.monthlyInr,
+          monthlyEstimated: p.monthlyEstimated,
+          nextRenewal: p.nextRenewal,
+          spentThisYear: p.spentThisYear,
+          invoices: p.invoiceCount,
+          link: '/money?tab=subscriptions',
+        })),
+      };
     }
 
     default:

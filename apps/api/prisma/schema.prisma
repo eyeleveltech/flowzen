@@ -140,6 +140,11 @@ model Organization {
   /// meeting, interested). Settings, not constants (Sales next step plan).
   dealStaleDays             Int      @default(25)
   outreachStaleDays         Int      @default(10)
+  /// Subscriptions: what a dollar invoice costs in rupees until the bank
+  /// statement says (Settings → Money). Null: no estimate can be made.
+  usdInrRate                Decimal? @db.Decimal(10, 4)
+  /// How much uploaded invoice space the organisation may use, in MB.
+  uploadQuotaMb             Int      @default(2048)
   defaultTermsAndConditions String[] @default(["Monthly retainer fee applicable", "Ad spend to be borne separately by the client", "Work execution begins upon confirmation and payment"])
   /// The lowest monthly fee a proposal may quote (AI Proposal Builder): the
   /// base, and per-industry floors above it, keyed by the industry's name.
@@ -193,6 +198,9 @@ model Organization {
   zenConversations           ZenConversation[]
   zenMemories                ZenMemory[]
   costs                      Cost[]
+  storedFiles                StoredFile[]
+  subscriptionPlatforms      SubscriptionPlatform[]
+  subscriptionInvoices       SubscriptionInvoice[]
   invoices                   Invoice[]
   alerts                     Alert[]
   activities                 Activity[]
@@ -291,6 +299,8 @@ model User {
   reviewingTasks       Task[]                      @relation("TaskReviewer")
   taskAssignments      TaskAssignee[]              @relation("TaskAssignments")
   enteredCosts         Cost[]                      @relation("CostEnteredBy")
+  storedFiles          StoredFile[]                @relation("StoredFileCreatedBy")
+  subscriptionInvoices SubscriptionInvoice[]       @relation("SubscriptionInvoiceCreatedBy")
   allocations          PeopleAllocation[]          @relation("UserAllocations")
   confirmedAllocations PeopleAllocation[]          @relation("AllocationConfirmedBy")
   acknowledgedAlerts   Alert[]                     @relation("AlertAcknowledgedBy")
@@ -1663,12 +1673,110 @@ model Cost {
   recurringClones  Cost[]             @relation("RecurringCostClones")
   assets           Asset[]
   assetMaintenance AssetMaintenance[]
+  /// The platform invoice this cost was made from, when it was (Subscriptions).
+  subscriptionInvoice SubscriptionInvoice?
 
   @@index([organizationId, type])
   @@index([monthCardId])
   @@index([projectId])
   @@index([incurredAt])
   @@map("costs")
+}
+
+/// ─── Subscriptions ───────────────────────────────────────────────────────────
+///
+/// "Only manage the subscription invoices, so we know what we spend on which
+/// platform." A platform invoice is uploaded, read by the AI, checked by a
+/// person, and saved with a linked Software cost. Management only.
+
+/// An uploaded file, on the uploads volume under a random name. The only
+/// files Flowzen keeps; served through a signed-in, Management-only route.
+model StoredFile {
+  id             String    @id @default(cuid())
+  organizationId String
+  /// What it is: "SUBSCRIPTION_INVOICE".
+  kind           String
+  mime           String
+  sizeBytes      Int
+  /// The file's name on disk, random. Never the name it was uploaded with.
+  path           String    @unique
+  sha256         String
+  /// What the person called it, for the download.
+  originalName   String
+  createdById    String
+  createdAt      DateTime  @default(now())
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User         @relation("StoredFileCreatedBy", fields: [createdById], references: [id])
+  invoices     SubscriptionInvoice[]
+
+  @@index([organizationId, kind, deletedAt])
+  @@map("stored_files")
+}
+
+/// A platform somebody pays for — Adobe, Canva, Google Workspace. Made by its
+/// first invoice; later invoices are matched to it by name.
+model SubscriptionPlatform {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  /// `name` lower-cased and trimmed, so "adobe" and "Adobe" are one platform.
+  nameKey        String
+  /// ACTIVE | CANCELLED. A cancelled platform gets no reminders.
+  status         String   @default("ACTIVE")
+  notes          String?  @db.Text
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoices     SubscriptionInvoice[]
+
+  @@unique([organizationId, nameKey])
+  @@map("subscription_platforms")
+}
+
+/// One platform invoice: the figures as printed, in the invoice's own
+/// currency, plus what the bank actually charged in rupees once known.
+model SubscriptionInvoice {
+  id             String    @id @default(cuid())
+  organizationId String
+  platformId     String
+  invoiceNumber  String
+  invoiceDate    DateTime  @db.Date
+  periodStart    DateTime? @db.Date
+  periodEnd      DateTime? @db.Date
+  planName       String?
+  /// ISO code: USD, INR, EUR…
+  currency       String
+  subtotal       Decimal?  @db.Decimal(14, 2)
+  taxAmount      Decimal?  @db.Decimal(14, 2)
+  /// "GST", "IGST", "VAT"… as printed.
+  taxType        String?
+  total          Decimal   @db.Decimal(14, 2)
+  /// From the bank or card statement. Until it is filled in, the rupee
+  /// figure is estimated from the USD→INR rate in Settings.
+  inrCharged     Decimal?  @db.Decimal(14, 2)
+  vendorGstin    String?
+  fileId         String
+  /// What the AI read, before the person corrected it — for comparison.
+  extracted      Json?
+  /// The Software cost this invoice is counted as, in profit and cash.
+  costId         String?   @unique
+  createdById    String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  platform     SubscriptionPlatform @relation(fields: [platformId], references: [id], onDelete: Cascade)
+  file         StoredFile           @relation(fields: [fileId], references: [id])
+  cost         Cost?                @relation(fields: [costId], references: [id], onDelete: SetNull)
+  createdBy    User                 @relation("SubscriptionInvoiceCreatedBy", fields: [createdById], references: [id])
+
+  @@unique([platformId, invoiceNumber])
+  @@index([organizationId, invoiceDate])
+  @@map("subscription_invoices")
 }
 
 model PeopleAllocation {

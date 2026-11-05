@@ -292,7 +292,7 @@ Money figures (Accounts and Management).
   - Outstanding today: what is owed now, on every invoice, whatever the period.
   - Overdue today: the part of that past its due date, in rupees, with a count.
 - **Header buttons:** Export invoices CSV, Export costs CSV, "+ New invoice". "+ New invoice" records a tax invoice already raised in Tally. It offers to link the client's live proforma and, for a project, the milestone it settles.
-- **Tabs** (the tab is in the address: /money?tab=invoices, billing, costs or profit):
+- **Tabs** (the tab is in the address: /money?tab=invoices, billing, costs, profit or subscriptions — the last is Management's only, see "Subscriptions" below):
   - **Invoices:**
     - A page of 50 at a time; filter by Still owed, Overdue, Paid or Cancelled. Amounts include GST.
     - Statuses: Raised, Part-paid (some money in), Overdue (due before today, by the studio's calendar), Paid, Cancelled. The same badge shows on a client's tab and a project's invoices.
@@ -396,6 +396,12 @@ Day start and end (default 10:00–19:00), days worked (default Monday–Saturda
 - **Numbering:** Prefix (default EL/PI) and "Financial year starts" (default April).
 - **Dates and money:** timezone and currency.
 - Without a state, quotations and invoices cannot work out tax.
+
+### Settings → Money
+
+Setup access. Two settings for Subscriptions (Money → Subscriptions):
+- **USD→INR rate:** rupees per dollar, used to estimate what a dollar invoice costs until the INR actually charged is entered on it. Estimated figures say "(estimated)" wherever they show. Blank means no estimate, and a dollar invoice then needs its INR charged before it can be saved.
+- **Upload space:** how much room uploaded invoices may take (default 2 GB). Uploads are also refused when the server has under 2 GB free, whatever this says.
 
 ### Settings → Documents & billing
 
@@ -602,6 +608,18 @@ Flowzen has no task approval step any more (removed 28 Oct 2026). A task is fini
 - **Recurring costs:** copied into each new month on the 1st as drafts, which you confirm with "Confirm draft". Drafts count in totals before they are confirmed.
 - **Deleted costs:** go to Trash.
 
+## Subscriptions
+[Money → Subscriptions](/money?tab=subscriptions), **Management only** (the tab is hidden from everyone else and the routes refuse them): what the studio spends on which platform — Adobe, Canva, Google Workspace, ChatGPT, Hostinger — worked out from the platforms' own invoices. Nothing else is tracked: no seats, logins, cards or trials.
+- **Upload the invoice:** drop one or several PDF, PNG or JPG files (10 MB each). Flowzen sends each to the organisation's AI (Anthropic, from Settings → Zen) and reads only fixed fields: vendor, invoice number, date, billing period, plan, currency, subtotal, tax and type, total, vendor GSTIN. A **review card** shows the file beside the fields, all editable; fields the reader was unsure of are highlighted. Nothing is saved until **Save**. With AI off or a failed reading, the card opens empty to fill in by hand. The invoice's text is never treated as instructions.
+- **Platforms** are made by their first invoice and matched by name after that (the card lets you pick another). A platform is a name, Active or Cancelled, and notes.
+- **Currency:** the invoice keeps its own currency; **INR charged** (from the bank statement) can be filled in now or later. Until then dollar invoices are estimated from the USD→INR rate (Settings → Money) and marked "(estimated)". Other currencies need the INR charged to be saved.
+- **Counts as a cost:** saving makes a linked Company cost, category Software, vendor the platform, amount the INR, dated on the invoice — so it is in profit and cash. Editing the invoice updates it; deleting the invoice removes it. If the platform already has a recurring Software cost, the card asks "Stop the old recurring cost for Adobe so it isn't counted twice?" — never silently.
+- **No duplicates:** the same platform and invoice number refuses with "Already uploaded on 3 Oct".
+- **The view:** Spent this month, Spent this year (from the financial year start), Monthly run-rate (each active platform's last invoice per month; a yearly plan ÷ 12), Renewing in the next 30 days; a sortable platforms table (plan, billing cycle from the invoice periods, last invoice in its currency and INR, monthly equivalent, next renewal = the last period's end, spent this year, invoice count); click a platform for its invoices (open the PDF) and price history; Export CSV. Phone width shows cards.
+- **Reminders** (bells, Management only, from the invoices alone): "Adobe renews around 12 Nov (about $54.99)" 7 days before; "Canva went up from $12.99 to $14.99" when an invoice costs more than the last for the same plan; "Upload the Canva invoice for October?" when a renewal passed 7 days ago with no new invoice. Cancelled platforms are silent.
+- **Files** live on their own disk volume, under random names, opened only through a signed-in Management route; the organisation has an upload quota.
+- Zen (Management) can read the per-platform totals (getSubscriptions), never the files.
+
 ## The time split
 [Time split](/allocations), pick the month, check each person's proposed split, then "Edit" if it is wrong and "Confirm". It should total 100%.
 
@@ -730,7 +748,7 @@ It can draft a task for the person to create — or several at once from one mes
 
 ## The API
 Flowzen can be reached by other tools, two ways:
-- **Sign in with Flowzen** — for Claude.ai, Claude Desktop, Claude mobile and ChatGPT. The person adds Flowzen as a custom connector with the address /api/mcp, chooses "Sign in", signs in to Flowzen, and ticks what the app may do. No key to copy. Anybody can connect their own account; what they can give the app is limited to what they can do themselves. Their connections are listed under Settings → API → Connected apps, where they (or Setup access) can revoke one.
+- **Sign in with Flowzen** — for Claude.ai, Claude Desktop, Claude mobile and ChatGPT. The person adds Flowzen as a custom connector with the address /api/mcp, chooses "Sign in", signs in to Flowzen, and ticks what the app may do. No key to copy. **Who may connect is Management's call:** the "Connect AI apps" switch on a person's access (Team → Access & permissions) — Management always may, nobody else until it is ticked for them, and switching it off stops every app they had connected. What they can give the app is limited to what they can do themselves. Their connections are listed under Settings → API → Connected apps, where they (or Setup access) can revoke one.
 - **An API key** from Settings → API (/settings?tab=api), Setup access only — for Claude Code, Claude Desktop's config file, or any MCP client over MCP at /api/mcp, and for **automation tools** (n8n, Make, Zapier) over the REST API at /api/v1. Its full description is /api/v1/openapi.json.
 
 A key or a connected app acts as the person behind it, narrowed to its scopes, so it never sees or does more than they can: a Head's sees their department's tasks, and money amounts and deal values show only if that person may see them. A key stops working when it is revoked, expires, its maker leaves, or API keys are switched off; a connected app stops when it is revoked, the person leaves, or API keys are switched off.

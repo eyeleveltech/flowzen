@@ -178,6 +178,18 @@ const full = async <T>(method: string, e: string, body?: unknown): Promise<T> =>
   return payload as T;
 };
 
+/**
+ * A file upload. The browser sets the multipart boundary itself, so no
+ * Content-Type header here — one set by hand breaks the upload.
+ */
+async function uploadForm<T>(endpoint: string, form: FormData): Promise<T> {
+  const response = await fetch(`${API_URL}${endpoint}`, { method: 'POST', credentials: 'include', cache: 'no-store', body: form });
+  const text = await response.text();
+  const payload = text ? JSON.parse(text) : {};
+  if (!response.ok) throw new ApiError(payload.error ?? 'Something went wrong', response.status, payload.fieldErrors ?? [], payload.data, payload.code, payload.detail);
+  return payload as T;
+}
+
 const getFull = <T>(e: string) => full<T>('GET', e);
 const postFull = <T>(e: string, body?: unknown) => full<T>('POST', e, body);
 /**
@@ -357,6 +369,9 @@ export interface OrgConfig {
     allowPasswordLogin?: boolean;
     /** The first part of every asset tag — EL in EL/CAM/001. */
     assetTagPrefix?: string;
+    /** Settings → Money (Subscriptions): rupees per dollar for estimates, and the upload space in MB. setup.admin only. */
+    usdInrRate?: number | null;
+    uploadQuotaMb?: number;
   };
   /**
    * Whether this organisation can send email at all.
@@ -2546,6 +2561,31 @@ export const api = {
   },
 
   /** Settings → API: the switch, and making, changing and revoking API keys (setup.admin). */
+  subscriptions: {
+    view: () => getFull<SubscriptionsView & { success: boolean }>('/subscriptions'),
+    /** Upload one invoice; Flowzen keeps the file and reads it. Nothing is saved until `save`. */
+    read: (file: File) => {
+      const form = new FormData();
+      form.append('file', file, file.name);
+      return uploadForm<SubscriptionReadResult & { success: boolean }>('/subscriptions/invoices/read', form);
+    },
+    save: (body: SubscriptionInvoiceBody & { fileId: string; extracted?: SubscriptionReadFields | null; stopRecurringCostId?: string }) =>
+      postFull<{ success: boolean; invoice: { id: string; platformId: string; platformName: string; inr: number; estimated: boolean }; stoppedRecurring: string | null }>(
+        '/subscriptions/invoices',
+        body,
+      ),
+    updateInvoice: (id: string, body: Partial<SubscriptionInvoiceBody>) =>
+      patchFull<{ success: boolean; invoice: { id: string; inr: number; estimated: boolean } }>(`/subscriptions/invoices/${id}`, body),
+    deleteInvoice: (id: string) => del(`/subscriptions/invoices/${id}`),
+    platform: (id: string) => getFull<SubscriptionPlatformDetail & { success: boolean }>(`/subscriptions/${id}`),
+    updatePlatform: (id: string, body: { name?: string; status?: 'ACTIVE' | 'CANCELLED'; notes?: string | null }) =>
+      patchFull<{ success: boolean; platform: SubscriptionPlatformDetail['platform'] }>(`/subscriptions/${id}`, body),
+    /** For a plain link: the browser downloads it with its cookie. */
+    exportUrl: () => fileUrl('/subscriptions/export.csv'),
+    /** The invoice file, for opening in a new tab — Management only, like the data. */
+    fileHref: (fileId: string) => fileUrl(`/files/${fileId}`),
+  },
+
   oauth: {
     /** What the consent screen shows. A 400 carries `data: { fatal, redirectTo }` — see the page. */
     authorizeInfo: (params: OAuthAuthorizeParams) => get<OAuthAuthorizeInfo>(`/oauth/authorize?${new URLSearchParams(params as Record<string, string>)}`),
@@ -3448,6 +3488,117 @@ export interface ProposalDealDocs {
   versions: { id: string; n: number; sentAt: string; scopeSummary: string; fromDocument: { id: string; n: number } | null; value?: number }[];
 }
 
+// ── Subscriptions (Money → Subscriptions, Management only) ───────────────────
+
+export type SubscriptionCycle = 'MONTHLY' | 'YEARLY' | 'UNKNOWN';
+
+export interface SubscriptionPlatformSummary {
+  id: string;
+  name: string;
+  status: 'ACTIVE' | 'CANCELLED' | string;
+  notes: string | null;
+  plan: string | null;
+  cycle: SubscriptionCycle;
+  lastInvoice: { id: string; date: string; currency: string; total: number; inr: number | null; estimated: boolean } | null;
+  monthlyInr: number | null;
+  monthlyEstimated: boolean;
+  nextRenewal: string | null;
+  spentThisYear: number;
+  yearEstimated: boolean;
+  yearUnknown: number;
+  invoiceCount: number;
+}
+
+export interface SubscriptionsView {
+  today: string;
+  rate: { usdInrRate: number | null; set: boolean };
+  totals: {
+    spentThisMonth: number;
+    monthEstimated: boolean;
+    spentThisYear: number;
+    yearEstimated: boolean;
+    unknownThisYear: number;
+    runRate: number;
+    runRateEstimated: boolean;
+    activePlatforms: number;
+  };
+  renewingSoon: { id: string; name: string; nextRenewal: string; lastInvoice: SubscriptionPlatformSummary['lastInvoice'] }[];
+  platforms: SubscriptionPlatformSummary[];
+}
+
+/** What the reader found — every field editable on the review card. */
+export interface SubscriptionReadFields {
+  vendor?: string | null;
+  invoiceNumber?: string | null;
+  invoiceDate?: string | null;
+  periodStart?: string | null;
+  periodEnd?: string | null;
+  planName?: string | null;
+  currency?: string | null;
+  subtotal?: number | null;
+  taxAmount?: number | null;
+  taxType?: string | null;
+  total?: number | null;
+  vendorGstin?: string | null;
+}
+
+export interface SubscriptionReadResult {
+  file: { id: string; mime: string; sizeBytes: number; name: string; url: string };
+  aiUsed: boolean;
+  reason: string | null;
+  fields: SubscriptionReadFields;
+  uncertain: string[];
+  platformMatch: { id: string; name: string; status: string } | null;
+  duplicate: { id: string; uploadedOn: string; message: string } | null;
+  recurringCost: { id: string; vendor: string; amount: number; category: string } | null;
+  platforms: { id: string; name: string; status: string }[];
+  usdInrRate: number | null;
+}
+
+export interface SubscriptionInvoiceBody {
+  platformId?: string;
+  platformName?: string;
+  invoiceNumber: string;
+  invoiceDate: string;
+  periodStart?: string | null;
+  periodEnd?: string | null;
+  planName?: string | null;
+  currency: string;
+  subtotal?: number | null;
+  taxAmount?: number | null;
+  taxType?: string | null;
+  total: number;
+  inrCharged?: number | null;
+  vendorGstin?: string | null;
+}
+
+export interface SubscriptionInvoiceRow {
+  id: string;
+  invoiceNumber: string;
+  invoiceDate: string;
+  periodStart: string | null;
+  periodEnd: string | null;
+  planName: string | null;
+  currency: string;
+  subtotal: number | null;
+  taxAmount: number | null;
+  taxType: string | null;
+  total: number;
+  inrCharged: number | null;
+  inr: number | null;
+  estimated: boolean;
+  vendorGstin: string | null;
+  fileId: string;
+  fileUrl: string;
+  costId: string | null;
+}
+
+export interface SubscriptionPlatformDetail {
+  platform: { id: string; name: string; status: string; notes: string | null };
+  invoices: SubscriptionInvoiceRow[];
+  priceHistory: { date: string; currency: string; total: number; plan: string | null }[];
+}
+
 /** Settings → API. */
 export interface ApiScopeInfo {
   key: string;
@@ -3538,6 +3689,9 @@ export interface ConnectedAppsPage {
   /** True for an admin, who sees everyone's; otherwise only this person's. */
   all: boolean;
   me: string;
+  /** Whether this person may connect an app at all ("Connect AI apps" on their access), and if not, why. */
+  canConnect: boolean;
+  cannotConnectWhy: string | null;
   mcpUrl: string;
   scopes: ApiScopeInfo[];
   grants: ConnectedApp[];

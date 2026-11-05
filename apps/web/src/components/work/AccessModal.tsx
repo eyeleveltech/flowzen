@@ -47,6 +47,7 @@ const PERMS: { key: PermissionKey; label: string; hint: string }[] = [
   // because nobody with the key was around, the fix is this switch on one
   // person, not a wider preset.
   { key: 'asset.manage', label: 'Issue equipment', hint: 'Enter kit, hand it over, check it back in, retire it' },
+  { key: 'api.connect', label: 'Connect AI apps', hint: 'Let Claude or ChatGPT sign in as them and work in Flowzen with what they allow' },
 ];
 
 type Person = { id: string; name: string; dept?: string | null; preset?: string | null; permissions?: string[] };

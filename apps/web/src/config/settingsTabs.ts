@@ -16,6 +16,7 @@ import {
   Trash2,
   TrendingUp,
   Users,
+  Wallet,
 } from 'lucide-react';
 
 /**
@@ -45,6 +46,7 @@ export const SETTINGS_GROUPS = [
       { key: 'pricing', label: 'Services & pricing', caption: 'What the agency sells, its floors and agreed client rates.', icon: Tags },
       { key: 'proforma', label: 'Documents & billing', caption: 'What a proforma or invoice says, and who issues it.', icon: FileText },
       { key: 'documents', label: 'Tax & numbering', caption: 'GST, document numbers, the financial year and currency.', icon: Receipt },
+      { key: 'money', label: 'Money', caption: 'The USD→INR rate for subscriptions, and the space for uploaded invoices.', icon: Wallet },
     ],
   },
   {

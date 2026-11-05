@@ -29,6 +29,7 @@ import { useConfirmStore } from '@/stores/confirm';
 import { usePageHeader } from '@/hooks/usePageHeader';
 import { StatTile, StatRow } from '@/components/ui/stat-tile';
 import { Tabs, useTabState, type TabDef } from '@/components/ui/tabs';
+import { SubscriptionsTab } from '@/components/money/SubscriptionsTab';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { isCollectible } from '@/lib/invoice-state';
@@ -86,7 +87,7 @@ interface CostRow {
   project?: { company: { name: string }; name: string } | null;
 }
 
-type MoneyTab = 'INVOICES' | 'BILLING' | 'COSTS' | 'PROFIT';
+type MoneyTab = 'INVOICES' | 'BILLING' | 'COSTS' | 'PROFIT' | 'SUBSCRIPTIONS';
 
 interface ProfitRow {
   companyId: string;
@@ -147,6 +148,8 @@ export default function MoneyPage() {
   const perms = config?.me.permissions ?? [];
   const canSeeFigures =
     perms.includes('money.figures') || perms.includes('setup.admin') || config?.me.preset === 'MANAGEMENT';
+  // Subscriptions are Management's alone (Subscriptions plan, decision 1) — the preset, as the API gates it.
+  const isManagement = config?.me.preset === 'MANAGEMENT';
   const timezone = config?.organization.timezone ?? 'Asia/Kolkata';
   const fyStart = config?.organization.fiscalYearStart ?? 4;
   const today = todayIn(timezone);
@@ -220,6 +223,7 @@ export default function MoneyPage() {
     { key: 'BILLING', label: 'Billing', count: billingToDo, visible: canSeeFigures },
     { key: 'COSTS', label: 'Costs' },
     { key: 'PROFIT', label: 'Profit & Costs', visible: canSeeFigures },
+    { key: 'SUBSCRIPTIONS', label: 'Subscriptions', visible: isManagement },
   ];
   const [tab, setTab] = useTabState(tabs);
 
@@ -406,6 +410,8 @@ export default function MoneyPage() {
       )}
 
       <Tabs tabs={tabs} active={tab} onChange={setTab} />
+
+      {tab === 'SUBSCRIPTIONS' && isManagement && <SubscriptionsTab />}
 
       {tab === 'INVOICES' && !canPrintTaxInvoice && <SellerGapsNote gaps={sellerGaps} className="mb-3" />}
 

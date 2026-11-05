@@ -124,6 +124,9 @@ configRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction
               // decision made once and printed on stickers, not a display
               // setting every screen needs.
               assetTagPrefix: org.assetTagPrefix,
+              // Settings → Money (Subscriptions): the dollar rate and the upload space.
+              usdInrRate: org.usdInrRate === null ? null : Number(org.usdInrRate),
+              uploadQuotaMb: org.uploadQuotaMb,
               // §14: the working calendar and the stage probabilities are
               // settings, and until now nothing read either of them.
               workingHoursStart: org.workingHoursStart,
@@ -281,6 +284,10 @@ const orgUpdateSchema = z.object({
   // "Going stale": days since the last touch. A deal sits longer than a cold lead.
   dealStaleDays: z.number().int().min(1, 'At least 1 day').max(365, '365 days at most').optional(),
   outreachStaleDays: z.number().int().min(1, 'At least 1 day').max(365, '365 days at most').optional(),
+  /** Subscriptions: rupees per dollar for estimating a USD invoice; null clears it. */
+  usdInrRate: z.number().positive('The rate must be above zero').max(1000, 'That is not a rupee rate').nullable().optional(),
+  /** Subscriptions: how much invoice space the organisation may use, in MB. */
+  uploadQuotaMb: z.number().int().min(100, 'At least 100 MB').max(102400, '100 GB at most').optional(),
 });
 
 configRouter.patch('/', requirePermission('setup.admin'), async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -350,6 +357,8 @@ configRouter.patch('/', requirePermission('setup.admin'), async (req: AuthReques
         ...(data.stageProbVerbalYes !== undefined ? { stageProbVerbalYes: data.stageProbVerbalYes } : {}),
         ...(data.dealStaleDays !== undefined ? { dealStaleDays: data.dealStaleDays } : {}),
         ...(data.outreachStaleDays !== undefined ? { outreachStaleDays: data.outreachStaleDays } : {}),
+        ...(data.usdInrRate !== undefined ? { usdInrRate: data.usdInrRate } : {}),
+        ...(data.uploadQuotaMb !== undefined ? { uploadQuotaMb: data.uploadQuotaMb } : {}),
       },
     });
 

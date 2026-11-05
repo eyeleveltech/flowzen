@@ -47,6 +47,8 @@ import { apiKeysRouter } from './routes/apiKeys.js';
 import { apiV1Router } from './routes/apiV1.js';
 import { mcpRouter } from './routes/mcp.js';
 import { oauthRouter, wellKnownRouter } from './routes/oauth.js';
+import { subscriptionsRouter } from './routes/subscriptions.js';
+import { filesRouter } from './routes/files.js';
 import { startAgencyHealthScanner } from './workers/scanner.cron.js';
 import { startMonthCardScheduler } from './workers/monthCard.cron.js';
 import { startAllocationScheduler } from './workers/allocation.cron.js';
@@ -179,6 +181,9 @@ app.use('/api/push', pushRouter);
 app.use('/api/usage', usageRouter);
 // Settings → API: making and revoking keys. A signed-in session, like any screen.
 app.use('/api/api-keys', apiKeysRouter);
+// Money → Subscriptions, and the invoice files behind it. Management only.
+app.use('/api/subscriptions', subscriptionsRouter);
+app.use('/api/files', filesRouter);
 
 // Start background health rules scanner
 startAgencyHealthScanner();

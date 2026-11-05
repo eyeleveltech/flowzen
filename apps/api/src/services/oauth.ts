@@ -1,7 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
-import { sessionOf, type UserSession } from '../middleware/auth.js';
+import { hasPermission, sessionOf, type UserSession } from '../middleware/auth.js';
 import { logger } from '../utils/logger.js';
 import { appUrl } from './publicApi/core.js';
 import { SCOPE_KEYS, base62, hashKey, isScope, sameHash, scopesFor, type ApiScope } from './apiKeys.js';
@@ -432,17 +432,31 @@ const GRANT_INCLUDE = {
 type GrantWithPeople = NonNullable<Awaited<ReturnType<typeof grantById>>>;
 const grantById = (id: string) => prisma.oAuthGrant.findUnique({ where: { id }, include: GRANT_INCLUDE });
 
-/** Whether tokens under this grant may still be used, or why not. */
+/** What stands between a person and connecting an app, in words for the screen. Null when nothing does. */
+export const CONNECT_PERMISSION = 'api.connect' as const;
+export const cannotConnect = (user: UserSession): string | null =>
+  hasPermission(user, CONNECT_PERMISSION)
+    ? null
+    : 'Connecting AI apps is switched on per person by Management (Team → Access & permissions → "Connect AI apps"). Ask them to switch it on for you.';
+
+/**
+ * Whether tokens under this grant may still be used, or why not. The person
+ * must still be allowed to connect apps at all — Management can take that
+ * away from the team screen, and every token they had stops with it.
+ */
 export function grantUsable(g: {
   revokedAt: Date | null;
   organization: { apiEnabled: boolean };
-  user: { active: boolean };
+  user: Parameters<typeof sessionOf>[0];
 }): { ok: true } | { ok: false; code: string; message: string } {
   if (g.revokedAt) return { ok: false, code: 'grant_revoked', message: 'This connection was revoked in Flowzen. Connect again to continue.' };
   if (!g.organization.apiEnabled) {
     return { ok: false, code: 'api_disabled', message: 'API access is switched off for this organisation. An admin can turn it on in Settings → API.' };
   }
   if (!g.user.active) return { ok: false, code: 'creator_inactive', message: 'This person no longer has access to Flowzen.' };
+  if (cannotConnect(sessionOf(g.user))) {
+    return { ok: false, code: 'not_allowed', message: 'This person is no longer allowed to connect AI apps to Flowzen.' };
+  }
   return { ok: true };
 }
 

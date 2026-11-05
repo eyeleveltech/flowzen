@@ -97,6 +97,15 @@ export const RULE_PERMISSION: Record<string, PermissionKey | readonly Permission
 };
 
 /**
+ * The rules for Management and nobody else — not a permission, the preset,
+ * exactly as `requireManagement()` gates their screen. Subscriptions are
+ * what the studio pays for, platform by platform (Subscriptions plan,
+ * decisions 1 and 8): a Head granted `setup.admin` runs Settings, not the
+ * studio's spending.
+ */
+export const MANAGEMENT_RULES = ['SUBSCRIPTION_RENEWAL_DUE', 'SUBSCRIPTION_PRICE_UP', 'SUBSCRIPTION_INVOICE_MISSING'] as const;
+
+/**
  * The rules that reach you about your OWN work, whatever you may see.
  *
  * Six of fourteen people are EMPLOYEE, holding `work.own` and nothing else, so
@@ -194,7 +203,10 @@ export async function alertClausesFor(user: UserSession): Promise<Prisma.AlertWh
 
   const scope = await teamScope(user);
   const isTeamRule = (rule: string) => (TEAM_RULES as readonly string[]).includes(rule);
-  const openRules = scope.all ? allowedRules : allowedRules.filter((r) => !isTeamRule(r));
+  const openRules = [
+    ...(scope.all ? allowedRules : allowedRules.filter((r) => !isTeamRule(r))),
+    ...(user.preset === 'MANAGEMENT' ? MANAGEMENT_RULES : []),
+  ];
 
   /*
    * A Head's team rules, narrowed to their people (and themselves). Looked up
@@ -282,6 +294,7 @@ const SOURCE: Record<string, string> = {
   CalendarEvent: 'Calendar',
   InternalProject: 'Internal work',
   ApiKey: 'Settings',
+  SubscriptionPlatform: 'Money',
 };
 
 /** Where a row opens: utils/recordLink, shared with the calendar. */
@@ -304,6 +317,8 @@ const linkFor = (
   if (rule === 'PROPOSAL_REVIEW_REQUESTED') return `/quotations/${entityId}`;
   // API keys live in Settings → API, which is setup.admin's like the rule.
   if (rule === 'API_KEY_CHANGED') return '/settings?tab=api';
+  // A platform opens on Money → Subscriptions, which only Management reach — like the rule.
+  if (entityType === 'SubscriptionPlatform') return `/money?tab=subscriptions&platform=${entityId}`;
   return linkForUser(entityType, entityId, user);
 };
 

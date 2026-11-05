@@ -77,15 +77,19 @@ function useWhen(tz: string, locale: string) {
 
 export function ApiTab({ tz, locale, admin }: { tz: string; locale: string; admin: boolean }) {
   const { when, dayOf } = useWhen(tz, locale);
-  if (!admin) {
-    return (
-      <div className="space-y-6">
-        <ConnectedAppsCard when={when} dayOf={dayOf} />
-        <SignInCard />
-      </div>
-    );
-  }
+  if (!admin) return <PersonApiTab when={when} dayOf={dayOf} />;
   return <AdminApiTab when={when} dayOf={dayOf} />;
+}
+
+/** Somebody without setup access: their own connected apps, and how to add one — if Management lets them. */
+function PersonApiTab({ when, dayOf }: { when: (iso: string) => string; dayOf: (iso: string) => string }) {
+  const { data } = useQuery({ queryKey: APPS_KEY, queryFn: () => api.oauth.grants() });
+  return (
+    <div className="space-y-6">
+      <ConnectedAppsCard when={when} dayOf={dayOf} />
+      {data && (data.canConnect ? <SignInCard /> : <Note tone="info">{data.cannotConnectWhy}</Note>)}
+    </div>
+  );
 }
 
 function AdminApiTab({ when, dayOf }: { when: (iso: string) => string; dayOf: (iso: string) => string }) {
@@ -194,7 +198,7 @@ function ConnectedAppsCard({ when, dayOf }: { when: (iso: string) => string; day
       title="Connected apps"
       description={
         data?.all
-          ? 'Everyone’s sign-ins from Claude.ai, Claude Desktop, Claude mobile and ChatGPT. Each acts as the person who connected it, with only what they ticked.'
+          ? 'Everyone’s sign-ins from Claude.ai, Claude Desktop, Claude mobile and ChatGPT. Each acts as the person who connected it, with only what they ticked. Who may connect at all is the "Connect AI apps" switch on each person’s access (Team).'
           : 'Your sign-ins from Claude.ai, Claude Desktop, Claude mobile and ChatGPT. Each acts as you, with only what you ticked.'
       }
     >
@@ -204,8 +208,14 @@ function ConnectedAppsCard({ when, dayOf }: { when: (iso: string) => string; day
         <ErrorNote>{error instanceof ApiError ? error.message : 'Could not load the connected apps.'}</ErrorNote>
       ) : data.grants.length === 0 ? (
         <p className="text-sm text-secondary">
-          Nothing connected yet. In Claude.ai, add Flowzen as a custom connector with the address{' '}
-          <code className="font-mono text-xs">{data.mcpUrl}</code> and choose <span className="font-medium">Sign in now</span>.
+          {data.canConnect ? (
+            <>
+              Nothing connected yet. In Claude.ai, add Flowzen as a custom connector with the address{' '}
+              <code className="font-mono text-xs">{data.mcpUrl}</code> and choose <span className="font-medium">Sign in now</span>.
+            </>
+          ) : (
+            'Nothing connected.'
+          )}
         </p>
       ) : (
         <ul className="-mx-5 divide-y divide-line sm:-mx-6">

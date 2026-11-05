@@ -120,6 +120,9 @@ type Form = {
   stageProbVerbalYes: string;
   dealStaleDays: string;
   outreachStaleDays: string;
+  /** Subscriptions: rupees per dollar, blank for no estimate; and the upload space in MB. */
+  usdInrRate: string;
+  uploadQuotaMb: string;
 };
 
 export default function SettingsPage() {
@@ -222,6 +225,8 @@ export default function SettingsPage() {
         stageProbVerbalYes: String(o.stageProbabilities?.VERBAL_YES ?? 90),
         dealStaleDays: String(o.dealStaleDays ?? 25),
         outreachStaleDays: String(o.outreachStaleDays ?? 10),
+        usdInrRate: o.usdInrRate === null || o.usdInrRate === undefined ? '' : String(o.usdInrRate),
+        uploadQuotaMb: String(o.uploadQuotaMb ?? 2048),
       });
       setError(null);
       // Admin-only, so a refusal is expected for anyone below and is not worth
@@ -330,6 +335,9 @@ export default function SettingsPage() {
         stageProbVerbalYes: Number(form.stageProbVerbalYes),
         dealStaleDays: Number(form.dealStaleDays),
         outreachStaleDays: Number(form.outreachStaleDays),
+        // Blank clears the rate: dollar invoices then need their INR charged.
+        usdInrRate: form.usdInrRate.trim() ? Number(form.usdInrRate) : null,
+        uploadQuotaMb: Number(form.uploadQuotaMb),
       });
       // The org config is cached for an hour and read across the app. Without
       // this the other screens would show the old settings for the rest of the
@@ -611,6 +619,46 @@ export default function SettingsPage() {
                   <Field label="Deals (days)" value={form.dealStaleDays} onChange={(v) => set('dealStaleDays', v)} type="number" min="1" max="365" disabled={!canEdit} />
                   <Field label="Outreach leads (days)" value={form.outreachStaleDays} onChange={(v) => set('outreachStaleDays', v)} type="number" min="1" max="365" disabled={!canEdit} />
                 </div>
+            </SectionCard>
+
+            {canEdit && <SaveBar saving={saving} saved={saved} />}
+          </form>
+        )}
+
+        {tab === 'money' && (
+          <form onSubmit={save} className="space-y-10">
+            <SectionCard
+              title="Subscriptions"
+              description={
+                <>
+                  Money → Subscriptions keeps each platform&apos;s invoices in their own currency. Until the INR actually
+                  charged is entered on a dollar invoice, its rupee figure is estimated from this rate and marked
+                  &ldquo;(estimated)&rdquo; wherever it shows.
+                </>
+              }
+            >
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field
+                  label="USD → INR rate"
+                  value={form.usdInrRate}
+                  onChange={(v) => set('usdInrRate', v)}
+                  type="number"
+                  min="0"
+                  placeholder="e.g. 84.50"
+                  hint="Rupees per dollar. Blank means no estimate: a dollar invoice then needs its INR charged before it can be saved."
+                  disabled={!canEdit}
+                />
+                <Field
+                  label="Upload space (MB)"
+                  value={form.uploadQuotaMb}
+                  onChange={(v) => set('uploadQuotaMb', v)}
+                  type="number"
+                  min="100"
+                  max="102400"
+                  hint="How much room uploaded invoices may take. Uploads also stop when the server has under 2 GB free."
+                  disabled={!canEdit}
+                />
+              </div>
             </SectionCard>
 
             {canEdit && <SaveBar saving={saving} saved={saved} />}

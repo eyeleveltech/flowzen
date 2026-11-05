@@ -25,6 +25,9 @@ const PERMISSION_KEYS = [
   // HEAD preset who should issue gear gets this one switch added here, rather
   // than the whole MANAGEMENT preset being widened for one person.
   'asset.manage',
+  // "Connect AI apps": may let Claude or ChatGPT sign in as them (API Plan 2).
+  // In no preset — Management ticks it per person.
+  'api.connect',
 ] as const;
 
 export const usersRouter = Router();

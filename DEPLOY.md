@@ -32,6 +32,17 @@ docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB
 docker compose exec -T api sh -c 'gunzip -c /backups/pre-migration/<FILE>.sql.gz' | docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
 docker compose up -d api
 
+## Uploaded files (subscription invoices)
+Invoices uploaded on Money → Subscriptions live on the `uploads_data` volume (mounted at
+`/app/apps/api/uploads` in the API container), never in the database, and never on the
+database's disk. The `uploads-backup` service (docker-compose.yml) tars that volume nightly
+into `/backups/uploads/` on the `postgres_backups` volume and keeps 7 days — the same place
+the database dumps land. Uploads refuse themselves when the server has under 2 GB free or
+the organisation is past its quota (Settings → Money).
+- List backups: `docker compose exec -T api sh -c 'ls -lh /backups/uploads/'`
+- Restore one: `docker compose exec -T api sh -c 'tar xzf /backups/uploads/uploads-<DATE>.tar.gz -C /app/apps/api/uploads'`
+- Start the backup service after pulling this: `docker compose up -d uploads-backup`
+
 ## Rules
 - NEVER run prisma db push or --accept-data-loss on production.
 - Always READ the migration SQL before building (Scenario B).

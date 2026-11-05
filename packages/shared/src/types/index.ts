@@ -20,7 +20,12 @@ export type PermissionKey =
   // Handing a piece of company equipment over — assign, check out, check in,
   // retire. Reading the catalogue needs nothing; only the ACT of moving an
   // asset is gated, which is why this is one key rather than a read/write pair.
-  | 'asset.manage';
+  | 'asset.manage'
+  // Connecting an AI app (Claude.ai, ChatGPT) to their own account through
+  // "Sign in with Flowzen" (API Plan 2). In no preset: Management decides per
+  // person from the team screen who may let an app act as them. Management
+  // itself always may, through the master bypass.
+  | 'api.connect';
 
 export const ROLE_PRESET_PERMISSIONS: Record<RolePreset, PermissionKey[]> = {
   EMPLOYEE: ['work.own'],

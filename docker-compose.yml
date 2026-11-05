@@ -140,6 +140,24 @@ services:
     volumes:
       - postgres_backups:/backups
 
+  # Nightly copy of the uploads volume (subscription invoices), kept 7 days,
+  # beside the database dumps. pg_dump never includes files, so without this
+  # a restored database would point at invoices that are gone.
+  uploads-backup:
+    image: alpine:3.20
+    container_name: flowzen-uploads-backup
+    restart: unless-stopped
+    volumes:
+      - uploads_data:/uploads:ro
+      - postgres_backups:/backups
+    command: >
+      sh -c 'mkdir -p /backups/uploads;
+      while true; do
+        tar czf /backups/uploads/uploads-$$(date +%F).tar.gz -C /uploads . && echo "[uploads-backup] saved uploads-$$(date +%F).tar.gz";
+        find /backups/uploads -name "uploads-*.tar.gz" -mtime +7 -delete;
+        sleep 86400;
+      done'
+
 volumes:
   postgres_data:
     driver: local

@@ -36,20 +36,21 @@ const session = (who: Who) => ({
   active: true,
 });
 
-const userRow = (who: Who) => ({
+/** Everyone but Management has had "Connect AI apps" ticked, unless a test says otherwise. */
+const userRow = (who: Who, { connect = true } = {}) => ({
   id: PEOPLE[who].id,
   organizationId: 'org-1',
   email: `${PEOPLE[who].id}@eyelevel.local`,
   name: PEOPLE[who].name,
   preset: PEOPLE[who].preset,
-  permissions: [],
+  permissions: connect ? ['api.connect'] : [],
   active: true,
   sessionsValidFrom: null,
 });
 
 /** A signed-in session, as the screens have one. */
-const as = (who: Who) => {
-  (prisma.user.findUnique as any).mockResolvedValue(userRow(who));
+const as = (who: Who, opts: { connect?: boolean } = {}) => {
+  (prisma.user.findUnique as any).mockResolvedValue(userRow(who, opts));
   return ['Authorization', `Bearer ${signJwt({ ...session(who), email: 'x@eyelevel.local' } as any)}`] as const;
 };
 
@@ -188,6 +189,19 @@ describe('registering a client', () => {
 });
 
 describe('the consent screen', () => {
+  it('is Management’s to open up: without "Connect AI apps" a person is refused before anything else; Management never is', async () => {
+    const res = await request(app).get('/api/oauth/authorize').query(signIn()).set(...as('employee', { connect: false })).expect(403);
+    expect(res.body.error).toMatch(/Connect AI apps/);
+    expect(res.body.data.fatal).toBe(true);
+    expect((await request(app).post('/api/oauth/authorize').set(...as('bd', { connect: false })).send({ decision: 'allow', scopes: [], params: signIn() })).status).toBe(403);
+    expect((await request(app).get('/api/oauth/authorize').query(signIn()).set(...as('admin', { connect: false }))).status).toBe(200);
+
+    (prisma.oAuthGrant.findMany as any).mockResolvedValue([]);
+    const list = await request(app).get('/api/oauth/grants').set(...as('employee', { connect: false })).expect(200);
+    expect(list.body.canConnect).toBe(false);
+    expect(list.body.cannotConnectWhy).toMatch(/Management/);
+  });
+
   it('refuses an unknown app, or a known one at an address it did not register, on the page', async () => {
     const unknown = await request(app).get('/api/oauth/authorize').query(signIn({ client_id: 'fzc_nobody' })).set(...as('bd')).expect(400);
     expect(unknown.body.data.fatal).toBe(true);
@@ -378,6 +392,11 @@ describe('a token at the MCP door', () => {
       tokenRow('bd', ['tasks:read'], { grant: grantRow('bd', ['tasks:read'], { organization: { apiEnabled: false } }) }),
     );
     expect(await code()).toEqual([401, 'api_disabled', true]);
+    // Management took "Connect AI apps" off them: every token they had stops.
+    (prisma.oAuthToken.findUnique as any).mockResolvedValue(
+      tokenRow('bd', ['tasks:read'], { grant: grantRow('bd', ['tasks:read'], { user: userRow('bd', { connect: false }) }) }),
+    );
+    expect(await code()).toEqual([401, 'not_allowed', true]);
   });
 
   it('writes made through it say "via Claude connector"', () => {
