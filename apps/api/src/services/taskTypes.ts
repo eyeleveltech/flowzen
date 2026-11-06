@@ -5,6 +5,7 @@ export const TASK_TYPE_LABEL: Record<TaskType, string> = {
   DESIGN: 'Design',
   VIDEO: 'Video',
   DIGITAL_MARKETING: 'Digital Marketing',
+  SOCIAL_MEDIA: 'Social Media',
   DEVELOPMENT: 'Development',
   BUSINESS_DEVELOPMENT: 'Business Development',
   ACCOUNTS: 'Accounts',

@@ -26,6 +26,8 @@ import { useCreateFlag } from '@/hooks/useCreateFlag';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { InlineDueDate } from '@/components/work/InlineDueDate';
 import { changeTaskStatus, waitingWords } from '@/lib/task-status';
+import { optimistic, changedBackMessage } from '@/lib/optimistic';
+import { MyWorkSkeleton } from '@/components/ui/skeleton-screens';
 import { getPriorityDot, getPriorityLabel } from '@/lib/priority';
 import { StatTile, StatRow } from '@/components/ui/stat-tile';
 import { TaskDrawer, type DrawerTask } from '@/components/work/TaskDrawer';
@@ -253,7 +255,7 @@ export default function MyWorkPage() {
       try {
         await api.tasks.saveMyOrder(list.map((t) => t.id));
       } catch (e) {
-        toast.error(e instanceof ApiError ? e.message : 'Could not save that order');
+        toast.error(changedBackMessage(e));
         void refetch();
       }
     },
@@ -418,9 +420,30 @@ export default function MyWorkPage() {
     if (next === task.status) return;
     setBusyId(task.id);
     try {
-      // On hold goes through /wait and /resume, so the wait is timed — and
-      // asks what it is waiting on. Cancelled, nothing moved.
-      if (!(await changeTaskStatus(task, next))) return;
+      if (next === 'ON_HOLD') {
+        // On hold goes through /wait, so the wait is timed — and asks what it
+        // is waiting on first. Nothing moves until that is answered; cancelled,
+        // nothing moved.
+        if (!(await changeTaskStatus(task, next))) return;
+      } else {
+        // The row changes now and the save follows (lib/optimistic). Refused
+        // or failed, it goes back with "Couldn't save — changed back".
+        const saved = await optimistic<NonNullable<typeof data>>(
+          queryClient,
+          ['tasks', 'my'],
+          (cur) => ({
+            ...cur,
+            tasks: Object.fromEntries(
+              Object.entries(cur.tasks).map(([group, list]) => [
+                group,
+                list.map((t: TaskItem) => (t.id === task.id ? { ...t, status: next } : t)),
+              ]),
+            ) as typeof cur.tasks,
+          }),
+          () => api.tasks.updateStatus(task.id, next),
+        );
+        if (!saved) return;
+      }
       await load();
       setSelected((s) => (s && s.id === task.id ? { ...s, status: next } : s));
     } catch (e) {
@@ -438,7 +461,7 @@ export default function MyWorkPage() {
   usePageHeader('My Work', todayStr);
   const total = counts.today + counts.overdue + counts.thisWeek + counts.later + counts.completed;
 
-  if (isPending) return null;
+  if (isPending) return <MyWorkSkeleton />;
 
   /*
    * A row, at the density every other list in the product runs at.
@@ -491,7 +514,7 @@ export default function MyWorkPage() {
                 disabled={focusBusy}
                 onClick={(e) => {
                   e.stopPropagation();
-                  void startNow(t.id).then((now) => now && load());
+                  void startNow(t.id, t).then((now) => now && load());
                 }}
                 className="ml-2 rounded-sm text-micro font-semibold text-primary underline-offset-2 opacity-0 outline-none transition-opacity hover:underline focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-primary/40 group-hover/row:opacity-100"
               >

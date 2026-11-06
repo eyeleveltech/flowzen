@@ -10,15 +10,17 @@
  * times with am/pm beside it, Today / Tomorrow, and Save. On a phone the same
  * panel comes up as a bottom sheet, stacked.
  *
- * Saves both in one call, shows the new value at once, and every task list
- * refreshes (lib/task-sync).
+ * Shows the new value at once and saves both in one call; refused or
+ * failed, the old date comes back with "Couldn't save — changed back"
+ * (lib/optimistic). Every task list refreshes after a save (lib/task-sync).
  */
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
-import { api, ApiError, formatDate } from '@/lib/api-v2';
+import { api, formatDate } from '@/lib/api-v2';
+import { changedBackMessage } from '@/lib/optimistic';
 import { cn } from '@/lib/utils';
 import { dueTimeOptions, withDueTime } from '@/lib/due-time';
 import { useIsMobile } from '@/hooks/use-breakpoint';
@@ -74,16 +76,19 @@ export function InlineDueDate({
       return;
     }
     setSaving(true);
+    const previous = saved;
+    // On the row now; the request follows.
+    setSaved({ date: nextDate, time: nextTime || null });
+    setOpen(false);
     try {
       await api.tasks.update(taskId, {
         ...(nextDate !== date ? { dueDate: nextDate } : {}),
         ...(nextTime !== currentTime ? { dueTime: nextTime || null } : {}),
       });
-      setSaved({ date: nextDate, time: nextTime || null });
       toast.success(`Due ${withDueTime(format(nextDate), nextTime)}`);
-      setOpen(false);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : 'Could not change the due date');
+      setSaved(previous);
+      toast.error(changedBackMessage(e));
     } finally {
       setSaving(false);
     }

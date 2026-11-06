@@ -145,6 +145,10 @@ model Organization {
   usdInrRate                Decimal? @db.Decimal(10, 4)
   /// How much uploaded invoice space the organisation may use, in MB.
   uploadQuotaMb             Int      @default(2048)
+  /// Logins: a known value encrypted with CREDENTIALS_KEY on the first save,
+  /// so a server started with a different key says so instead of failing
+  /// row by row.
+  credentialsKeyCheck       String?
   defaultTermsAndConditions String[] @default(["Monthly retainer fee applicable", "Ad spend to be borne separately by the client", "Work execution begins upon confirmation and payment"])
   /// The lowest monthly fee a proposal may quote (AI Proposal Builder): the
   /// base, and per-industry floors above it, keyed by the industry's name.
@@ -201,6 +205,8 @@ model Organization {
   storedFiles                StoredFile[]
   subscriptionPlatforms      SubscriptionPlatform[]
   subscriptionInvoices       SubscriptionInvoice[]
+  credentials                Credential[]
+  credentialLogs             CredentialLog[]
   invoices                   Invoice[]
   alerts                     Alert[]
   activities                 Activity[]
@@ -301,6 +307,10 @@ model User {
   enteredCosts         Cost[]                      @relation("CostEnteredBy")
   storedFiles          StoredFile[]                @relation("StoredFileCreatedBy")
   subscriptionInvoices SubscriptionInvoice[]       @relation("SubscriptionInvoiceCreatedBy")
+  credentialsCreated   Credential[]                @relation("CredentialCreatedBy")
+  credentialsUpdated   Credential[]                @relation("CredentialUpdatedBy")
+  credentialsDeleted   Credential[]                @relation("CredentialDeletedBy")
+  credentialLogs       CredentialLog[]
   allocations          PeopleAllocation[]          @relation("UserAllocations")
   confirmedAllocations PeopleAllocation[]          @relation("AllocationConfirmedBy")
   acknowledgedAlerts   Alert[]                     @relation("AlertAcknowledgedBy")
@@ -386,6 +396,8 @@ model Company {
   organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   owner         User?          @relation("CompanyOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   people        Person[]
+  /// The client's logins (Logins plan). Removing the company keeps them, under "No client".
+  credentials   Credential[]
   proposals     Proposal[]
   proformas     Proforma[]
   retainers     Retainer[]
@@ -1275,6 +1287,7 @@ enum TaskType {
   DESIGN
   VIDEO
   DIGITAL_MARKETING
+  SOCIAL_MEDIA
   DEVELOPMENT
   BUSINESS_DEVELOPMENT
   ACCOUNTS
@@ -2868,4 +2881,88 @@ model ApiIdempotency {
   @@unique([apiKeyId, idempotencyKey])
   @@index([createdAt])
   @@map("api_idempotency")
+}
+
+/// ─── Logins (Credentials plan) ───────────────────────────────────────────────
+///
+/// One safe place for the studio's own and its clients' logins, Management
+/// only. The password and the notes are AES-256-GCM ciphertext under
+/// CREDENTIALS_KEY, which lives only in the server's .env — never in the
+/// database, the repo or a backup. Everything else is plain so search works.
+
+enum CredentialScope {
+  INTERNAL
+  CLIENT
+}
+
+enum CredentialAction {
+  SHOW
+  COPY
+  CREATE
+  UPDATE
+  PASSWORD_CHANGED
+  DELETE
+  RESTORE
+  IMPORT
+  PURGE
+}
+
+model Credential {
+  id                String          @id @default(cuid())
+  organizationId    String
+  scope             CredentialScope
+  /// The client it belongs to; null for the studio's own. Set to null if the
+  /// company is removed, so the login is never lost with it.
+  companyId         String?
+  name              String
+  website           String?
+  username          String?
+  /// "c1:iv:tag:data", bound to this row's id — ciphertext copied onto
+  /// another row fails to decrypt.
+  passwordEnc       String          @db.Text
+  notesEnc          String?         @db.Text
+  passwordChangedAt DateTime        @default(now())
+  createdById       String
+  updatedById       String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  /// Recently deleted for 30 days, then purged for good.
+  deletedAt         DateTime?
+  deletedById       String?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  company      Company?     @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  createdBy    User         @relation("CredentialCreatedBy", fields: [createdById], references: [id])
+  updatedBy    User?        @relation("CredentialUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  deletedBy    User?        @relation("CredentialDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  logs         CredentialLog[]
+
+  @@index([organizationId, scope])
+  @@index([companyId])
+  @@map("credentials")
+}
+
+/// Who did what to which login — its own log, never the shared Activity
+/// feed, so login names appear nowhere other people read. Never a password.
+model CredentialLog {
+  id             String           @id @default(cuid())
+  organizationId String
+  credentialId   String?
+  /// The login's name at the time, kept after the row is purged.
+  credentialName String
+  userId         String
+  action         CredentialAction
+  ip             String?
+  /// Counts only — "84 imported, 3 skipped". Never a value from the login.
+  detail         String?
+  at             DateTime         @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  credential   Credential?  @relation(fields: [credentialId], references: [id], onDelete: SetNull)
+  user         User         @relation(fields: [userId], references: [id])
+
+  @@index([organizationId, at])
+  @@index([credentialId, at])
+  @@index([userId, at])
+  @@map("credential_logs")
 }

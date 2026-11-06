@@ -1,14 +1,24 @@
+/*
+ * No `fetch` listener here, on purpose (Perf Plan 1, decision 9).
+ *
+ * There used to be an empty one, "required for the install prompt". It was
+ * not: Chrome has not needed a fetch handler to offer "Install app" for some
+ * time, and an empty one cost something on every request — the browser had
+ * to wake the worker up and ask it whether it wanted the request, for a
+ * handler that never did. Push and the tap on a notification are all this
+ * worker is for.
+ *
+ * If a cache is ever added here: it must EXCLUDE /api/credentials* — those
+ * answers carry passwords and are sent with Cache-Control: no-store
+ * (Credentials plan, decision 10). Nothing from Logins may sit in a cache.
+ */
+
 self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
-});
-
-self.addEventListener('fetch', (event) => {
-  // Minimal fetch listener required for PWA installation prompt
-  // We are not caching anything to avoid development conflicts
 });
 
 /*

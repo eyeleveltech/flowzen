@@ -12,6 +12,7 @@ import { Field, FieldSelect } from '@/components/ui/field';
 import { ErrorNote } from '@/components/ui/empty-state';
 import { PRIORITY_CONFIG } from '@/lib/priority';
 import { personOptions } from '@/lib/people';
+import { TASK_TYPE_OPTIONS } from '@/lib/task-type';
 import { useAuthStore } from '@/stores';
 import { DueTimeField } from '@/components/work/DueTimeField';
 
@@ -52,6 +53,7 @@ export function AssignTaskModal({
   // Optional; empty means any time that day.
   const [dueTime, setDueTime] = useState('');
   const [priority, setPriority] = useState('MEDIUM');
+  const [taskType, setTaskType] = useState('');
   const [description, setDescription] = useState('');
   const [scope, setScope] = useState<'INTERNAL' | 'CLIENT'>('INTERNAL');
   const [companyId, setCompanyId] = useState('');
@@ -107,6 +109,7 @@ export function AssignTaskModal({
   const canSave =
     Boolean(title.trim()) &&
     Boolean(dueDate) &&
+    Boolean(taskType) &&
     (scope === 'INTERNAL' ? Boolean(internalProjectId) : Boolean(selectedTarget));
 
   const submit = async (e: React.FormEvent) => {
@@ -128,6 +131,7 @@ export function AssignTaskModal({
         internalProjectId: scope === 'INTERNAL' ? internalProjectId || undefined : undefined,
         projectId: scope === 'CLIENT' ? selectedTarget?.projectId : undefined,
         priority,
+        taskType,
         assignedById: assignedById || undefined,
         notes: description.trim() || undefined,
       });
@@ -225,6 +229,14 @@ export function AssignTaskModal({
             <Field label="Due date" type="date" value={dueDate} onChange={setDueDate} required />
             <DueTimeField value={dueTime} onChange={setDueTime} />
             <FieldSelect label="Priority" value={priority} onChange={setPriority} options={PRIORITY_OPTIONS} />
+            <FieldSelect
+              label="Type of work"
+              value={taskType}
+              onChange={setTaskType}
+              required
+              placeholder="Choose…"
+              options={TASK_TYPE_OPTIONS}
+            />
           </div>
           <Field label="Description" value={description} onChange={setDescription} textarea rows={3} />
           {error && <ErrorNote>{error}</ErrorNote>}

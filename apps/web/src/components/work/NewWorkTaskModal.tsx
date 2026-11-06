@@ -148,7 +148,7 @@ export function NewWorkTaskModal({
       year: 'numeric',
     });
   })();
-  const canSave = Boolean(title.trim()) && Boolean(dueDate) && Boolean(selected);
+  const canSave = Boolean(title.trim()) && Boolean(dueDate) && Boolean(taskType) && Boolean(selected);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -266,7 +266,8 @@ export function NewWorkTaskModal({
             label="Type of work"
             value={taskType}
             onChange={setTaskType}
-            placeholder="Not set"
+            required
+            placeholder="Choose…"
             options={TASK_TYPE_OPTIONS}
           />
           <Field label="Description" value={description} onChange={setDescription} textarea rows={3} />

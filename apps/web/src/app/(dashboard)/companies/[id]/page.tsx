@@ -60,8 +60,10 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { useAuthStore } from '@/stores';
 import { useConfig } from '@/hooks/queries';
+import { ClientDetailSkeleton } from '@/components/ui/skeleton-loaders';
 import { useConfirmStore } from '@/stores/confirm';
 import { EditCompanyModal } from '@/components/clients/EditCompanyModal';
+import { LoginsCard } from '@/components/logins/LoginsCard';
 import { EditProformaModal } from '@/components/clients/EditProformaModal';
 import { SendDocumentModal } from '@/components/documents/SendDocumentModal';
 import { NewProposalModal } from '@/components/clients/NewProposalModal';
@@ -409,9 +411,8 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
 
   if (loading) {
     return (
-      <div className="page-shell space-y-6">
-        <div className="h-8 w-48 bg-subtle rounded-xl animate-pulse" />
-        <div className="h-64 bg-subtle rounded-xl animate-pulse" />
+      <div className="page-shell">
+        <ClientDetailSkeleton />
       </div>
     );
   }
@@ -743,6 +744,8 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
 
           {/* Right Col: Details Card */}
           <div className="space-y-6">
+            {/* The client's logins — Management only, by preset (Credentials plan). Nobody else is sent the count. */}
+            {pageConfig?.me.preset === 'MANAGEMENT' && <LoginsCard companyId={company.id} />}
             <Card className="p-5 space-y-4">
               <h3 className="text-sm font-semibold text-primary pb-2 border-b border-border">
                 Company Details

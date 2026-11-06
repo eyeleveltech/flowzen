@@ -26,12 +26,13 @@ import {
   offered,
   visibleSections,
   permissionForPath,
+  managementOnlyAccess,
 } from './navigation';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
-/** A person, described the way every auth response describes them. */
-const as = (preset: RolePreset) => ({ permissions: ROLE_PRESET_PERMISSIONS[preset] });
+/** A person, described the way every auth response describes them: their switches, and their preset. */
+const as = (preset: RolePreset) => ({ permissions: ROLE_PRESET_PERMISSIONS[preset], preset });
 
 const labels = (sections: { items: { label: string }[] }[]) =>
   sections.flatMap((s) => s.items.map((i) => i.label));
@@ -193,10 +194,11 @@ describe('every item names a permission the API actually enforces', () => {
     //   /profile   everybody has an account
     //   /assets    everybody needs to know where the kit is (the ACTIONS
     //              inside it are gated on asset.manage by the server)
-    // A fourth arriving here without a reason written beside it is the thing
+    //   /how-it-works  the explainer: it describes screens, it opens none
+    // A fifth arriving here without a reason written beside it is the thing
     // this assertion exists to stop.
     const open = [...NAV_ITEMS, ...BOTTOM_NAV_ITEMS].filter((i) => !i.needs).map((i) => i.href);
-    expect(open.sort()).toEqual(['/assets', '/my-work', '/profile']);
+    expect(open.sort()).toEqual(['/assets', '/how-it-works', '/my-work', '/profile']);
   });
 });
 
@@ -217,7 +219,7 @@ describe('every screen in the app is behind the guard, not just the listed ones'
   /** Deliberately open, each for a reason — same three the sidebar allows. */
   // Trash: each section asks for the access that deleted it (TrashTab), and
   // the server refuses the rest — there is no one permission for the page.
-  const OPEN = new Set(['/my-work', '/profile', '/assets', '/trash']);
+  const OPEN = new Set(['/my-work', '/profile', '/assets', '/trash', '/how-it-works']);
 
   it('gates every route under (dashboard) that is not deliberately open', () => {
     const routes = readdirSync(DASHBOARD, { withFileTypes: true })
@@ -266,5 +268,37 @@ describe('My department — a department head\'s page (Department head page plan
     expect(headsOnlyAccess('/my-department', as('HEAD'))).toBe('unknown');
     // Every other screen is untouched by it.
     expect(headsOnlyAccess('/members', { ...as('HEAD'), headOf: [] })).toBe('open');
+  });
+});
+
+describe('Subscriptions — its own screen, Management by preset', () => {
+  const item = NAV_ITEMS.find((i) => i.href === '/subscriptions')!;
+
+  it('sits under MANAGEMENT for Management only', () => {
+    expect(item.managementOnly).toBe(true);
+    expect(offered(item, as('MANAGEMENT'))).toBe(true);
+    for (const preset of ['EMPLOYEE', 'HEAD', 'BD', 'ACCOUNTS'] as RolePreset[]) expect(seenBy(preset), preset).not.toContain('Subscriptions');
+    expect(managementOnlyAccess('/subscriptions', as('MANAGEMENT'))).toBe('open');
+    expect(managementOnlyAccess('/subscriptions', as('ACCOUNTS'))).toBe('refused');
+  });
+});
+
+describe('Logins — Management by preset, not by permission (Credentials plan)', () => {
+  const item = NAV_ITEMS.find((i) => i.href === '/logins')!;
+
+  it('is offered to Management, and to nobody else — a Head handed setup.admin included', () => {
+    expect(item.managementOnly).toBe(true);
+    expect(offered(item, as('MANAGEMENT'))).toBe(true);
+    // The permission alone opens the door for canSee; the preset is what offered() asks on top.
+    expect(canSee(item, [...ROLE_PRESET_PERMISSIONS.HEAD, 'setup.admin'])).toBe(true);
+    expect(offered(item, { permissions: [...ROLE_PRESET_PERMISSIONS.HEAD, 'setup.admin'], preset: 'HEAD' })).toBe(false);
+    for (const preset of ['EMPLOYEE', 'HEAD', 'BD', 'ACCOUNTS'] as RolePreset[]) expect(seenBy(preset), preset).not.toContain('Logins');
+  });
+
+  it('refuses the address to anybody but Management, and waits until it knows who is asking', () => {
+    expect(managementOnlyAccess('/logins', as('MANAGEMENT'))).toBe('open');
+    expect(managementOnlyAccess('/logins', { permissions: [...ROLE_PRESET_PERMISSIONS.HEAD, 'setup.admin'], preset: 'HEAD' })).toBe('refused');
+    expect(managementOnlyAccess('/logins', null)).toBe('unknown');
+    expect(managementOnlyAccess('/money', as('ACCOUNTS'))).toBe('open');
   });
 });

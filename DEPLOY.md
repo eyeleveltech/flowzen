@@ -32,6 +32,28 @@ docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB
 docker compose exec -T api sh -c 'gunzip -c /backups/pre-migration/<FILE>.sql.gz' | docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
 docker compose up -d api
 
+## Logins (one-time setup, optional)
+Management's store of internal and client logins (sidebar → MANAGEMENT → Logins). Every
+password is encrypted with its own key, which lives **only** in the server's `.env`.
+1. On the server:
+   ```bash
+   openssl rand -base64 32
+   ```
+   Put the output in `/var/www/flowzen/.env` as `CREDENTIALS_KEY=...`, then Scenario A
+   (rebuild and restart). **Never paste the key into a chat or a ticket.** Until it is set,
+   Flowzen runs normally and the Logins page says "Not set up yet".
+2. **Keep one offline copy of the key** — written down in the office safe, or in a personal
+   password manager. A database backup holds only ciphertext: **if the key is lost, every
+   saved password is lost, even with backups.** That is the cost of backups being safe.
+3. Never change the key by editing `.env` alone — the page would say "the credentials key on
+   the server doesn't match". To rotate it (only if it leaks):
+   ```bash
+   NEW=$(openssl rand -base64 32)
+   docker compose exec -T -e CREDENTIALS_KEY_OLD="$(grep ^CREDENTIALS_KEY= .env | cut -d= -f2-)" -e CREDENTIALS_KEY="$NEW" api npm run credentials:rotate-key
+   # then put $NEW in .env as CREDENTIALS_KEY and: docker compose up -d api
+   ```
+   Every row is re-encrypted in one transaction; a failure part-way changes nothing.
+
 ## Uploaded files (subscription invoices)
 Invoices uploaded on Money → Subscriptions live on the `uploads_data` volume (mounted at
 `/app/apps/api/uploads` in the API container), never in the database, and never on the
@@ -144,3 +166,58 @@ n8n/Make/Zapier (REST at `/api/v1`, described at `/api/v1/openapi.json`).
    ```
    Then in Claude.ai: Customize → Connectors → Add custom connector → URL
    `https://project.eyelevelstudio.in/api/mcp` → **Sign in now** → **Use Claude's published identity**.
+
+## Performance (Perf Plan 1)
+The API gzips its JSON, puts its own time on every answer (`Server-Timing`, visible in
+DevTools → Network → Timing) and logs any request over 500 ms at `warn` — method, route
+pattern, duration, status and the caller's preset, never a user id or a body. The
+production database pool is pinned in docker-compose.yml (`connection_limit=10&pool_timeout=20`
+on `DATABASE_URL`); ten is far below Postgres's `max_connections` of 100 and must stay so.
+
+**Measuring.** `scripts/perf-check.ts` times the GETs behind the main screens (read-only,
+safe on production) and prints the median of 5 runs with the payload size:
+```bash
+# token: DevTools → Application → Cookies → `token` (sign in first)
+FLOWZEN_API=https://project.eyelevelstudio.in/api FLOWZEN_TOKEN=… npx tsx scripts/perf-check.ts
+```
+Run it before and after a change; `FLOWZEN_OUT=before.json` keeps a run and
+`FLOWZEN_BASELINE=before.json` prints the two side by side.
+
+**Apache**, once, in the site's HTTPS (`:443`) virtual host. Back the file up first
+(`sudo cp /etc/apache2/sites-enabled/<site>.conf ~/apache-<site>-$(date +%F).conf`), make the
+change, then `sudo apachectl configtest` and `sudo systemctl reload apache2`:
+```apache
+# HTTP/2: the dozen requests a screen makes share one connection instead of
+# queuing six at a time. Needs: sudo a2enmod http2 — and mpm_event, not prefork
+# (sudo a2dismod mpm_prefork && sudo a2enmod mpm_event; if PHP is on this box it
+# must then run as php-fpm). Restart apache2 after changing the MPM.
+Protocols h2 http/1.1
+
+# Compress what is not already compressed (sudo a2enmod deflate). The API gzips
+# its own JSON; this covers the web app's HTML, CSS and JS.
+AddOutputFilterByType DEFLATE text/html text/plain text/css text/javascript application/javascript application/json image/svg+xml
+# Never the live stream (each event must leave at once) nor the MCP endpoint.
+SetEnvIf Request_URI "^/api/stream" no-gzip=1
+SetEnvIf Request_URI "^/api/mcp"    no-gzip=1
+
+# The live stream passes straight through, unbuffered. ABOVE the general /api
+# line — Apache takes the first ProxyPass that matches.
+ProxyPass        /api/stream http://127.0.0.1:4000/api/stream flushpackets=on
+ProxyPassReverse /api/stream http://127.0.0.1:4000/api/stream
+# /api goes to the API directly, never through Next (which would add a hop).
+ProxyPass        /api http://127.0.0.1:4000/api
+ProxyPassReverse /api http://127.0.0.1:4000/api
+# Everything else is the web app.
+ProxyPass        / http://127.0.0.1:3000/
+ProxyPassReverse / http://127.0.0.1:3000/
+```
+Check, from any machine:
+```bash
+curl -sI --http2 https://project.eyelevelstudio.in/ | head -1
+#   HTTP/2 200
+curl -sI -H 'Accept-Encoding: gzip' -H "Authorization: Bearer $TOKEN" https://project.eyelevelstudio.in/api/tasks/all | grep -i 'content-encoding\|server-timing'
+#   content-encoding: gzip        server-timing: app;dur=…
+curl -sS -N --max-time 5 -H "Authorization: Bearer $TOKEN" https://project.eyelevelstudio.in/api/stream
+#   data: {"event":"connected",…} within a second — not after five
+```
+In DevTools → Network, the Protocol column reads `h2` for every request once HTTP/2 is on.

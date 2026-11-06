@@ -38,7 +38,7 @@ import { Drawer } from '@/components/ui/drawer';
 import { StatRow, StatTile } from '@/components/ui/stat-tile';
 import { Table, THead, TH, SortableTH, TBody, TR, TD, type SortDir } from '@/components/ui/table';
 import { ExportCsvButton } from '@/components/ui/export-csv-button';
-import { TableRowsSkeleton } from '@/components/ui/skeleton-loaders';
+import { TableSkeleton } from '@/components/ui/skeleton-loaders';
 import { useConfirmStore } from '@/stores/confirm';
 import { cn, plural } from '@/lib/utils';
 
@@ -701,7 +701,7 @@ export function SubscriptionsTab() {
   const { data, isPending, error } = useQuery({ queryKey: KEY, queryFn: () => api.subscriptions.view() });
   const [cards, setCards] = useState<Card[]>([]);
   const nextId = useRef(1);
-  // A bell's link lands on its platform: /money?tab=subscriptions&platform=<id>.
+  // A bell's link lands on its platform: /subscriptions?platform=<id>.
   const [open, setOpen] = useState<string | null>(() => search.get('platform'));
 
   const addFiles = (files: File[]) => {
@@ -724,7 +724,7 @@ export function SubscriptionsTab() {
 
   const platforms = useMemo(() => (data?.platforms ?? []).map((p) => ({ id: p.id, name: p.name })), [data]);
 
-  if (isPending) return <TableRowsSkeleton cols={8} />;
+  if (isPending) return <TableSkeleton />;
   if (error || !data) return <ErrorNote>{error instanceof ApiError ? error.message : 'Could not load subscriptions.'}</ErrorNote>;
 
   const t = data.totals;

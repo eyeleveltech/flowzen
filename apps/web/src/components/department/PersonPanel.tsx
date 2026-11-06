@@ -12,7 +12,7 @@
  */
 
 import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Mail, Phone, Plus } from 'lucide-react';
 import { api, formatDate, type CalendarItem, type DepartmentOverview } from '@/lib/api-v2';
 import { Drawer } from '@/components/ui/drawer';
@@ -59,6 +59,8 @@ export function PersonPanel({
   const { data: calendar, isPending: calendarLoading } = useQuery({
     queryKey: ['department', departmentId, 'person-week', person?.id, week.from],
     enabled: Boolean(person),
+    // Another week, or another person: the panel stays up while it loads.
+    placeholderData: keepPreviousData,
     queryFn: () =>
       api.calendar.get({ from: week.from, to: week.to, layers: ['team', 'events', 'google'], person: person!.id, onlyDepartment: departmentId }),
   });

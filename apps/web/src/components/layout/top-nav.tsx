@@ -37,6 +37,7 @@ import {
 } from 'lucide-react';
 import { Drawer } from '@/components/ui/drawer';
 import toast from 'react-hot-toast';
+import { changedBackMessage } from '@/lib/optimistic';
 import { canSee } from '@/config/navigation';
 
 // Keyed by the actual rule names the scanner (workers/scanner.cron.ts) emits —
@@ -123,9 +124,9 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
     try {
       await api.notifications.markRead(id);
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
-    } catch (err: any) {
+    } catch (err) {
       queryClient.setQueryData(['notifications'], previous); // rollback
-      toast.error('Failed to mark read');
+      toast.error(changedBackMessage(err));
     }
   };
 
@@ -140,9 +141,9 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
       await api.notifications.markAllRead();
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
       toast.success('All marked as read');
-    } catch (err: any) {
+    } catch (err) {
       queryClient.setQueryData(['notifications'], previous); // rollback
-      toast.error('Failed to mark all read');
+      toast.error(changedBackMessage(err));
     }
   };
 

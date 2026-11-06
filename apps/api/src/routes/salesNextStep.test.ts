@@ -259,6 +259,57 @@ describe('going stale counts from the last touch', () => {
     expect(stalled.map((a) => a.entityId)).toEqual(['quiet']);
     expect(stalled[0].message).toMatch(/no contact for 74 days/);
   });
+
+  /**
+   * One follow-up task per stall. Marking it done used to bring it straight
+   * back on the next tick, because only OPEN follow-ups counted as "already
+   * chased" — so the owner saw the same chase every day until a touch was
+   * logged on the deal.
+   */
+  describe('the follow-up task a stalled deal gets', () => {
+    const quietSince = day('2026-08-01');
+    const scan = async (lastFollowUp: Record<string, unknown> | null, over: Record<string, unknown> = {}) => {
+      const quiet = { ...openDeal({ id: 'quiet', ...over }), company: { id: 'co-1', name: 'Quiet Co' } };
+      p.proposal.findMany.mockResolvedValueOnce([quiet]).mockResolvedValue([]);
+      for (const m of ['proforma', 'retainer', 'invoice', 'project', 'user', 'company', 'monthCard', 'asset', 'assetMovement', 'assetMaintenance']) {
+        p[m].findMany.mockResolvedValue([]);
+      }
+      p.task.findMany.mockResolvedValue([]);
+      p.task.findFirst.mockResolvedValue(lastFollowUp);
+      p.task.create.mockResolvedValue({ id: 'new-follow-up' });
+      p.task.groupBy.mockResolvedValue([]);
+      p.peopleAllocation.groupBy.mockResolvedValue([]);
+      p.peopleAllocation.count.mockResolvedValue(0);
+      await evaluateAgencyHealthRules('org-1');
+      return p.task.create.mock.calls.filter((c: any) => c[0]?.data?.notes === 'proposal_followup:quiet');
+    };
+    beforeEach(() => p.task.create.mockClear());
+
+    it('is made once, with the deal\'s client on it', async () => {
+      const made = await scan(null);
+      expect(made).toHaveLength(1);
+      expect(made[0][0].data).toMatchObject({ title: 'Follow up — Quiet Co proposal', companyId: 'co-1', assigneeId: 'usr-bd' });
+    });
+
+    it('is not made again while one is open', async () => {
+      expect(await scan({ id: 'fu-1', status: 'TODO', completedAt: null, updatedAt: day('2026-10-10') })).toHaveLength(0);
+    });
+
+    it('is not made again once done — the stall has been chased', async () => {
+      // Done after the deal went quiet, with nothing logged on the deal since.
+      expect(await scan({ id: 'fu-1', status: 'DONE', completedAt: day('2026-10-10'), updatedAt: day('2026-10-10') })).toHaveLength(0);
+      expect(quietSince < day('2026-10-10')).toBe(true);
+    });
+
+    it('is made again for a NEW stall: a touch after the last chase, then silence', async () => {
+      // Chased on 1 Sept, a call logged on 20 Sept, nothing since: 24 days quiet again.
+      const made = await scan(
+        { id: 'fu-1', status: 'DONE', completedAt: day('2026-09-01'), updatedAt: day('2026-09-01') },
+        { lastTouchedAt: day('2026-09-20') },
+      );
+      expect(made).toHaveLength(1);
+    });
+  });
 });
 
 // ── 4. Correcting imported dates ──

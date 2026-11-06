@@ -35,7 +35,7 @@ import { Field, FieldSelect } from '@/components/ui/field';
 import { EmptyState, ErrorNote } from '@/components/ui/empty-state';
 import { NotFoundPanel } from '@/components/ui/not-found-panel';
 import { ActivityFeed, type FeedItem } from '@/components/activities/ActivityFeed';
-import { PageSkeleton } from '@/components/ui/skeleton-loaders';
+import { ProjectDetailSkeleton } from '@/components/ui/skeleton-loaders';
 import { StatTile } from '@/components/ui/stat-tile';
 import { plural } from '@/lib/utils';
 import { Tabs, useTabState, type TabDef } from '@/components/ui/tabs';
@@ -326,7 +326,13 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   // The tab and the bar name the project (QA19 fixes plan, small wins).
   usePageHeader(project?.name ?? 'Project', project?.company?.name ?? null);
 
-  if (loading) return <PageSkeleton />;
+  if (loading) {
+    return (
+      <div className="page-shell">
+        <ProjectDetailSkeleton />
+      </div>
+    );
+  }
 
   if (!project) {
     return (

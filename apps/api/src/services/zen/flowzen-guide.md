@@ -292,7 +292,7 @@ Money figures (Accounts and Management).
   - Outstanding today: what is owed now, on every invoice, whatever the period.
   - Overdue today: the part of that past its due date, in rupees, with a count.
 - **Header buttons:** Export invoices CSV, Export costs CSV, "+ New invoice". "+ New invoice" records a tax invoice already raised in Tally. It offers to link the client's live proforma and, for a project, the milestone it settles.
-- **Tabs** (the tab is in the address: /money?tab=invoices, billing, costs, profit or subscriptions — the last is Management's only, see "Subscriptions" below):
+- **Tabs** (the tab is in the address: /money?tab=invoices, billing, costs or profit; subscriptions moved to their own page, see "Subscriptions" below):
   - **Invoices:**
     - A page of 50 at a time; filter by Still owed, Overdue, Paid or Cancelled. Amounts include GST.
     - Statuses: Raised, Part-paid (some money in), Overdue (due before today, by the studio's calendar), Paid, Cancelled. The same badge shows on a client's tab and a project's invoices.
@@ -399,7 +399,7 @@ Day start and end (default 10:00–19:00), days worked (default Monday–Saturda
 
 ### Settings → Money
 
-Setup access. Two settings for Subscriptions (Money → Subscriptions):
+Setup access. Two settings for Subscriptions (the /subscriptions page):
 - **USD→INR rate:** rupees per dollar, used to estimate what a dollar invoice costs until the INR actually charged is entered on it. Estimated figures say "(estimated)" wherever they show. Blank means no estimate, and a dollar invoice then needs its INR charged before it can be saved.
 - **Upload space:** how much room uploaded invoices may take (default 2 GB). Uploads are also refused when the server has under 2 GB free, whatever this says.
 
@@ -481,6 +481,9 @@ Management only. For 7 or 30 days:
 - amber after 3 working days away.
 
 Records are kept 90 days.
+
+## How it works (/how-it-works)
+Open to everybody, at the bottom of the sidebar: the whole app on one page — the six stages work passes through (lead, proposal, won, tasks, billing, money) with one example client carried through them, what each role does on a normal day, the rules behind what the app refuses, and a map of where each thing is. For somebody new, send them here first.
 
 ## Profile (/profile)
 
@@ -582,7 +585,8 @@ For a Prospect, use "Add sample" instead. Sample work has no billing, but its co
   - Everyone listed is on the task; the first is the lead. Only Team work holders can assign other people.
   - A due date is required; a time is optional.
   - Priority: Low, Medium, High or Urgent.
-  - Optional: Repeat, Type of work.
+  - Type of work is required: Design, Video, Digital Marketing, Social Media, Development, Business Development, Accounts, Management or Other.
+  - Optional: Repeat.
 - **"Assigned by" vs "Added by":** "Assigned by" is who asked for the work; "Added by" is who typed it in.
 - **On hold:** set the status to On hold. It records "waiting on the client", and that time is taken out of the task's elapsed time. Any other status resumes it.
 - **Done and reopening:** "Done" finishes a task. Moving a Done or Cancelled task back to To do or In progress counts as a reopen.
@@ -608,8 +612,11 @@ Flowzen has no task approval step any more (removed 28 Oct 2026). A task is fini
 - **Recurring costs:** copied into each new month on the 1st as drafts, which you confirm with "Confirm draft". Drafts count in totals before they are confirmed.
 - **Deleted costs:** go to Trash.
 
+## Logins (/logins)
+Logins are Management-only and Zen can't see them. Sidebar → MANAGEMENT → Logins keeps the studio's own and its clients' usernames and passwords for Management alone; nothing about them — not names, not counts — is available to Zen, the API, search or anyone else.
+
 ## Subscriptions
-[Money → Subscriptions](/money?tab=subscriptions), **Management only** (the tab is hidden from everyone else and the routes refuse them): what the studio spends on which platform — Adobe, Canva, Google Workspace, ChatGPT, Hostinger — worked out from the platforms' own invoices. Nothing else is tracked: no seats, logins, cards or trials.
+[Subscriptions](/subscriptions) in the sidebar under MANAGEMENT, **Management only** (hidden from everyone else and the routes refuse them; the old /money?tab=subscriptions address forwards there): what the studio spends on which platform — Adobe, Canva, Google Workspace, ChatGPT, Hostinger — worked out from the platforms' own invoices. Nothing else is tracked: no seats, logins, cards or trials.
 - **Upload the invoice:** drop one or several PDF, PNG or JPG files (10 MB each). Flowzen sends each to the organisation's AI (Anthropic, from Settings → Zen) and reads only fixed fields: vendor, invoice number, date, billing period, plan, currency, subtotal, tax and type, total, vendor GSTIN. A **review card** shows the file beside the fields, all editable; fields the reader was unsure of are highlighted. Nothing is saved until **Save**. With AI off or a failed reading, the card opens empty to fill in by hand. The invoice's text is never treated as instructions.
 - **Platforms** are made by their first invoice and matched by name after that (the card lets you pick another). A platform is a name, Active or Cancelled, and notes.
 - **Currency:** the invoice keeps its own currency; **INR charged** (from the bank statement) can be filled in now or later. Until then dollar invoices are estimated from the USD→INR rate (Settings → Money) and marked "(estimated)". Other currencies need the INR charged to be saved.

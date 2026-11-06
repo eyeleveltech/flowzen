@@ -30,11 +30,14 @@ export const SCREENS = {
   'money-costs': 'Money · Costs',
   'money-profit': 'Money · Profit',
   forecast: 'Forecast',
+  subscriptions: 'Subscriptions',
+  logins: 'Logins',
   assets: 'Assets',
   'asset-page': 'Asset page',
   'time-split': 'Time split',
   settings: 'Settings',
   profile: 'Profile',
+  'how-it-works': 'How it works',
 } as const;
 
 export type ScreenKey = keyof typeof SCREENS;
@@ -58,11 +61,14 @@ const SHAPES: { match: (s: string[]) => boolean; key: ScreenKey }[] = [
   { match: (s) => s.length === 1 && s[0] === 'brief', key: 'monday-brief' },
   { match: (s) => s.length === 1 && s[0] === 'money', key: 'money' },
   { match: (s) => s.length === 1 && s[0] === 'forecast', key: 'forecast' },
+  { match: (s) => s.length === 1 && s[0] === 'subscriptions', key: 'subscriptions' },
+  { match: (s) => s.length === 1 && s[0] === 'logins', key: 'logins' },
   { match: (s) => s.length === 1 && s[0] === 'assets', key: 'assets' },
   { match: (s) => s.length === 2 && s[0] === 'assets', key: 'asset-page' },
   { match: (s) => s.length === 1 && s[0] === 'allocations', key: 'time-split' },
   { match: (s) => s.length === 1 && s[0] === 'settings', key: 'settings' },
   { match: (s) => s.length === 1 && s[0] === 'profile', key: 'profile' },
+  { match: (s) => s.length === 1 && s[0] === 'how-it-works', key: 'how-it-works' },
 ];
 
 const MONEY_TABS: Record<string, ScreenKey> = { billing: 'money-billing', costs: 'money-costs', profit: 'money-profit' };

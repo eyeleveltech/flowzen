@@ -2561,6 +2561,31 @@ export const api = {
   },
 
   /** Settings → API: the switch, and making, changing and revoking API keys (setup.admin). */
+  credentials: {
+    status: () => getFull<{ success: boolean; keyConfigured: boolean; keyMatches: boolean | null }>('/credentials/status'),
+    list: (params: { scope?: CredentialScope; companyId?: string; q?: string } = {}) =>
+      getFull<{ success: boolean; credentials: CredentialRow[]; companies: { id: string; name: string }[] }>(
+        `/credentials?${new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([, v]) => v)) as Record<string, string>)}`,
+      ),
+    deleted: () => getFull<{ success: boolean; credentials: CredentialRow[] }>('/credentials/deleted'),
+    log: (userId?: string) =>
+      getFull<{ success: boolean; entries: CredentialLogEntry[]; people: { id: string; name: string; active: boolean }[] }>(
+        `/credentials/log${userId ? `?userId=${encodeURIComponent(userId)}` : ''}`,
+      ),
+    logFor: (id: string) => getFull<{ success: boolean; entries: CredentialLogEntry[] }>(`/credentials/${id}/log`),
+    /** The password and notes, once, logged as a show or a copy. */
+    reveal: (id: string, purpose: 'show' | 'copy') => postFull<{ success: boolean; password: string; notes: string | null }>(`/credentials/${id}/reveal`, { purpose }),
+    create: (body: CredentialBody & { password: string }) => postFull<{ success: boolean; credential: CredentialRow }>('/credentials', body),
+    update: (id: string, body: Partial<CredentialBody>) => patchFull<{ success: boolean; credential: CredentialRow }>(`/credentials/${id}`, body),
+    delete: (id: string) => del(`/credentials/${id}`),
+    restore: (id: string) => postFull<{ success: boolean; credential: CredentialRow }>(`/credentials/${id}/restore`),
+    generate: () => getFull<{ success: boolean; password: string }>('/credentials/generate'),
+    import: (body: { csv: string; mapping?: Partial<Record<CredentialImportField, string | null>>; clientChoices?: Record<string, string>; dryRun: boolean }) =>
+      postFull<CredentialImportResult & { success: boolean }>('/credentials/import', body),
+    /** The count on a client's page — Management only, like everything else here. */
+    countFor: (companyId: string) => getFull<{ success: boolean; count: number }>(`/companies/${companyId}/credentials/count`),
+  },
+
   subscriptions: {
     view: () => getFull<SubscriptionsView & { success: boolean }>('/subscriptions'),
     /** Upload one invoice; Flowzen keeps the file and reads it. Nothing is saved until `save`. */
@@ -3486,6 +3511,73 @@ export interface ProposalDealDocs {
   };
   documents: ProposalDocSummary[];
   versions: { id: string; n: number; sentAt: string; scopeSummary: string; fromDocument: { id: string; n: number } | null; value?: number }[];
+}
+
+// ── Logins (Credentials plan, Management only) ───────────────────────────────
+
+export type CredentialScope = 'INTERNAL' | 'CLIENT';
+
+/** A login as the list shows it — never the password; the notes only as "has some". */
+export interface CredentialRow {
+  id: string;
+  scope: CredentialScope;
+  companyId: string | null;
+  company: { id: string; name: string } | null;
+  name: string;
+  website: string | null;
+  username: string | null;
+  hasNotes: boolean;
+  passwordChangedAt: string;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+  deletedBy?: { id: string; name: string } | null;
+}
+
+export interface CredentialLogEntry {
+  id: string;
+  at: string;
+  action: 'SHOW' | 'COPY' | 'CREATE' | 'UPDATE' | 'PASSWORD_CHANGED' | 'DELETE' | 'RESTORE' | 'IMPORT' | 'PURGE';
+  credentialId: string | null;
+  credentialName: string;
+  ip: string | null;
+  detail: string | null;
+  user: { id: string; name: string };
+}
+
+export interface CredentialBody {
+  scope: CredentialScope;
+  companyId?: string | null;
+  name: string;
+  website?: string | null;
+  username?: string | null;
+  password?: string;
+  notes?: string | null;
+}
+
+export type CredentialImportField = 'name' | 'client' | 'website' | 'username' | 'password' | 'notes';
+
+export interface CredentialImportRow {
+  row: number;
+  name: string;
+  clientText: string;
+  client: 'INTERNAL' | string | null;
+  clientName: string | null;
+  website: string | null;
+  username: string | null;
+  hasPassword: boolean;
+  hasNotes: boolean;
+  status: 'OK' | 'NO_PASSWORD' | 'NO_NAME' | 'UNKNOWN_CLIENT' | 'DUPLICATE';
+  reason?: string;
+}
+
+export interface CredentialImportResult {
+  dryRun: boolean;
+  headers?: string[];
+  mapping?: Partial<Record<CredentialImportField, string | null>>;
+  rows: CredentialImportRow[];
+  counts: { total: number; ok: number; skipped: number; problems: number; truncated: boolean };
+  imported?: number;
 }
 
 // ── Subscriptions (Money → Subscriptions, Management only) ───────────────────

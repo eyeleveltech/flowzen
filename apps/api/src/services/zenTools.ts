@@ -753,7 +753,7 @@ export async function runZenTool(
           nextRenewal: p.nextRenewal,
           spentThisYear: p.spentThisYear,
           invoices: p.invoiceCount,
-          link: '/money?tab=subscriptions',
+          link: '/subscriptions',
         })),
       };
     }

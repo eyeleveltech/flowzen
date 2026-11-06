@@ -37,11 +37,14 @@ export const qk = {
   myFocus: ['me', 'focus'] as const,
 };
 
+/** Settings-like data — config, the roster, departments — holds for ten minutes (Perf Plan 1). */
+const SETTINGS_STALE_MS = 10 * 60 * 1000;
+
 /**
  * Organisation settings: stages, sources, verticals, tax defaults, and the
  * caller's own permissions.
  *
- * An hour of `staleTime` rather than the app default of 30 seconds. This is
+ * Ten minutes of `staleTime` rather than the app default of two. This is
  * configuration — it changes when somebody edits Settings, and that path
  * invalidates this key itself, so there is nothing to be gained by re-asking
  * for it on every navigation.
@@ -50,7 +53,7 @@ export function useConfig() {
   return useQuery<OrgConfig>({
     queryKey: qk.config,
     queryFn: () => api.config.get(),
-    staleTime: 60 * 60 * 1000,
+    staleTime: SETTINGS_STALE_MS,
     gcTime: 60 * 60 * 1000,
   });
 }
@@ -64,7 +67,7 @@ export type TeamMemberOption = { id: string; name: string; designation: string |
  * Nine call sites each ran this in their own `useEffect` — two screens and
  * seven modals — so opening a dialog refetched the whole team every time, and
  * a screen that hosts two dialogs fetched it three times over. The list changes
- * when somebody joins or leaves, so it is cached for an hour and shared.
+ * when somebody joins or leaves, so it is cached for ten minutes and shared.
  *
  * Returns `[]` rather than undefined while loading: every caller was already
  * written against an empty array, and a picker with no options is the correct
@@ -74,7 +77,7 @@ export function useTeamMembers() {
   const { data } = useQuery({
     queryKey: qk.team,
     queryFn: () => api.team.members(),
-    staleTime: 60 * 60 * 1000,
+    staleTime: SETTINGS_STALE_MS,
     gcTime: 60 * 60 * 1000,
   });
   return (data?.members ?? []) as TeamMemberOption[];
@@ -89,7 +92,7 @@ export function useScopedTeamMembers() {
   const { data } = useQuery({
     queryKey: qk.teamScoped,
     queryFn: () => api.team.members({ scoped: true }),
-    staleTime: 60 * 60 * 1000,
+    staleTime: SETTINGS_STALE_MS,
     gcTime: 60 * 60 * 1000,
   });
   return (data?.members ?? []) as TeamMemberOption[];
@@ -98,7 +101,7 @@ export function useScopedTeamMembers() {
 /**
  * What the caller said they are working on now — the task drawer and My Work
  * both read it, so the "Now" badge agrees wherever a task is opened. The app's
- * 30-second default: it changes when its task is finished elsewhere, and every
+ * default staleTime: it changes when its task is finished elsewhere, and every
  * screen that changes a status invalidates it.
  */
 export function useMyFocus(enabled = true): { focus: MyFocus | null; loaded: boolean } {
@@ -118,7 +121,7 @@ export function useTeamScope(): TeamScope | null {
   const { data } = useQuery({
     queryKey: qk.teamScope,
     queryFn: () => api.team.scope(),
-    staleTime: 10 * 60 * 1000,
+    staleTime: SETTINGS_STALE_MS,
   });
   return data?.scope ?? null;
 }
@@ -135,7 +138,7 @@ export function useDepartments() {
   const { data, isPending } = useQuery({
     queryKey: qk.departments,
     queryFn: () => api.departments.list(),
-    staleTime: 10 * 60 * 1000,
+    staleTime: SETTINGS_STALE_MS,
   });
   return { departments: (data?.departments ?? []) as Department[], loading: isPending };
 }

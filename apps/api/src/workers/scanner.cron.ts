@@ -63,7 +63,7 @@ export async function evaluateAgencyHealthRules(organizationId: string): Promise
     if (p.versions.length === 0) continue;
     // The threshold here is the alert's own (5 days, escalated at 10); the
     // board's "Going stale" uses the org setting. Only the starting point is shared.
-    const { daysSinceTouch: daysSince } = dealStaleness(p, 0, stalledToday);
+    const { daysSinceTouch: daysSince, lastTouchAt } = dealStaleness(p, 0, stalledToday);
     if (daysSince <= 5) continue;
     const escalated = daysSince > 10;
     alerts.push({
@@ -75,11 +75,22 @@ export async function evaluateAgencyHealthRules(organizationId: string): Promise
     });
 
     // One follow-up task per stall, not one every hourly tick.
+    //
+    // A stall ends when the deal is touched, so a follow-up finished since the
+    // last touch means this stall has already been chased. Only the open ones
+    // used to count: marking the task done made the next tick create it again,
+    // so "Done" meant "see it again tomorrow" until somebody logged a touch.
     const marker = `proposal_followup:${p.id}`;
-    const existingFollowUp = await prisma.task.findFirst({
-      where: { organizationId, deletedAt: null, notes: marker, status: { notIn: [TaskStatus.DONE, TaskStatus.CANCELLED] } },
+    const lastFollowUp = await prisma.task.findFirst({
+      where: { organizationId, deletedAt: null, notes: marker },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, status: true, completedAt: true, updatedAt: true },
     });
-    if (!existingFollowUp) {
+    const finished = (s: TaskStatus | undefined) => s === TaskStatus.DONE || s === TaskStatus.CANCELLED;
+    const chasedThisStall =
+      lastFollowUp != null &&
+      (!finished(lastFollowUp.status) || (lastFollowUp.completedAt ?? lastFollowUp.updatedAt) >= lastTouchAt);
+    if (!chasedThisStall) {
       await prisma.task.create({
         data: {
           organizationId,

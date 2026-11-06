@@ -10,6 +10,7 @@ import { ShowMore } from "@/components/ui/show-more";
 import { ErrorNote } from "@/components/ui/empty-state";
 import { plural } from "@/lib/utils";
 import { api, formatMoney } from "@/lib/api-v2";
+import { TableRowsSkeleton } from "@/components/ui/skeleton-loaders";
 import { useAuthStore } from "@/stores";
 import { ImportClientsModal } from "@/components/clients/ImportClientsModal";
 import Link from "next/link";
@@ -292,14 +293,7 @@ export default function CompaniesPage() {
             </thead>
             <tbody className="divide-y divide-border">
               {loading ? (
-                <tr>
-                  <td
-                    colSpan={6}
-                    className="px-5 py-12 text-center text-sm text-secondary"
-                  >
-                    Loading...
-                  </td>
-                </tr>
+                <TableRowsSkeleton cols={6} rows={8} />
               ) : filtered.length === 0 ? (
                 <tr>
                   <td

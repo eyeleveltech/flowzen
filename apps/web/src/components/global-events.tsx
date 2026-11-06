@@ -50,6 +50,10 @@ export function GlobalEvents() {
      * and toast what comes back.
      */
     const handleNewNotification = async () => {
+      // Every open tab of every person hears the same event at the same
+      // instant; a random pause of up to five seconds spreads the re-asks
+      // out so they do not all land on the API together (Perf Plan 1).
+      await new Promise((r) => setTimeout(r, Math.random() * 5000));
       await queryClient.invalidateQueries({ queryKey: ['notifications'] });
 
       const data = queryClient.getQueryData<{ notifications: AppNotification[] }>([

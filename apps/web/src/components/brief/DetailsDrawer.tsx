@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { ChevronRight } from "lucide-react";
 import { Drawer } from "@/components/ui/drawer";
 import { ErrorNote } from "@/components/ui/empty-state";
@@ -58,6 +58,7 @@ export function DetailsDrawer({
     queryKey: ["brief-details", metric, week.from],
     queryFn: () => api.brief.details(metric!, week.from),
     enabled: Boolean(metric),
+    placeholderData: keepPreviousData,
   });
   const rows = (data?.rows ?? []) as Row[];
   const money = (n: number | undefined) => formatMoney(n ?? 0, currency);

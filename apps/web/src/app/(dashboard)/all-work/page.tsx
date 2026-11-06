@@ -24,7 +24,7 @@
  */
 
 import { useMemo, useState } from 'react';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { ChevronRight } from 'lucide-react';
@@ -44,6 +44,7 @@ import { SortableTH, type SortDir } from '@/components/ui/table';
 import { Select } from '@/components/ui/select';
 import { InlineDueDate } from '@/components/work/InlineDueDate';
 import { changeTaskStatus } from '@/lib/task-status';
+import { optimistic } from '@/lib/optimistic';
 import toast from 'react-hot-toast';
 import { TaskDrawer, type DrawerTask } from '@/components/work/TaskDrawer';
 import { getInitials, getAvatarColor } from '@/lib/utils';
@@ -106,7 +107,7 @@ const STATUS_TONE: Record<string, string> = {
 };
 
 /** The columns a click on the header sorts by — the server's names for them. */
-type SortKey = 'assigned' | 'task' | 'type' | 'for' | 'who' | 'due' | 'status' | 'elapsed';
+type SortKey = 'assigned' | 'task' | 'type' | 'for' | 'who' | 'due' | 'status';
 const DEFAULT_SORT: { key: SortKey; dir: SortDir } = { key: 'due', dir: 'asc' };
 
 type Task = {
@@ -210,14 +211,28 @@ export default function AllWorkPage() {
   });
 
   const tasks = (data?.tasks ?? []) as Task[];
+  const queryClient = useQueryClient();
 
   // Right on the row, or from the drawer — the same call either way.
   const setStatus = async (t: { id: string; status: string; title?: string; hasClient?: boolean }, next: string) => {
     if (next === t.status) return;
     setBusyId(t.id);
     try {
-      // False when "Waiting on…" was cancelled: nothing moved.
-      if (!(await changeTaskStatus(t, next))) return;
+      if (next === 'ON_HOLD') {
+        // "Waiting on…" is asked first; nothing moves until it is answered.
+        // False when it was cancelled: nothing moved.
+        if (!(await changeTaskStatus(t, next))) return;
+      } else {
+        // The row changes now — on every filter's copy of the list — and the
+        // save follows (lib/optimistic). Refused or failed, it goes back.
+        const saved = await optimistic<{ tasks: Task[] }>(
+          queryClient,
+          ['all-work'],
+          (cur) => ({ ...cur, tasks: cur.tasks.map((x) => (x.id === t.id ? { ...x, status: next as Task['status'] } : x)) }),
+          () => api.tasks.updateStatus(t.id, next),
+        );
+        if (!saved) return;
+      }
       toast.success(`Moved to ${STATUS_OPTIONS.find((o) => o.value === next)?.label ?? next}`);
       void refetch();
     } catch (e) {
@@ -309,6 +324,9 @@ export default function AllWorkPage() {
                       : '—'}
                   </td>
                   <td>
+                    {/* The whole title, every time: the Elapsed column went
+                        so this one has the room, and a title cut short is a
+                        task somebody has to open to recognise. */}
                     <button
                       type="button"
                       className="rounded-sm text-left text-sm font-medium text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-primary/40"
@@ -323,18 +341,25 @@ export default function AllWorkPage() {
                       <Link
                         href={`/companies/${t.companyId}`}
                         onClick={(e) => e.stopPropagation()}
-                        className="rounded-sm hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                        title={t.clientName ?? undefined}
+                        className="block max-w-[14rem] truncate rounded-sm hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                       >
                         {t.clientName}
                       </Link>
                     ) : (
-                      t.clientName
+                      <span className="block max-w-[14rem] truncate" title={t.clientName ?? undefined}>
+                        {t.clientName}
+                      </span>
                     )}
                     {/* The job by name — a one-off project or the stream of
                         work inside a retainer. Not the billing month, which is
-                        what this said before and is not what the work is. */}
+                        what this said before and is not what the work is.
+                        One line: "Social Media Management & Performance
+                        Marketing" wrapped over four and set the row's height. */}
                     {t.projectName && (
-                      <span className="block text-micro text-secondary">{t.projectName}</span>
+                      <span className="block max-w-[14rem] truncate text-micro text-secondary" title={t.projectName}>
+                        {t.projectName}
+                      </span>
                     )}
                   </td>
                   <td>
@@ -403,7 +428,6 @@ export default function AllWorkPage() {
                       disabled={busyId === t.id}
                     />
                   </td>
-                  <td className="text-right text-secondary">{t.workingHoursText ?? '—'}</td>
                 </tr>
   );
 
@@ -561,14 +585,13 @@ export default function AllWorkPage() {
                 <SortableTH label="Who" column="who" sort={sort} onSort={sortBy} />
                 <SortableTH label="Due" column="due" sort={sort} onSort={sortBy} />
                 <SortableTH label="Status" column="status" sort={sort} onSort={sortBy} />
-                <SortableTH label="Elapsed" column="elapsed" sort={sort} onSort={sortBy} align="right" />
               </tr>
             </thead>
             <tbody className={`divide-y divide-border transition-opacity ${isPlaceholderData ? 'opacity-60' : ''}`}>
               {isPending && <TableRowsSkeleton rows={6} cols={8} />}
               {!isPending && tasks.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-5 py-12 text-center text-sm text-secondary">
+                  <td colSpan={7} className="px-5 py-12 text-center text-sm text-secondary">
                     {filtered ? 'Nothing matches those filters.' : 'No work on anybody’s plate.'}
                   </td>
                 </tr>
@@ -579,7 +602,7 @@ export default function AllWorkPage() {
                     const open = !folded.has(id);
                     return [
                       <tr key={`group:${id}`} className="bg-subtle/60">
-                        <td colSpan={8}>
+                        <td colSpan={7}>
                           <button
                             type="button"
                             aria-expanded={open}

@@ -22,4 +22,11 @@ export const REVIEW_RULE = 'PROPOSAL_REVIEW_REQUESTED';
  */
 export const API_KEY_RULE = 'API_KEY_CHANGED';
 
-export const EXTERNAL_RULES = [...EVENT_RULES, REVIEW_RULE, API_KEY_RULE];
+/**
+ * Logins (Credentials plan): somebody opened an unusual number of logins, or
+ * left Management having opened some. Raised by the reveal route and the
+ * team screen; closed by the daily logins purge after a month.
+ */
+export const CREDENTIAL_RULES = ['CREDENTIAL_UNUSUAL_ACTIVITY', 'CREDENTIAL_ACCESS_LOST'];
+
+export const EXTERNAL_RULES = [...EVENT_RULES, REVIEW_RULE, API_KEY_RULE, ...CREDENTIAL_RULES];

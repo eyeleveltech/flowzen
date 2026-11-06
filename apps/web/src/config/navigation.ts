@@ -11,10 +11,13 @@ import {
   AlignJustify,
   Sparkles,
   IndianRupee,
+  KeyRound,
+  CreditCard,
   Package,
   PieChart,
   Settings,
   User as UserIcon,
+  BookOpen,
   UsersRound,
   LucideIcon,
 } from 'lucide-react';
@@ -66,6 +69,12 @@ export interface NavItem {
    * Departments instead, without it in their sidebar.
    */
   headsOnly?: boolean;
+  /**
+   * Management, and nobody else — the PRESET, exactly as `requireManagement()`
+   * gates the screen on the server. `setup.admin` does not open it: an admin
+   * who is not Management sees nothing (Credentials plan, decision 1).
+   */
+  managementOnly?: boolean;
   isPrimaryMobile?: boolean;
 }
 
@@ -75,9 +84,12 @@ export type NavUser = { permissions?: readonly string[]; headOf?: readonly strin
 /** Heads at least one department. */
 export const headsADepartment = (user: NavUser | null | undefined): boolean => (user?.headOf?.length ?? 0) > 0;
 
-/** An item this person is offered: the permission switch, and for a heads-only item, a department to head. */
+/** Management, by preset — the one thing `setup.admin` does not stand in for. */
+export const isManagement = (user: NavUser | null | undefined): boolean => user?.preset === 'MANAGEMENT';
+
+/** An item this person is offered: the permission switch, a department to head for a heads-only item, the preset for a Management-only one. */
 export const offered = (item: NavItem, user: NavUser | null | undefined): boolean =>
-  canSee(item, user?.permissions) && (!item.headsOnly || headsADepartment(user));
+  canSee(item, user?.permissions) && (!item.headsOnly || headsADepartment(user)) && (!item.managementOnly || isManagement(user));
 
 export interface NavSection {
   title: string | null;
@@ -141,7 +153,14 @@ export const NAV_SECTIONS: NavSection[] = [
       // The figures, not the paid/unpaid status — this screen opens with
       // retainer profitability, which is `money.figures` on the server.
       { label: 'Money', href: '/money', icon: IndianRupee, needs: 'money.figures', isPrimaryMobile: true },
+      // Platform spend from the platforms' own invoices. Was a Money tab;
+      // Management by preset, like Logins — `needs` is only the URL guard's switch.
+      { label: 'Subscriptions', href: '/subscriptions', icon: CreditCard, needs: 'money.figures', managementOnly: true },
       { label: 'Forecast', href: '/forecast', icon: PieChart, needs: 'reports.read' },
+      // The studio's and its clients' logins. `needs` is the nearest switch
+      // (management reports), for the URL guard; the real gate is the preset —
+      // `managementOnly`, which no permission, setup.admin included, stands in for.
+      { label: 'Logins', href: '/logins', icon: KeyRound, needs: 'reports.read', managementOnly: true },
       // No `needs` — the catalogue itself is open to everybody signed in, and
       // the gates are inside the screen: `asset.manage` to hand anything over,
       // `money.figures` for the prices, both enforced by the server.
@@ -163,6 +182,9 @@ export const NAV_SECTIONS: NavSection[] = [
 ];
 
 export const BOTTOM_NAV_ITEMS: NavItem[] = [
+  // The whole app on one page, for whoever is new to it. Open to everybody
+  // signed in: it describes screens, it does not open them.
+  { label: 'How it works', href: '/how-it-works', icon: BookOpen },
   { label: 'Profile', href: '/profile', icon: UserIcon },
 ];
 
@@ -244,6 +266,18 @@ export const headsOnlyAccess = (pathname: string, user: NavUser | null | undefin
   if (user?.preset === 'MANAGEMENT') return 'open';
   if (!user?.headOf) return 'unknown';
   return headsADepartment(user) ? 'open' : 'refused';
+};
+
+/**
+ * A Management-only screen at this address, beyond its permission: open to
+ * Management, refused to everybody else, `unknown` until the session has said
+ * who this is.
+ */
+export const managementOnlyAccess = (pathname: string, user: NavUser | null | undefined): 'open' | 'refused' | 'unknown' => {
+  const item = NAV_ITEMS.find((i) => i.managementOnly && (pathname === i.href || pathname.startsWith(i.href + '/')));
+  if (!item) return 'open';
+  if (!user) return 'unknown';
+  return isManagement(user) ? 'open' : 'refused';
 };
 
 export const permissionForPath = (pathname: string): PermissionKey | undefined =>

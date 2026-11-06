@@ -148,6 +148,7 @@ export function NewTaskModal({
   const canSave =
     Boolean(title.trim()) &&
     Boolean(dueDate) &&
+    Boolean(taskType) &&
     (scope === 'INTERNAL' ? Boolean(internalProjectId) : Boolean(selectedTarget));
 
   const submit = async (e: React.FormEvent) => {
@@ -293,7 +294,8 @@ export function NewTaskModal({
             label="Type of work"
             value={taskType}
             onChange={setTaskType}
-            placeholder="Not set"
+            required
+            placeholder="Choose…"
             options={TASK_TYPE_OPTIONS}
           />
           <Field label="Description" value={description} onChange={setDescription} textarea rows={3} />

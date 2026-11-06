@@ -18,7 +18,7 @@
 
 import { Suspense, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { Lock } from 'lucide-react';
 import { api, ApiError } from '@/lib/api-v2';
@@ -87,6 +87,8 @@ function MyDepartment() {
     queryKey: ['department', departmentId, 'overview'],
     enabled: Boolean(departmentId),
     queryFn: () => api.departments.overview(departmentId),
+    // Switching department keeps the page up while the next one loads.
+    placeholderData: keepPreviousData,
   });
 
   const month = overview?.month ?? '';

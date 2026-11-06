@@ -17,6 +17,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { api, type MyFocus } from '@/lib/api-v2';
 import { qk, useMyFocus } from '@/hooks/queries';
+import { optimistic } from '@/lib/optimistic';
 import { useAuthStore } from '@/stores';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -40,17 +41,31 @@ export function useWorkingOnNow(enabled = true) {
   const [busy, setBusy] = useState(false);
   const put = (next: MyFocus | null) => queryClient.setQueryData(qk.myFocus, { success: true, focus: next });
 
-  /** Returns what it became — the status may have moved to In progress — or null if refused. */
-  const start = async (taskId: string): Promise<MyFocus | null> => {
+  /**
+   * Returns what it became — the status may have moved to In progress — or
+   * null if refused. With `hint` (the task's title and status, when the
+   * caller has them) the Now badge moves at once and the save follows; a
+   * refusal puts it back (lib/optimistic).
+   */
+  const start = async (taskId: string, hint?: { title: string; status: string }): Promise<MyFocus | null> => {
     setBusy(true);
     try {
-      const res = await api.tasks.focus(taskId);
+      let res: { focus: MyFocus } | undefined;
+      const saved = await optimistic<{ success: boolean; focus: MyFocus | null }>(
+        queryClient,
+        qk.myFocus,
+        (cur) =>
+          hint
+            ? { ...cur, focus: { id: taskId, title: hint.title, status: hint.status === 'TODO' ? 'IN_PROGRESS' : hint.status } }
+            : cur,
+        async () => {
+          res = await api.tasks.focus(taskId);
+        },
+      );
+      if (!saved || !res) return null;
       put(res.focus);
       toast.success('Marked as what you’re working on now');
       return res.focus;
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not mark that as what you’re working on');
-      return null;
     } finally {
       setBusy(false);
     }
@@ -59,11 +74,13 @@ export function useWorkingOnNow(enabled = true) {
   const clear = async () => {
     setBusy(true);
     try {
-      await api.me.clearFocus();
-      put(null);
-      toast.success('Cleared');
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not clear that');
+      const saved = await optimistic<{ success: boolean; focus: MyFocus | null }>(
+        queryClient,
+        qk.myFocus,
+        (cur) => ({ ...cur, focus: null }),
+        () => api.me.clearFocus(),
+      );
+      if (saved) toast.success('Cleared');
     } finally {
       setBusy(false);
     }

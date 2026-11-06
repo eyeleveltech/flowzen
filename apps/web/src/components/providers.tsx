@@ -17,21 +17,24 @@ import { NumberWheelGuard } from '@/components/number-wheel-guard';
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 30 * 1000,
+      /*
+       * Two minutes (Perf Plan 1, decision 5). A screen left two seconds ago
+       * paints from cache and does not re-ask; anything written in this tab
+       * invalidates what it touched (lib/task-sync, the hand-wired
+       * invalidations after every write), and what another person wrote
+       * arrives through the live events or on the next visit past two
+       * minutes. Settings-like data holds for ten (hooks/queries.ts).
+       */
+      staleTime: 2 * 60 * 1000,
       retry: 1,
       /*
-       * On, and it matters more than it looks.
-       *
-       * Every refresh in this app is hand-wired: there is not a single
-       * `useMutation`, so a write updates the screen only where somebody
-       * remembered to invalidate. With this off and the SSE layer emitting
-       * nothing, a missed invalidation was not "late" -- it was stale for the
-       * rest of the session, because nothing else would ever re-ask.
-       *
-       * Coming back to the tab is the moment a person is most likely to be
-       * looking at something another person changed while they were away.
+       * Off. On, coming back to the tab refetched EVERY mounted query at
+       * once — a dozen requests for a glance at another window — and with six
+       * tabs open that was the API's busiest moment of the day. The bell and
+       * the lists still change: the live stream says when something is new,
+       * and the two-minute staleTime re-asks on the next navigation.
        */
-      refetchOnWindowFocus: true,
+      refetchOnWindowFocus: false,
     },
   },
 });

@@ -5,7 +5,7 @@ import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { api } from '@/lib/api-v2';
 import { useAuthStore, useUIStore } from '@/stores';
-import { permissionForPath, canSee, headsOnlyAccess } from '@/config/navigation';
+import { permissionForPath, canSee, headsOnlyAccess, managementOnlyAccess } from '@/config/navigation';
 import { Sidebar } from '@/components/layout/sidebar';
 import { TopNav } from '@/components/layout/top-nav';
 import { BottomTabs } from '@/components/layout/bottom-tabs';
@@ -91,8 +91,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const known = Boolean(user?.permissions);
   // My Department: a department's head, or Management — not every holder of its permission.
   const headsOnly = headsOnlyAccess(pathname, user);
-  const refused = known && ((Boolean(needs) && !canSee({ needs }, user!.permissions)) || headsOnly === 'refused');
-  const waiting = (Boolean(needs) && !known) || (!refused && headsOnly === 'unknown');
+  // Logins: Management by preset, which no permission stands in for.
+  const managementOnly = managementOnlyAccess(pathname, user);
+  const refused =
+    known && ((Boolean(needs) && !canSee({ needs }, user!.permissions)) || headsOnly === 'refused' || managementOnly === 'refused');
+  const waiting = (Boolean(needs) && !known) || (!refused && (headsOnly === 'unknown' || managementOnly === 'unknown'));
 
   /*
    * Who is using Flowzen (routes/usage.ts): the screen a person opens, sent

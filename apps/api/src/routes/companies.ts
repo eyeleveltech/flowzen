@@ -1,4 +1,4 @@
-import { Router, type Response } from 'express';
+import { Router, type NextFunction, type Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { maskInvoiceFigures, maskPaymentFigures } from '../utils/invoiceFigures.js';
@@ -8,7 +8,7 @@ import { changesBetween } from '../utils/activityDiff.js';
 import { canReadActivityType, stripMoney } from '../utils/activityAccess.js';
 import { canSeeDealValues, maskDealValues } from '../utils/dealValues.js';
 import { emitToOrganization } from '../sse.js';
-import { authenticate, requirePermission, type AuthRequest, hasPermission } from '../middleware/auth.js';
+import { authenticate, requireManagement, requirePermission, type AuthRequest, hasPermission } from '../middleware/auth.js';
 import { CompanyStatus, PersonRole, Prisma, TaskWorkType, TaskStatus } from '@prisma/client';
 import { DEFAULT_INDUSTRY, DEFAULT_LEAD_SOURCE } from '@flowzen/shared';
 import { checkForDuplicates, checkForImport } from '../services/duplicateCheck.js';
@@ -1927,5 +1927,22 @@ companiesRouter.delete('/:id/people/:personId', requirePermission('company.write
     res.json({ success: true });
   } catch (error) {
     next(error);
+  }
+});
+
+/**
+ * GET /api/companies/:id/credentials/count — how many logins this client has
+ * (Credentials plan, decision 7), for the small card on the client's page.
+ * Management only, like the logins: nobody else is sent the count.
+ */
+companiesRouter.get('/:id/credentials/count', requireManagement('Logins are Management’s alone.'), async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const count = await prisma.credential.count({
+      where: { companyId: String(req.params.id), organizationId: req.user!.organizationId, deletedAt: null },
+    });
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ success: true, count });
+  } catch (e) {
+    next(e);
   }
 });

@@ -49,6 +49,9 @@ import { mcpRouter } from './routes/mcp.js';
 import { oauthRouter, wellKnownRouter } from './routes/oauth.js';
 import { subscriptionsRouter } from './routes/subscriptions.js';
 import { filesRouter } from './routes/files.js';
+import { credentialsRouter } from './routes/credentials.js';
+import { requestTiming, compressResponses } from './middleware/perf.js';
+import { startCredentialPurge } from './services/credentials.js';
 import { startAgencyHealthScanner } from './workers/scanner.cron.js';
 import { startMonthCardScheduler } from './workers/monthCard.cron.js';
 import { startAllocationScheduler } from './workers/allocation.cron.js';
@@ -75,6 +78,11 @@ const app = express();
 app.set('trust proxy', 1);
 
 app.use(helmet());
+
+// Server-Timing on every answer, a warn line for anything over 500 ms, and
+// gzip on JSON — the live stream excepted (middleware/perf.ts, Perf Plan 1).
+app.use(requestTiming());
+app.use(compressResponses());
 
 /**
  * The public API (API Plan 1): /api/v1 for automation tools, /api/mcp for AI
@@ -184,6 +192,8 @@ app.use('/api/api-keys', apiKeysRouter);
 // Money → Subscriptions, and the invoice files behind it. Management only.
 app.use('/api/subscriptions', subscriptionsRouter);
 app.use('/api/files', filesRouter);
+// Logins: Management only, its own log, never in search or the public API.
+app.use('/api/credentials', credentialsRouter);
 
 // Start background health rules scanner
 startAgencyHealthScanner();
@@ -216,6 +226,8 @@ startUsageCleanup();
 startPushWorker();
 // API call logs (30 days) and Idempotency-Keys (a day), trimmed daily.
 startApiCleanup();
+// Logins in Recently deleted for 30 days, then gone for good.
+startCredentialPurge();
 
 app.use((_req, res) => {
   res.status(404).json({ success: false, error: 'Not found' });

@@ -5,10 +5,9 @@
  * for (see lib/actions.ts — the "task" command only ever `applies: ['project']`).
  * Same finalized field set as every other task-creation form in the app
  * (NewWorkTaskModal, AssignTaskModal, My Work's own): title, assignee,
- * priority, description, due date. This used to also collect Task Type,
- * Reviewer, Recurrence and multiple assignees — none of which the backend's
- * create schema has ever accepted, so every one of those fields was silently
- * discarded on save. Removed rather than wired up; see the plan doc for why.
+ * priority, description, due date — and the type of work, which every
+ * task-creation form asks for and none lets through blank, so the type
+ * filters and the per-type turnaround medians have nothing to guess at.
  */
 
 import { useEffect, useState } from 'react';
@@ -20,6 +19,7 @@ import { api, ApiError } from '@/lib/api-v2';
 import { useTeamMembers } from '@/hooks/queries';
 import { PRIORITY_CONFIG } from '@/lib/priority';
 import { personOptions } from '@/lib/people';
+import { TASK_TYPE_OPTIONS } from '@/lib/task-type';
 import { useAuthStore } from '@/stores';
 import { DueTimeField } from '@/components/work/DueTimeField';
 
@@ -39,6 +39,7 @@ export function NewTaskPanel({ isOpen, onClose, onSuccess, projectId, projectNam
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [assignedById, setAssignedById] = useState('');
   const [priority, setPriority] = useState('MEDIUM');
+  const [taskType, setTaskType] = useState('');
   const [description, setDescription] = useState('');
   const [dueDate, setDueDate] = useState('');
   // Optional; empty means any time that day.
@@ -55,13 +56,14 @@ export function NewTaskPanel({ isOpen, onClose, onSuccess, projectId, projectNam
     // field means nothing when it is filled in by default.
     setAssignedById('');
     setPriority('MEDIUM');
+    setTaskType('');
     setDescription('');
     setDueDate('');
     setDueTime('');
     setError(null);
   }, [isOpen, me?.id]);
 
-  const canSave = Boolean(title.trim()) && Boolean(dueDate);
+  const canSave = Boolean(title.trim()) && Boolean(dueDate) && Boolean(taskType);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,6 +80,7 @@ export function NewTaskPanel({ isOpen, onClose, onSuccess, projectId, projectNam
         dueDate,
         dueTime: dueTime || undefined,
         priority,
+        taskType,
         notes: description.trim() || undefined,
       });
       onSuccess?.();
@@ -108,6 +111,14 @@ export function NewTaskPanel({ isOpen, onClose, onSuccess, projectId, projectNam
               from one of them. */}
           <AssigneeField value={assigneeIds} onChange={setAssigneeIds} />
           <FieldSelect label="Priority" value={priority} onChange={setPriority} options={PRIORITY_OPTIONS} />
+          <FieldSelect
+            label="Type of work"
+            value={taskType}
+            onChange={setTaskType}
+            required
+            placeholder="Choose…"
+            options={TASK_TYPE_OPTIONS}
+          />
 
           <div className="grid grid-cols-2 gap-4">
             <Field label="Due date" type="date" value={dueDate} onChange={setDueDate} required />

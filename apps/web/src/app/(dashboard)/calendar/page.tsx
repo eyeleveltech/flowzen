@@ -37,6 +37,7 @@ import listPlugin from '@fullcalendar/list';
 import interactionPlugin, { type DateClickArg } from '@fullcalendar/interaction';
 import type { DatesSetArg, EventClickArg, EventDropArg, EventInput } from '@fullcalendar/core';
 import toast from 'react-hot-toast';
+import { changedBackMessage } from '@/lib/optimistic';
 import { CalendarPlus, Check, CheckSquare, ChevronDown, ChevronLeft, ChevronRight, Menu, Plus, TriangleAlert, Users } from 'lucide-react';
 import {
   api,
@@ -463,7 +464,7 @@ function CalendarScreen() {
       else await saveMove(item.eventId!, body, arg.revert);
     } catch (e) {
       arg.revert();
-      toast.error(e instanceof ApiError ? e.message : 'Could not move it');
+      toast.error(changedBackMessage(e));
     }
   };
 
@@ -488,8 +489,9 @@ function CalendarScreen() {
       await api.tasks.update(item.taskId, { dueDate, dueTime });
       toast.success('Task moved');
     } catch (e) {
+      // FullCalendar moved it on screen already; put it back, and say so.
       arg.revert();
-      toast.error(e instanceof ApiError ? e.message : 'Could not move that task');
+      toast.error(changedBackMessage(e));
     }
   };
 

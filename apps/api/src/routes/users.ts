@@ -14,6 +14,7 @@ import { logger } from '../utils/logger.js';
 import { Prisma, RolePreset } from '@prisma/client';
 import { bookValue } from '../utils/assetValue.js';
 import { teamScope } from '../services/teamScope.js';
+import { managementAccessLost } from '../services/credentials.js';
 
 const PERMISSION_KEYS = [
   'work.own', 'work.team', 'work.all',
@@ -580,6 +581,11 @@ usersRouter.patch('/:id', requirePermission('setup.admin'), async (req: AuthRequ
     // Permissions, department or cost changed -- and somebody's own sidebar
     // may now show more or less than it did a moment ago.
     emitToOrganization(orgId, 'member:changed', { userId: id });
+
+    // Somebody who could open the logins no longer can (Credentials plan,
+    // decision 6): the remaining Management members hear how many they opened.
+    const leftManagement = existing.preset === 'MANAGEMENT' && (updated.preset !== 'MANAGEMENT' || (existing.active && !updated.active));
+    if (leftManagement) await managementAccessLost(orgId, { id: updated.id, name: updated.name }).catch(() => undefined);
 
     res.json({
       success: true,

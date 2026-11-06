@@ -106,6 +106,14 @@ export const RULE_PERMISSION: Record<string, PermissionKey | readonly Permission
 export const MANAGEMENT_RULES = ['SUBSCRIPTION_RENEWAL_DUE', 'SUBSCRIPTION_PRICE_UP', 'SUBSCRIPTION_INVOICE_MISSING'] as const;
 
 /**
+ * Also Management's, but about a PERSON — "Harish opened 25 logins in 10
+ * minutes", "Akmal no longer has Management access" (Credentials plan,
+ * decision 6). Every other Management member hears it; the person it names
+ * does not.
+ */
+export const MANAGEMENT_PEOPLE_RULES = ['CREDENTIAL_UNUSUAL_ACTIVITY', 'CREDENTIAL_ACCESS_LOST'] as const;
+
+/**
  * The rules that reach you about your OWN work, whatever you may see.
  *
  * Six of fourteen people are EMPLOYEE, holding `work.own` and nothing else, so
@@ -264,7 +272,11 @@ export async function alertClausesFor(user: UserSession): Promise<Prisma.AlertWh
 
   const people = await peopleAlertClauses(orgId, userId);
 
-  return [...(openRules.length > 0 ? [{ rule: { in: openRules } }] : []), ...scoped, ...mine, ...people];
+  // The logins bells: every Management member but the one they are about.
+  const aboutOthers: Prisma.AlertWhereInput[] =
+    user.preset === 'MANAGEMENT' ? [{ rule: { in: [...MANAGEMENT_PEOPLE_RULES] }, NOT: { entityType: 'User', entityId: userId } }] : [];
+
+  return [...(openRules.length > 0 ? [{ rule: { in: openRules } }] : []), ...scoped, ...mine, ...people, ...aboutOthers];
 }
 
 /**
@@ -318,7 +330,9 @@ const linkFor = (
   // API keys live in Settings → API, which is setup.admin's like the rule.
   if (rule === 'API_KEY_CHANGED') return '/settings?tab=api';
   // A platform opens on Money → Subscriptions, which only Management reach — like the rule.
-  if (entityType === 'SubscriptionPlatform') return `/money?tab=subscriptions&platform=${entityId}`;
+  if (entityType === 'SubscriptionPlatform') return `/subscriptions?platform=${entityId}`;
+  // The logins bells open the Log, filtered to the person they are about.
+  if (rule === 'CREDENTIAL_UNUSUAL_ACTIVITY' || rule === 'CREDENTIAL_ACCESS_LOST') return `/logins?tab=log&user=${entityId}`;
   return linkForUser(entityType, entityId, user);
 };
 

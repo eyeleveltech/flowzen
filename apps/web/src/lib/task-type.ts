@@ -13,6 +13,7 @@ export const TASK_TYPE_OPTIONS = [
   { value: 'DESIGN', label: 'Design' },
   { value: 'VIDEO', label: 'Video' },
   { value: 'DIGITAL_MARKETING', label: 'Digital Marketing' },
+  { value: 'SOCIAL_MEDIA', label: 'Social Media' },
   { value: 'DEVELOPMENT', label: 'Development' },
   { value: 'BUSINESS_DEVELOPMENT', label: 'Business Development' },
   { value: 'ACCOUNTS', label: 'Accounts' },

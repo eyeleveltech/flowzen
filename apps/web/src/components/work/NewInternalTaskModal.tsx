@@ -54,7 +54,7 @@ export function NewInternalTaskModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const canSave = Boolean(title.trim()) && Boolean(dueDate) && assigneeIds.length > 0 && !saving;
+  const canSave = Boolean(title.trim()) && Boolean(dueDate) && Boolean(taskType) && assigneeIds.length > 0 && !saving;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -110,7 +110,8 @@ export function NewInternalTaskModal({
             label="Type of work"
             value={taskType}
             onChange={setTaskType}
-            placeholder="Not set"
+            required
+            placeholder="Choose…"
             options={TASK_TYPE_OPTIONS}
             disabled={saving}
           />

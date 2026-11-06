@@ -10,7 +10,7 @@
  */
 
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { api, formatDate } from '@/lib/api-v2';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -31,6 +31,7 @@ export function WorkTab({ departmentId }: { departmentId: string }) {
   const { data, isPending, error, refetch } = useQuery({
     queryKey: ['department', departmentId, 'work'],
     queryFn: () => api.departments.work(departmentId),
+    placeholderData: keepPreviousData,
   });
 
   if (error) return <ErrorNote onDismiss={() => void refetch()}>{error instanceof Error ? error.message : 'Could not load the work'}</ErrorNote>;

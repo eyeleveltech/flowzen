@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { TableRowsSkeleton } from '@/components/ui/skeleton-loaders';
 import { LoadError, Note } from '@/components/ui/empty-state';
 import { plural } from '@/lib/utils';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Pencil, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api, fileUrl, formatMoney, type ProjectProfitRow, type ProjectProfitTotals } from '@/lib/api-v2';
@@ -29,7 +29,6 @@ import { useConfirmStore } from '@/stores/confirm';
 import { usePageHeader } from '@/hooks/usePageHeader';
 import { StatTile, StatRow } from '@/components/ui/stat-tile';
 import { Tabs, useTabState, type TabDef } from '@/components/ui/tabs';
-import { SubscriptionsTab } from '@/components/money/SubscriptionsTab';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { isCollectible } from '@/lib/invoice-state';
@@ -87,7 +86,7 @@ interface CostRow {
   project?: { company: { name: string }; name: string } | null;
 }
 
-type MoneyTab = 'INVOICES' | 'BILLING' | 'COSTS' | 'PROFIT' | 'SUBSCRIPTIONS';
+type MoneyTab = 'INVOICES' | 'BILLING' | 'COSTS' | 'PROFIT';
 
 interface ProfitRow {
   companyId: string;
@@ -148,8 +147,14 @@ export default function MoneyPage() {
   const perms = config?.me.permissions ?? [];
   const canSeeFigures =
     perms.includes('money.figures') || perms.includes('setup.admin') || config?.me.preset === 'MANAGEMENT';
-  // Subscriptions are Management's alone (Subscriptions plan, decision 1) — the preset, as the API gates it.
-  const isManagement = config?.me.preset === 'MANAGEMENT';
+  // Subscriptions used to be a tab here; old links (bells, Zen, bookmarks)
+  // still say ?tab=subscriptions, and land on the screen it became.
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    if ((searchParams.get('tab') ?? '').toLowerCase() !== 'subscriptions') return;
+    const platform = searchParams.get('platform');
+    router.replace(platform ? `/subscriptions?platform=${encodeURIComponent(platform)}` : '/subscriptions');
+  }, [searchParams, router]);
   const timezone = config?.organization.timezone ?? 'Asia/Kolkata';
   const fyStart = config?.organization.fiscalYearStart ?? 4;
   const today = todayIn(timezone);
@@ -223,7 +228,6 @@ export default function MoneyPage() {
     { key: 'BILLING', label: 'Billing', count: billingToDo, visible: canSeeFigures },
     { key: 'COSTS', label: 'Costs' },
     { key: 'PROFIT', label: 'Profit & Costs', visible: canSeeFigures },
-    { key: 'SUBSCRIPTIONS', label: 'Subscriptions', visible: isManagement },
   ];
   const [tab, setTab] = useTabState(tabs);
 
@@ -410,8 +414,6 @@ export default function MoneyPage() {
       )}
 
       <Tabs tabs={tabs} active={tab} onChange={setTab} />
-
-      {tab === 'SUBSCRIPTIONS' && isManagement && <SubscriptionsTab />}
 
       {tab === 'INVOICES' && !canPrintTaxInvoice && <SellerGapsNote gaps={sellerGaps} className="mb-3" />}
 

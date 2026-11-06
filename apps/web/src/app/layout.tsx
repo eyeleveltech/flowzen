@@ -1,9 +1,22 @@
 import type { Metadata, Viewport } from 'next';
+import { Suspense } from 'react';
 import './globals.css';
 import { Providers } from '@/components/providers';
 
-export const dynamic = 'force-dynamic';
-export const fetchCache = 'force-no-store';
+/*
+ * No `dynamic = 'force-dynamic'` here any more (Perf Plan 1, decision 2).
+ *
+ * It made every screen render on the server on every request and switched
+ * off the prefetch the sidebar's links would otherwise do — for an app whose
+ * screens are all client components that get their session from localStorage
+ * and their data from the API. Nothing here reads a cookie or a header on the
+ * server, so every route can be built once and served as a static shell, and
+ * a sidebar link prefetches the next screen while the mouse is still on its
+ * way.
+ *
+ * The one thing a static build insists on: `useSearchParams` under a Suspense
+ * boundary, which the one below gives every screen at once.
+ */
 
 export const metadata: Metadata = {
   title: { default: 'Flowzen', template: '%s — Flowzen' },
@@ -30,7 +43,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="font-sans antialiased" suppressHydrationWarning>
-        <Providers>{children}</Providers>
+        <Providers>
+          <Suspense fallback={null}>{children}</Suspense>
+        </Providers>
       </body>
     </html>
   );
