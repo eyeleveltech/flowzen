@@ -106,6 +106,10 @@
   /* --color-info-tint is declared with --color-info above, beside the note
      explaining why a fourth status exists at all. */
 
+  /* Status colours lifted to read on the dark primary band (My Department's header). */
+  --color-warning-on-dark: #f2c879;
+  --color-success-on-dark: #7fcf9f;
+
   /* ── One step below xs ──────────────────────────────────────────────────
      Counted before adding: 78 arbitrary sizes under 12px were in use —
      text-[11px] × 48, text-[10px] × 26, text-[9px] × 3, text-[8px] × 1 — so

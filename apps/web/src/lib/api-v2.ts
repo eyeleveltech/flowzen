@@ -250,6 +250,8 @@ export type TaskDraft = {
     assignedTo: string;
     due: string;
     priority: string;
+    /** "Social Media" — Zen asks for it, as every task form does. */
+    typeOfWork?: string;
     notes: string | null;
   };
   /** The same task, already on the board and still open. */
@@ -870,6 +872,8 @@ export interface BillingProforma {
   amount: number;
   /** With GST. */
   total: number;
+  /** The GST alone — total less amount less the round-off. */
+  gst?: number;
   raisedAt: string;
   validTill: string;
 }
@@ -1312,8 +1316,6 @@ export const api = {
   auth: {
     login: (email: string, password: string) =>
       post<{ user: unknown }>('/auth/login', { email, password }),
-    register: (body: { name: string; email: string; password: string; organizationName: string }) =>
-      post<{ user: unknown }>('/auth/register', body),
     /** Accepting only ACTIVATES the account — the invitation created it (§3.12). */
     acceptInvite: (body: { token: string; password?: string; googleId?: string; googleEmail?: string }) =>
       post<{ user: unknown }>('/auth/accept-invite', body),
@@ -1955,6 +1957,11 @@ export const api = {
         companies: { id: string; name: string; jobs: any[] }[];
         internalProjects: { id: string; name: string }[];
       }>('/tasks/targets'),
+    /** One client's months and live projects, for a task filed inside their work. */
+    companyTargets: (companyId: string) =>
+      get<{ success: boolean; monthCards: { id: string; month: string }[]; projects: { id: string; name: string }[] }>(
+        `/tasks/targets/company/${companyId}`,
+      ),
     create: (body: Record<string, unknown>) =>
       post<{ success: boolean; task: any }>('/tasks', body),
     /**
@@ -2196,6 +2203,9 @@ export const api = {
         members: any[];
         /** Tasks on hold for a client, each counted once however many people share it. */
         waitingOnClientCount?: number;
+        /** Open and overdue tasks across these people, each task once however many share it. */
+        openTaskCount?: number;
+        overdueTaskCount?: number;
       }>(`/team/capacity?${new URLSearchParams(params)}`),
     /**
      * Name + id only, for an owner picker — gated on nothing but being logged in, unlike capacity.

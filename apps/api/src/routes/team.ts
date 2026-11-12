@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma.js';
 import { authenticate, requirePermission, type AuthRequest, hasPermission } from '../middleware/auth.js';
 import { listDepartments } from './departments.js';
 import { loadWorkCalendar, workingMinutesOn } from '../utils/workCalendar.js';
+import { studioToday } from '../services/salesFollowUp.js';
 import { toCsv } from '../utils/csv.js';
 import { sendCsv } from '../utils/csvResponse.js';
 import { teamScope, peopleInScope } from '../services/teamScope.js';
@@ -115,7 +116,8 @@ teamRouter.get('/capacity', requirePermission('work.team'), async (req: AuthRequ
 
     const now = new Date();
     const calendar = await loadWorkCalendar(orgId);
-    const todayStr = now.toISOString().slice(0, 10);
+    // The studio's day, not the server's UTC one.
+    const todayStr = await studioToday(orgId, now);
 
     /*
      * The tile above the table said "Waiting on Clients — not your team's
@@ -125,6 +127,9 @@ teamRouter.get('/capacity', requirePermission('work.team'), async (req: AuthRequ
      * counts would count a three-person task three times.
      */
     const onClient = new Set<string>();
+    // The tiles count each task once too; the per-person columns count it for each person on it.
+    const openIds = new Set<string>();
+    const overdueIds = new Set<string>();
 
     const formatted = members.map((m) => {
       const mine = m.taskAssignments.map((a) => a.task);
@@ -133,6 +138,8 @@ teamRouter.get('/capacity', requirePermission('work.team'), async (req: AuthRequ
       const overdueTasks = openTasks.filter(
         (t) => t.status !== 'ON_HOLD' && new Date(t.dueDate).toISOString().slice(0, 10) < todayStr,
       );
+      for (const t of openTasks) openIds.add(t.id);
+      for (const t of overdueTasks) overdueIds.add(t.id);
       const waitingTasks = mine.filter((t) => t.status === 'ON_HOLD');
       for (const t of waitingTasks) if (waitingOnShown(t) === 'CLIENT') onClient.add(t.id);
       const completedTasks = mine.filter((t) => t.status === 'DONE');
@@ -201,6 +208,8 @@ teamRouter.get('/capacity', requirePermission('work.team'), async (req: AuthRequ
       departments,
       members: formatted,
       waitingOnClientCount: onClient.size,
+      openTaskCount: openIds.size,
+      overdueTaskCount: overdueIds.size,
     });
   } catch (error) {
     next(error);
@@ -325,7 +334,8 @@ teamRouter.get('/:id', requirePermission('work.team'), async (req: AuthRequest, 
 
     const now = new Date();
     const calendar = await loadWorkCalendar(orgId);
-    const todayStr = now.toISOString().slice(0, 10);
+    // The studio's day, not the server's UTC one.
+    const todayStr = await studioToday(orgId, now);
     const tasks = member.taskAssignments.map((a) => a.task);
 
     const open = tasks.filter((t) => t.status !== 'DONE' && t.status !== 'CANCELLED');

@@ -33,6 +33,9 @@ class SSEClient {
   /** This tab holds the stream. */
   private leader = false;
   private releaseLock: (() => void) | null = null;
+  /** Waiting to open the stream again after it closed for good. */
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private retryMs = 5_000;
 
   connect() {
     if (this.active) {
@@ -83,6 +86,10 @@ class SSEClient {
     const es = new EventSource(`${apiUrl}/stream`, { withCredentials: true });
     this.eventSource = es;
 
+    es.onopen = () => {
+      this.retryMs = 5_000;
+    };
+
     es.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
@@ -107,9 +114,24 @@ class SSEClient {
       // whoever owns the lifecycle decide whether to try again — an authenticated
       // caller reconnects, a signed-out one is on its way to /login anyway.
       if (es.readyState === EventSource.CLOSED) {
-        console.warn('SSE connection closed; real-time updates paused until reconnect.');
+        console.warn('SSE connection closed; trying again shortly.');
         es.close();
         if (this.eventSource === es) this.eventSource = null;
+        /*
+         * Try again, waiting longer each time (5 s, doubling to a minute).
+         * A deploy restarts the API, the proxy answers 503 to the reconnect,
+         * and the browser gives up for good on any non-200 — so every open
+         * tab used to stop hearing anything until somebody reloaded it. This
+         * tab holds the lock, so no other tab would have taken over either.
+         * Signed out, disconnect() stops it.
+         */
+        if (this.active && this.leader && !this.retryTimer) {
+          this.retryTimer = setTimeout(() => {
+            this.retryTimer = null;
+            if (this.active && this.leader) this.openStream();
+          }, this.retryMs);
+          this.retryMs = Math.min(this.retryMs * 2, 60_000);
+        }
       }
     };
   }
@@ -117,6 +139,9 @@ class SSEClient {
   disconnect() {
     this.active = false;
     this.leader = false;
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
+    this.retryMs = 5_000;
     if (this.eventSource) {
       this.eventSource.close();
       this.eventSource = null;

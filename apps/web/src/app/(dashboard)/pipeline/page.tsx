@@ -322,6 +322,9 @@ export default function PipelinePage() {
   /** What the drag, override, version and proforma flows call after a change. */
   const load = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: ["pipeline"] });
+    // A win makes a client, a loss or a version moves the proposals list.
+    void queryClient.invalidateQueries({ queryKey: ["companies"] });
+    void queryClient.invalidateQueries({ queryKey: ["proposals"] });
   }, [queryClient]);
 
   const findCard = (id: string): PipelineCard | null => {
@@ -593,7 +596,7 @@ export default function PipelinePage() {
                         {showValues ? formatMoney(col.totalValue) : plural(col.cards.length, "deal")}
                       </p>
                       <p className="text-micro text-secondary">
-                        {stageProbability[col.stage]}% likely ·{" "}
+                        {stageProbability[col.stage] != null ? `${stageProbability[col.stage]}% likely · ` : ""}
                         {col.stage === "PROPOSAL_SENT"
                           ? "Number is with them"
                           : col.stage === "IN_NEGOTIATION"

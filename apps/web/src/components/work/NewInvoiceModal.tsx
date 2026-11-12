@@ -16,6 +16,7 @@
  * and a milestone could be invoiced a second time from its own page.
  */
 
+import { localToday } from '@/lib/utils';
 import { useEffect, useState } from 'react';
 import { api, ApiError, type Company } from '@/lib/api-v2';
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
@@ -47,7 +48,7 @@ export function NewInvoiceModal({ onClose, onCreated }: Props) {
   const [number, setNumber] = useState('');
   const [amount, setAmount] = useState('');
   const gst = useInvoiceGst(amount);
-  const [raisedAt, setRaisedAt] = useState(new Date().toISOString().slice(0, 10));
+  const [raisedAt, setRaisedAt] = useState(localToday());
   const [dueAt, setDueAt] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -150,6 +151,8 @@ export function NewInvoiceModal({ onClose, onCreated }: Props) {
         projectId: selectedTarget.projectId,
         ...(milestoneId ? { milestoneId } : {}),
         ...(proformaToLink && linkProforma ? { proformaId: proformaToLink.id } : {}),
+        // Unticked: say so, or the server links the standing proforma anyway.
+        ...(proformaToLink && !linkProforma ? { linkProforma: false } : {}),
       });
       onCreated();
     } catch (err) {

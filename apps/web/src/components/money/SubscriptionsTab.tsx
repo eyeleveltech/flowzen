@@ -249,6 +249,7 @@ function DropZone({ onFiles }: { onFiles: (files: File[]) => void }) {
         type="file"
         multiple
         accept={ACCEPT}
+        aria-label="Upload subscription invoices"
         className="hidden"
         onChange={(e) => {
           onFiles(Array.from(e.target.files ?? []));
@@ -291,7 +292,7 @@ function ReviewCard({ card, onDone, onDiscard }: { card: Card; onDone: () => voi
   };
 
   return (
-    <div className="rounded-2xl border border-line bg-white shadow-sm">
+    <div className="rounded-2xl border border-line bg-white">
       <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-3">
         <div className="min-w-0">
           <p className="truncate text-sm font-medium text-primary">{card.name}</p>

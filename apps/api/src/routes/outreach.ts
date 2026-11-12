@@ -810,7 +810,10 @@ outreachRouter.post('/:id/restore', requirePermission('company.write'), async (r
     const id = String(req.params.id);
 
     const entry = await prisma.outreachEntry.findFirst({
-      where: { id, organizationId: orgId },
+      // `deletedAt: undefined` is the written-out "deleted ones too" — without
+      // it lib/prisma.ts hid the deleted lead from its own restore, and every
+      // Restore in Trash answered "not found".
+      where: { id, organizationId: orgId, deletedAt: undefined },
       select: { id: true, name: true, deletedAt: true },
     });
     if (!entry) {
@@ -892,11 +895,31 @@ outreachRouter.post('/:id/promote', requirePermission('company.write'), async (r
      */
     const others = await prisma.company.findMany({
       where: { organizationId: orgId },
-      select: { id: true, name: true, people: { take: 1, select: { email: true, phone: true } } },
+      select: { id: true, name: true, people: { select: { email: true, phone: true } } },
     });
+    // The same name exactly is the company, not a lookalike — the database
+    // holds one per name, and overriding the warning came back as a 500.
+    const sameName = others.find((c) => c.name.trim().toLowerCase() === String(name).trim().toLowerCase());
+    if (sameName) {
+      res.status(409).json({
+        success: false,
+        error: `${sameName.name} is already a company here. Add this as a deal on it rather than a second company.`,
+        data: { action: 'BLOCK', canForce: false, matches: [{ id: sameName.id, name: sameName.name }] },
+      });
+      return;
+    }
+    // Every contact, not the first one: a client's second contact's email on
+    // a lead under another name is still the same client.
     const verdict = checkForDuplicates(
       { name, email: personEmail || null, phone: personPhone || null },
-      others.map((c) => ({ id: c.id, name: c.name, email: c.people[0]?.email || null, phone: c.people[0]?.phone || null })),
+      others.flatMap((c) =>
+        (c.people.length ? c.people : [{ email: null, phone: null }]).map((pp) => ({
+          id: c.id,
+          name: c.name,
+          email: pp.email || null,
+          phone: pp.phone || null,
+        })),
+      ),
     );
 
     if (verdict.action === 'BLOCK' || (verdict.action === 'WARN' && !force)) {

@@ -381,15 +381,15 @@ export function PricingPanel({
               <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
                 <label className="block">
                   <span className="text-micro text-secondary">Qty</span>
-                  <input type="number" min={0} step="any" className={INPUT} value={l.qty} onChange={(e) => edit(l.key, { qty: Number(e.target.value) })} disabled={!editable} />
+                  <input type="number" min={0} step="any" aria-label="Qty" className={INPUT} value={l.qty} onChange={(e) => edit(l.key, { qty: Number(e.target.value) })} disabled={!editable} />
                 </label>
                 <label className="block">
                   <span className="text-micro text-secondary">Unit</span>
-                  <input className={INPUT} placeholder="month, video…" value={l.unit ?? ''} onChange={(e) => edit(l.key, { unit: e.target.value || null })} disabled={!editable} maxLength={30} />
+                  <input aria-label="Unit" className={INPUT} placeholder="month, video…" value={l.unit ?? ''} onChange={(e) => edit(l.key, { unit: e.target.value || null })} disabled={!editable} maxLength={30} />
                 </label>
                 <label className="block">
                   <span className="text-micro text-secondary">Rate (₹)</span>
-                  <input type="number" min={0} step="any" className={INPUT} value={l.unitRate} onChange={(e) => edit(l.key, { unitRate: Number(e.target.value), priceSource: 'USER' })} disabled={!editable} />
+                  <input type="number" min={0} step="any" aria-label="Rate (₹)" className={INPUT} value={l.unitRate} onChange={(e) => edit(l.key, { unitRate: Number(e.target.value), priceSource: 'USER' })} disabled={!editable} />
                 </label>
                 <div>
                   <span className="text-micro text-secondary">Amount</span>
@@ -401,12 +401,13 @@ export function PricingPanel({
                 <div className="mt-2 grid gap-2 sm:grid-cols-[9rem_minmax(0,1fr)]">
                   <label className="block">
                     <span className="text-micro text-secondary">Discount (₹)</span>
-                    <input type="number" min={0} step="any" className={INPUT} value={l.discountAmount ?? 0} onChange={(e) => edit(l.key, { discountAmount: Number(e.target.value) })} disabled={!editable} />
+                    <input type="number" min={0} step="any" aria-label="Discount (₹)" className={INPUT} value={l.discountAmount ?? 0} onChange={(e) => edit(l.key, { discountAmount: Number(e.target.value) })} disabled={!editable} />
                   </label>
                   {discounted && (
                     <label className="block">
                       <span className="text-micro text-secondary">What the client gives in return</span>
                       <input
+                        aria-label="What the client gives in return"
                         className={`${INPUT} ${!l.discountTrade?.trim() ? 'border-warning' : ''}`}
                         placeholder="e.g. 12-month term, case-study rights"
                         value={l.discountTrade ?? ''}
@@ -421,7 +422,7 @@ export function PricingPanel({
 
               <label className="mt-2 block">
                 <span className="text-micro text-secondary">Description (prints under the service)</span>
-                <input className={INPUT} value={l.description ?? ''} onChange={(e) => edit(l.key, { description: e.target.value || null })} disabled={!editable} maxLength={2000} />
+                <input aria-label="Description (prints under the service)" className={INPUT} value={l.description ?? ''} onChange={(e) => edit(l.key, { description: e.target.value || null })} disabled={!editable} maxLength={2000} />
               </label>
               {(() => {
                 const note = sourceNote(l.priceSource, companyName);

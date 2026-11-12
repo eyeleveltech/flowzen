@@ -109,6 +109,7 @@ export function SectionEditor({
         <label className="block min-w-0 flex-1">
           <span className="eyebrow mb-1.5 block text-secondary">Title</span>
           <input
+            aria-label="Title"
             className={`${INPUT} text-base font-semibold text-primary`}
             value={title}
             onChange={(e) => changeTitle(e.target.value)}

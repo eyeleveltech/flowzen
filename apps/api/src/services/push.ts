@@ -138,6 +138,12 @@ export interface QueueOptions {
   /** Skip working hours — a test the person just asked for. */
   immediate?: boolean;
   now?: Date;
+  /**
+   * Send at this local time on this day (or now, if that has passed), whether
+   * or not it is a working day. For "Today: …" — held to working hours, a
+   * Sunday shoot's reminder arrived on Monday, after the shoot.
+   */
+  onDay?: { day: string; time: string };
 }
 
 /**
@@ -175,9 +181,13 @@ export async function queuePushFor(
     if (wanted.length === 0) return 0;
 
     const now = opts.now ?? new Date();
+    const zone = org.timezone || 'Asia/Kolkata';
+    const at = opts.onDay ? zonedToUtc(opts.onDay.day, opts.onDay.time, zone) : null;
     const dueAt = opts.immediate
       ? now
-      : pushDueAt(await loadWorkCalendar(organizationId), org.timezone || 'Asia/Kolkata', now);
+      : at
+        ? (at > now ? at : now)
+        : pushDueAt(await loadWorkCalendar(organizationId), zone, now);
 
     const written = await prisma.pushOutbox.createMany({
       data: wanted.map((p) => ({
@@ -258,6 +268,8 @@ export async function pushEventToday(
       `Today: ${ev.title}`,
       line,
       url,
+      // 07:00 on the day, before an early shoot — not the next working morning.
+      { onDay: { day: today, time: '07:00' } },
     );
   } catch (e) {
     logger.warn(`Today push not queued for ${ev.id}: ${e instanceof Error ? e.message : e}`);

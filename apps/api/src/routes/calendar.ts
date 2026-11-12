@@ -196,7 +196,8 @@ calendarRouter.get('/', requirePermission('work.own'), async (req: AuthRequest, 
         // Anybody who holds work.own may move a due date through PATCH
         // /tasks/:id, which is what a drop calls. A finished task stays put.
         draggable: !done,
-        overdue: !done && date < today,
+        // Not on hold — a held task is waiting, not late (internalWork.ts isLate).
+        overdue: !done && t.status !== TaskStatus.ON_HOLD && date < today,
         done,
         taskId: t.id,
         dueTime: t.dueTime,
@@ -628,18 +629,32 @@ type EventFields = {
  * Everything a saved event must be, checked against the database. Returns the
  * reason it is not, or null.
  */
-async function eventRefusal(orgId: string, f: EventFields): Promise<string | null> {
-  if (f.attendeeIds.length) {
-    const found = await prisma.user.count({ where: { id: { in: f.attendeeIds }, organizationId: orgId, active: true } });
-    if (found !== f.attendeeIds.length) return 'One of those people is not on the team.';
+async function eventRefusal(
+  orgId: string,
+  f: EventFields,
+  /*
+   * What the event already has, on an edit. Those are kept as they are: a
+   * person who has since left, gear since retired or a contact switched off
+   * used to make every later move or edit of the event fail — "One of those
+   * people is not on the team" — for a meeting nobody was changing the
+   * people of. Only what is being ADDED is checked.
+   */
+  already: { attendeeIds?: string[]; assetIds?: string[]; contactIds?: string[] } = {},
+): Promise<string | null> {
+  const added = (ids: string[], had: string[] = []) => ids.filter((id) => !had.includes(id));
+  const newPeople = added(f.attendeeIds, already.attendeeIds);
+  if (newPeople.length) {
+    const found = await prisma.user.count({ where: { id: { in: newPeople }, organizationId: orgId, active: true } });
+    if (found !== newPeople.length) return 'One of those people is not on the team.';
   }
-  if (f.assetIds.length) {
-    if (f.kind !== EventKind.SHOOT) return 'Only a shoot takes gear.';
+  if (f.assetIds.length && f.kind !== EventKind.SHOOT) return 'Only a shoot takes gear.';
+  const newGear = added(f.assetIds, already.assetIds);
+  if (newGear.length) {
     const assets = await prisma.asset.findMany({
-      where: { id: { in: f.assetIds }, organizationId: orgId },
+      where: { id: { in: newGear }, organizationId: orgId },
       select: { id: true, tag: true, status: true },
     });
-    if (assets.length !== f.assetIds.length) return 'One of those items is not in the register.';
+    if (assets.length !== newGear.length) return 'One of those items is not in the register.';
     const gone = assets.find((a) => UNPICKABLE.includes(a.status));
     if (gone) return `${gone.tag} is ${gone.status.toLowerCase()} and can't go on a shoot.`;
   }
@@ -656,9 +671,10 @@ async function eventRefusal(orgId: string, f: EventFields): Promise<string | nul
       const retainer = await prisma.retainer.findFirst({ where: { id: f.retainerId, companyId: f.companyId }, select: { id: true } });
       if (!retainer) return "That retainer isn't this client's.";
     }
-    if (f.contactIds.length) {
-      const found = await prisma.person.count({ where: { id: { in: f.contactIds }, companyId: f.companyId, active: true } });
-      if (found !== f.contactIds.length) return "One of those contacts isn't at this client.";
+    const newContacts = added(f.contactIds, already.contactIds);
+    if (newContacts.length) {
+      const found = await prisma.person.count({ where: { id: { in: newContacts }, companyId: f.companyId, active: true } });
+      if (found !== newContacts.length) return "One of those contacts isn't at this client.";
     }
   }
   return null;
@@ -1148,7 +1164,12 @@ calendarRouter.patch('/events/:id', requirePermission('work.own'), async (req: A
           ? existing.reservations.map((r) => r.assetId)
           : [],
     };
-    const refusal = await eventRefusal(orgId, f);
+    const refusal = await eventRefusal(orgId, f, {
+      attendeeIds: existing.attendees.map((a) => a.userId),
+      assetIds: existing.reservations.map((r) => r.assetId),
+      // Same client only: a new client's contacts are all new.
+      contactIds: clientChanged ? [] : existing.contacts.map((c) => c.personId),
+    });
     if (refusal) {
       res.status(400).json({ success: false, error: refusal });
       return;

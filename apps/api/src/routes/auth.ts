@@ -102,11 +102,22 @@ authRouter.post('/register', authLimiter, async (req, res: Response, next) => {
      * which is how a fresh deployment gets its admin, and every account after
      * that arrives by invitation (POST /users/invite, setup.admin only).
      */
+    /*
+     * Closed (12 Nov): Flowzen is this studio's alone, and nobody sets up an
+     * account for themselves — everybody arrives by invitation. The one way
+     * in is a brand-new, empty server whose operator sets
+     * ALLOW_FIRST_RUN_SETUP=true for the few minutes it takes to create the
+     * first admin, and then removes it. The sign-up page is gone from the app.
+     */
+    const firstRunOpen = process.env.ALLOW_FIRST_RUN_SETUP === 'true';
     const alreadySetUp = await prisma.organization.count();
-    if (alreadySetUp > 0) {
+    if (alreadySetUp > 0 || !firstRunOpen) {
       res.status(403).json({
         success: false,
-        error: 'This workspace is already set up. Ask an administrator to invite you.',
+        error:
+          alreadySetUp > 0
+            ? 'This workspace is already set up. Ask an administrator to invite you.'
+            : 'Sign-up is closed. Ask an administrator to invite you.',
       });
       return;
     }
@@ -359,7 +370,9 @@ authRouter.post('/accept-invite', authLimiter, async (req, res: Response, next) 
     const passwordHash = await hashPassword(password);
     const activated = await prisma.user.update({
       where: { id: user.id },
-      data: { passwordHash, active: true, inviteToken: null, inviteTokenExpiresAt: null },
+      // A fresh start: a cookie left from before the account was switched off
+      // and invited again stops working.
+      data: { passwordHash, active: true, inviteToken: null, inviteTokenExpiresAt: null, sessionsValidFrom: new Date() },
     });
 
     const effectivePermissions = resolvePermissions(activated.preset, activated.permissions);
@@ -531,6 +544,17 @@ authRouter.post('/reset-password', authLimiter, async (req, res, next) => {
     // One message for "no such token" and "expired" alike — telling them apart
     // turns a guessed token into a probe for which ones once existed.
     if (!user || !user.resetTokenExpiresAt || user.resetTokenExpiresAt < new Date()) {
+      res.status(400).json({ success: false, error: 'This link has expired. Ask an admin for a fresh one.' });
+      return;
+    }
+    /*
+     * Not an account that was switched off or taken off the team. A link
+     * asked for while they still worked here used to sign them back in and
+     * switch the account on again — undoing the switch-off without anybody
+     * deciding to. An invitation still waiting (a token on the record) is the
+     * one inactive account a reset may open.
+     */
+    if (user.removedAt || (!user.active && !user.inviteToken)) {
       res.status(400).json({ success: false, error: 'This link has expired. Ask an admin for a fresh one.' });
       return;
     }

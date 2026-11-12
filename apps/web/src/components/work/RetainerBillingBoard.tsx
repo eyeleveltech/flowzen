@@ -64,6 +64,8 @@ export function RetainerBillingBoard() {
     // An invoice or a payment moves the rest of the Money screen too.
     void queryClient.invalidateQueries({ queryKey: ['invoices'] });
     void queryClient.invalidateQueries({ queryKey: ['retainer-billing'] });
+    // The tiles — collected, outstanding, overdue — move with every payment.
+    void queryClient.invalidateQueries({ queryKey: ['money'] });
   };
 
   const raiseAll = async () => {
@@ -217,6 +219,8 @@ export function RetainerBillingHistory({ retainerId, onChanged }: { retainerId: 
     void refetch();
     void queryClient.invalidateQueries({ queryKey: ['invoices'] });
     void queryClient.invalidateQueries({ queryKey: ['retainer-billing'] });
+    // The tiles — collected, outstanding, overdue — move with every payment.
+    void queryClient.invalidateQueries({ queryKey: ['money'] });
     onChanged?.();
   };
 

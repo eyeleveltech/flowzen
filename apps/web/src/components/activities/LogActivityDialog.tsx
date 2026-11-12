@@ -1,5 +1,6 @@
 'use client';
 
+import { localToday } from '@/lib/utils';
 import { useState, useEffect } from 'react';
 import { api, ApiError } from '@/lib/api-v2';
 import { Button } from '@/components/ui/button';
@@ -49,7 +50,7 @@ export function LogActivityDialog({
   const [message, setMessage] = useState('');
   const [body, setBody] = useState('');
   const [direction, setDirection] = useState<'IN' | 'OUT'>('OUT');
-  const [occurredAt, setOccurredAt] = useState(new Date().toISOString().slice(0, 10));
+  const [occurredAt, setOccurredAt] = useState(localToday());
   const [followUpDate, setFollowUpDate] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,7 +67,7 @@ export function LogActivityDialog({
       setMessage('');
       setBody('');
       setDirection('OUT');
-      setOccurredAt(new Date().toISOString().slice(0, 10));
+      setOccurredAt(localToday());
       setFollowUpDate(defaultFollowUp());
       setError(null);
     }

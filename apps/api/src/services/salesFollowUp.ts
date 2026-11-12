@@ -107,9 +107,13 @@ export function mergeNextStep(
  */
 export const isNextStepMissing = (v: { nextStep: string | null | undefined }) => !v.nextStep?.trim();
 
-/** Whole days from a moment to today (studio calendar). Never negative. */
-export function daysSince(at: Date, today: string): number {
-  const from = Date.parse(`${dayKey(at)}T00:00:00Z`);
+/**
+ * Whole days from a moment to today (studio calendar). Never negative. The
+ * moment's own day is the studio's too: its UTC day made a touch logged at
+ * 01:00 IST read "1d" at once, and the deal went stale a day early.
+ */
+export function daysSince(at: Date, today: string, timezone = 'Asia/Kolkata'): number {
+  const from = Date.parse(`${orgToday(timezone, at)}T00:00:00Z`);
   const to = Date.parse(`${today}T00:00:00Z`);
   return Math.max(0, Math.round((to - from) / 86_400_000));
 }

@@ -26,6 +26,7 @@ import { Router, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { InternalProjectStatus } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
+import { changeableTaskIds } from '../services/taskAccess.js';
 import { authenticate, requirePermission, type AuthRequest } from '../middleware/auth.js';
 import { TASK_PEOPLE, withPeople } from './tasks.js';
 import { taskHasClient, waitingOnShown } from '../services/taskWaiting.js';
@@ -223,6 +224,7 @@ internalProjectsRouter.get(
       }
 
       const progress = projectProgress(project, project.tasks, today);
+      const mayChange = await changeableTaskIds(req.user!, project.tasks.map((t) => t.id));
 
       res.json({
         success: true,
@@ -239,6 +241,8 @@ internalProjectsRouter.get(
               // Internal work: an old "waiting on the client" hold shows as plain On hold (QA19, F06).
               waitingOn: waitingOnShown(t),
               hasClient: taskHasClient(t),
+              // Whether this person's edit will be accepted (a Head: their departments').
+              canChange: mayChange.has(t.id),
             })),
           ),
           taskCounts: { total: progress.total, done: progress.done, open: progress.open, late: progress.overdue },

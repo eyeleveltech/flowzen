@@ -50,7 +50,7 @@ export function FollowUps() {
       <ul className="divide-y divide-border">
         {items.map((f) => (
           <li key={`${f.kind}-${f.id}`} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-2.5">
-            <span className="w-11 shrink-0 text-micro font-semibold uppercase tracking-[0.04em] text-secondary">
+            <span className="eyebrow w-11 shrink-0 text-secondary">
               {f.kind === 'DEAL' ? 'Deal' : 'Lead'}
             </span>
             <div className="min-w-0 flex-1">

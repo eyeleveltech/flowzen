@@ -59,7 +59,11 @@ export function GlobalEvents() {
       const data = queryClient.getQueryData<{ notifications: AppNotification[] }>([
         'notifications',
       ]);
-      const newest = data?.notifications?.find((n) => !n.read && !toasted.current.has(n.id));
+      // The bell's list is worst first, so its first unread one was usually an
+      // old HIGH invoice alert, toasted again for every new signal. Newest first.
+      const newest = [...(data?.notifications ?? [])]
+        .filter((n) => !n.read && !toasted.current.has(n.id))
+        .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))[0];
       if (!newest) return;
 
       toasted.current.add(newest.id);

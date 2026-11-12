@@ -391,7 +391,7 @@ export default function HowItWorksPage() {
                       <s.icon className="h-5 w-5 shrink-0 text-secondary" />
                       <h3 className="text-base font-semibold text-primary">{s.title}</h3>
                       {mine(s.n) && (
-                        <span className="rounded-full bg-warning-tint px-2.5 py-0.5 text-micro font-bold uppercase tracking-wider text-warning-ink">
+                        <span className="eyebrow rounded-full bg-warning-tint px-2.5 py-0.5 text-warning-ink">
                           Your stage
                         </span>
                       )}
@@ -423,7 +423,7 @@ export default function HowItWorksPage() {
               <h3 className="flex items-center gap-2 text-sm font-semibold text-primary">
                 {d.role}
                 {d.role === me.name && (
-                  <span className="rounded-full bg-accent px-2 py-0.5 text-micro font-bold uppercase tracking-wider text-white">You</span>
+                  <span className="eyebrow rounded-full bg-accent px-2 py-0.5 text-white">You</span>
                 )}
               </h3>
               <ul className="mt-3 space-y-2.5">

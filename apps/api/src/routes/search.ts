@@ -15,6 +15,7 @@
 import { Router, type Response, type NextFunction } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, hasPermission, type AuthRequest } from '../middleware/auth.js';
+import { taskReadableWhere } from '../services/taskAccess.js';
 import { STAGE_LABEL } from '@flowzen/shared';
 
 /**
@@ -123,15 +124,11 @@ searchRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction
         : [],
 
       // Tasks are the one section everybody gets, because everybody has their
-      // own. Without work.all it is narrowed to the ones assigned to you —
-      // the same rule /my-work follows.
+      // own. Narrowed the way a task's own page is: yours, a Head's
+      // departments, or everything for Management — a Head used to see every
+      // department's task titles here and get "not found" opening them.
       prisma.task.findMany({
-        where: {
-          organizationId: orgId,
-          deletedAt: null,
-          title: like,
-          ...(hasPermission(user, 'work.all') ? {} : { assignees: { some: { userId: user.userId } } }),
-        },
+        where: await taskReadableWhere(user, { organizationId: orgId, deletedAt: null, title: like }),
         select: {
           id: true,
           title: true,
@@ -160,7 +157,7 @@ searchRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunction
       canMoney
         ? prisma.invoice.findMany({
             where: { organizationId: orgId, number: like },
-            select: { id: true, number: true, company: { select: { name: true } } },
+            select: { id: true, number: true, company: { select: { id: true, name: true } } },
             orderBy: { createdAt: 'desc' },
             take: LIMIT,
           })

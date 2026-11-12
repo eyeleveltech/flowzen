@@ -53,6 +53,11 @@ import { WorkingOnNowControl } from '@/components/work/WorkingOnNow';
 export type DrawerTask = {
   id: string;
   title: string;
+  /**
+   * False when this person may look but not change it — another
+   * department's task, open to a Head on a shared project. Absent means yes.
+   */
+  canChange?: boolean;
   status: string;
   /** MONTH_CARD, PROJECT or INTERNAL — what kind of work this is. */
   workType?: string;
@@ -281,7 +286,9 @@ export function TaskDrawer({
         ...(repeat !== (isRepeating(task.repeat) ? task.repeat.frequency : '') ? { repeat: repeat || null } : {}),
         priority,
         notes: notes.trim() || null,
-        ...(assignedById ? { assignedById } : {}),
+        // Only when changed: a task "assigned by" somebody since switched off
+        // sent their id back on every save, and the server refused it.
+        ...(assignedById && assignedById !== (task.assignedBy?.id ?? '') ? { assignedById } : {}),
         // The Reviewer picker is gone, so the field is left as it is rather
         // than cleared by every save.
         taskType: taskType || null,
@@ -293,7 +300,16 @@ export function TaskDrawer({
         ...(knowsClient && clientId !== (task.companyId ?? '') ? { companyId: clientId || null } : {}),
         // Sent whenever there is a set. The server refuses a reassignment from
         // somebody who may not make one, which is the check that counts.
-        ...(assigneeIds.length > 0 ? { assigneeIds } : {}),
+        // Only when the people changed, and only people still on the team. A
+        // switched-off person on the task had no chip to remove and was sent
+        // back every time, so no edit to that task could be saved — not even
+        // handing it to somebody else.
+        ...(() => {
+          const before = task.assignees?.map((a) => a.id) ?? (task.assignee ? [task.assignee.id] : []);
+          const same = before.length === assigneeIds.length && before.every((id) => assigneeIds.includes(id));
+          const onTeam = assigneeIds.filter((id) => people.some((p) => p.id === id));
+          return !same && onTeam.length > 0 ? { assigneeIds: onTeam } : {};
+        })(),
       });
       // Shown at once; the screen's refetch replaces it with the real row.
       const person = (id: string) => {
@@ -463,8 +479,9 @@ export function TaskDrawer({
                   label="Retainer project"
                   value={retainerProjectId || 'none'}
                   onChange={(v) => setRetainerProjectId(v === 'none' ? '' : v)}
+                  // No "Not under a project": a retainer month's task must sit
+                  // under one, and the database refused the save with a 500.
                   options={[
-                    { value: 'none', label: 'Not under a project' },
                     ...retainerProjects
                       .filter((rp) => rp.status === 'ACTIVE' || rp.id === task.retainerProjectId)
                       .map((rp) => ({ value: rp.id, label: rp.name })),
@@ -521,9 +538,14 @@ export function TaskDrawer({
                   onChange={(v) => onStatusChange(task, v)}
                   options={statusOptions}
                   ariaLabel="Status"
-                  disabled={busy}
+                  disabled={busy || task.canChange === false}
                   className="mt-1.5 w-full"
                 />
+                {task.canChange === false && (
+                  <p className="mt-1.5 text-micro text-secondary">
+                    Another department’s task. Its Head, or Management, can change it.
+                  </p>
+                )}
                 {/* Their own open task: "Working on this now", or the Now badge and Clear. */}
                 <WorkingOnNowControl
                   task={task}
@@ -697,7 +719,7 @@ export function TaskDrawer({
                 the server says no, and a button whose only outcome is an error
                 message is a worse way to say that than not offering it.
               */}
-              {!finished && (
+              {!finished && task.canChange !== false && (
                 <Button
                   variant="ghost"
                   icon={Trash2}
@@ -710,9 +732,11 @@ export function TaskDrawer({
               <Button variant="ghost" className="ml-auto" onClick={onClose}>
                 Close
               </Button>
-              <Button variant="secondary" icon={Pencil} onClick={() => setEditing(true)}>
-                Edit
-              </Button>
+              {task.canChange !== false && (
+                <Button variant="secondary" icon={Pencil} onClick={() => setEditing(true)}>
+                  Edit
+                </Button>
+              )}
             </div>
           </>
         )}

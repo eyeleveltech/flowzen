@@ -99,7 +99,7 @@ export default function OAuthAuthorizePage() {
           <img src="/logo_flowzen.png" alt="Flowzen" width={160} height={44} className="h-10 w-auto object-contain" />
         </div>
 
-        <div className="rounded-2xl border border-line bg-white p-6 shadow-sm">
+        <div className="rounded-2xl border border-line bg-white p-6">
           {problem ? (
             <Trouble problem={problem} />
           ) : !info ? (

@@ -43,7 +43,9 @@ export async function departmentForPage(
     select: { id: true, name: true, headId: true, head: { select: { name: true } } },
   });
   if (!d) return { status: 404, error: 'Department not found' };
-  if (d.headId !== user.userId && user.preset !== RolePreset.MANAGEMENT) {
+  // Its head while they hold the HEAD preset — somebody moved to another
+  // preset keeps no department's page — or Management.
+  if (user.preset !== RolePreset.MANAGEMENT && (d.headId !== user.userId || user.preset !== RolePreset.HEAD)) {
     return { status: 403, error: 'Only the head of this department, or Management, can open its page.' };
   }
   return { department: { id: d.id, name: d.name, headId: d.headId, headName: d.head?.name ?? null } };

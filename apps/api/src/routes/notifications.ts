@@ -377,7 +377,11 @@ notificationsRouter.get('/', async (req: AuthRequest, res: Response, next: NextF
       severity: a.severity,
       /** "Money", "Tasks", "Pipeline" — what this is about, at a glance. */
       source: SOURCE[a.entityType] ?? 'Other',
-      link: linkFor(a.entityType, a.entityId, req.user, a.rule),
+      // A cancelled event has no drawer to open — the calendar itself.
+      link:
+        a.entityType === 'CalendarEvent' && a.message.startsWith('Cancelled:')
+          ? '/calendar'
+          : linkFor(a.entityType, a.entityId, req.user, a.rule),
       read: readIds.has(a.id),
       createdAt: a.createdAt,
     }));

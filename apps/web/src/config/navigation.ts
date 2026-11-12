@@ -118,7 +118,9 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: 'My Work', href: '/my-work', icon: CheckSquare, isPrimaryMobile: true },
       // Everybody's too: what is on when, read through the same permissions as
       // each item's own screen, so it needs nothing of its own.
-      { label: 'Calendar', href: '/calendar', icon: CalendarDays, isPrimaryMobile: true },
+      // Everybody's — shoots and meetings are booked across the studio — and
+      // gated on what its own request asks for (GET /calendar is work.own).
+      { label: 'Calendar', href: '/calendar', icon: CalendarDays, needs: 'work.own', isPrimaryMobile: true },
       { label: 'Team', href: '/members', icon: Columns, needs: 'work.team', isPrimaryMobile: true },
       /*
        * A head's own page for their department — people, work, calendar,
@@ -250,6 +252,10 @@ export const visibleSections = (user: NavUser | null | undefined): NavSection[] 
 const UNLISTED_ROUTES: { prefix: string; needs: PermissionKey }[] = [
   { prefix: '/projects', needs: 'work.all' },
   { prefix: '/retainers', needs: 'work.all' },
+  // An internal project's own page — reached from Live work → Internal; its
+  // request (GET /internal-projects/:id) is work.all too. Typed by anybody
+  // else, the screen built itself out of refusals (12 Nov).
+  { prefix: '/internal-projects', needs: 'work.all' },
 ];
 
 /**

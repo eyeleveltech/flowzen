@@ -7,6 +7,7 @@ import { addDays } from '../utils/workCalendar.js';
 import { dayStartUtc, hoursLabel, localDayAndTime, whenLabel, zonedToUtc } from '../utils/zonedTime.js';
 import { googleConfigured } from './googleCalendar.js';
 import { pushCalendarChange } from './push.js';
+import { emitToOrganization } from '../liveStream.js';
 
 /**
  * Meetings, shoots and the gear they reserve — the parts the route, the
@@ -272,14 +273,16 @@ async function mailPeople(
   subject: string,
   sentence: string,
   snapshot: EventSnapshot,
+  /** The event is gone: point at the calendar, not a drawer that will say "not found". */
+  gone = false,
 ): Promise<void> {
   if (userIds.length === 0) return;
-  await pushCalendarChange(organizationId, userIds, snapshot.id, subject, sentence, eventLink(snapshot.id));
+  await pushCalendarChange(organizationId, userIds, snapshot.id, subject, sentence, gone ? '/calendar' : eventLink(snapshot.id));
   const people = await prisma.user.findMany({
     where: { id: { in: userIds }, organizationId, active: true },
     select: { id: true, name: true, email: true },
   });
-  const link = `${appUrl()}${eventLink(snapshot.id)}`;
+  const link = `${appUrl()}${gone ? '/calendar' : eventLink(snapshot.id)}`;
   for (const p of people) {
     try {
       await sendMail(organizationId, {
@@ -322,6 +325,8 @@ async function replaceUpdateAlert(
   if (readers.length) {
     await prisma.alertRead.createMany({ data: readers.map((userId) => ({ alertId: alert.id, userId })), skipDuplicates: true });
   }
+  // The bells open right now hear of it, as they do of the scanner's alerts.
+  emitToOrganization(organizationId, 'notification:new', null);
 }
 
 /**
@@ -371,6 +376,7 @@ export async function afterEventSaved(opts: {
         `${actor.name} cancelled ${before.title}`,
         `${actor.name} cancelled ${before.title} (${when(before)}).`,
         before,
+        true,
       );
       if (before.attendeeIds.length) {
         await replaceUpdateAlert(organizationId, before.id, `Cancelled: ${before.title}, ${when(before)} · ${bookedBy(before)}`, [actor.id]);
@@ -496,6 +502,7 @@ export async function syncTodayAlert(
   await prisma.alert.create({
     data: { organizationId, rule: 'EVENT_TODAY', severity: AlertSeverity.MED, entityType: 'CalendarEvent', entityId: ev.id, message, raisedAt: now },
   });
+  emitToOrganization(organizationId, 'notification:new', null);
   return 'created';
 }
 

@@ -502,10 +502,9 @@ companiesRouter.get('/:id', requirePermission('company.read'), async (req: AuthR
       invoices: p.invoices.map((inv) => maskInvoiceFigures(inv, canSeeFinancials)),
     }));
 
-    const sanitizedProformas = company.proformas.map((pf) => ({
-      ...pf,
-      amount: canSeeFinancials ? pf.amount : null,
-    }));
+    // Every figure, not only `amount`: subtotal, the GST lines, the total and
+    // the amount in words all said the same number.
+    const sanitizedProformas = company.proformas.map((pf) => maskInvoiceFigures(pf, canSeeFinancials));
 
     res.json({
       success: true,
@@ -546,19 +545,20 @@ companiesRouter.post('/check-duplicate', requirePermission('company.read'), asyn
       select: { 
         id: true, 
         name: true,
-        people: {
-          take: 1,
-          select: { email: true, phone: true }
-        }
+        // Every contact, not the first: a client's second contact's email on a
+        // "new" company is still the same client.
+        people: { select: { email: true, phone: true } },
       }
     });
 
-    const mappedExisting = existing.map(c => ({
-      id: c.id,
-      name: c.name,
-      email: c.people[0]?.email || null,
-      phone: c.people[0]?.phone || null
-    }));
+    const mappedExisting = existing.flatMap((c) =>
+        (c.people.length ? c.people : [{ email: null, phone: null }]).map((pp) => ({
+          id: c.id,
+          name: c.name,
+          email: pp.email || null,
+          phone: pp.phone || null,
+        })),
+      );
 
     const verdict = checkForDuplicates({ name, email, phone }, mappedExisting);
     // `canForce` is part of the contract the client reads — a near-name clash
@@ -1070,17 +1070,20 @@ companiesRouter.post('/', requirePermission('company.write'), async (req: AuthRe
      */
     const others = await prisma.company.findMany({
       where: { organizationId: orgId },
-      select: { id: true, name: true, people: { take: 1, select: { email: true, phone: true } } },
+      select: { id: true, name: true, people: { select: { email: true, phone: true } } },
     });
 
     const verdict = checkForDuplicates(
-      { name, phone: phone ?? contact?.phone ?? null },
-      others.map((c) => ({
-        id: c.id,
-        name: c.name,
-        email: c.people[0]?.email || null,
-        phone: c.people[0]?.phone || null,
-      })),
+      // The contact's email too — it was never checked on create.
+      { name, email: contact?.email ?? null, phone: phone ?? contact?.phone ?? null },
+      others.flatMap((c) =>
+        (c.people.length ? c.people : [{ email: null, phone: null }]).map((pp) => ({
+          id: c.id,
+          name: c.name,
+          email: pp.email || null,
+          phone: pp.phone || null,
+        })),
+      ),
     );
 
     if (verdict.action === 'BLOCK' || (verdict.action === 'WARN' && !force)) {

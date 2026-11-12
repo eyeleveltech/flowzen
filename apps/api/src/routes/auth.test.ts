@@ -136,6 +136,8 @@ describe('Phase 1: RBAC Permissions & Authorization Gates', () => {
     // unmocked count, which returns undefined and slides past the gate.
     (prisma.organization.count as any).mockResolvedValue(0);
     (prisma.department.create as any).mockResolvedValue({ id: 'dept-mgmt', name: 'Management' });
+    // And only when the operator has opened it for the first admin (12 Nov).
+    process.env.ALLOW_FIRST_RUN_SETUP = 'true';
 
     const res = await request(app).post('/api/auth/register').send({
       name: 'Test Owner',
@@ -158,6 +160,21 @@ describe('Phase 1: RBAC Permissions & Authorization Gates', () => {
       sortOrder: 0,
     });
     expect((prisma.user.create as any).mock.calls[0][0].data).toMatchObject({ departmentId: 'dept-mgmt', dept: 'Management' });
+    delete process.env.ALLOW_FIRST_RUN_SETUP;
+  });
+
+  it('is closed on an empty server unless its operator opens it — nobody signs themselves up', async () => {
+    delete process.env.ALLOW_FIRST_RUN_SETUP;
+    (prisma.organization.count as any).mockResolvedValue(0);
+    const res = await request(app).post('/api/auth/register').send({
+      name: 'Somebody',
+      email: 'somebody@example.com',
+      password: 'AnotherStrongPassword1!',
+      organizationName: 'Their Studio',
+    });
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatch(/Sign-up is closed/);
+    expect(prisma.organization.create).not.toHaveBeenCalled();
   });
 
   it('refuses a second workspace on a deployment that already has one', async () => {

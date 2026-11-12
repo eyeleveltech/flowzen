@@ -89,7 +89,7 @@ function Heading({ children, aside }: { children: React.ReactNode; aside?: React
  */
 function LiveMark() {
   return (
-    <span className="inline-flex items-center gap-1.5 text-micro font-semibold uppercase tracking-[0.06em] text-success">
+    <span className="eyebrow inline-flex items-center gap-1.5 text-success">
       <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden="true" />
       Live
     </span>

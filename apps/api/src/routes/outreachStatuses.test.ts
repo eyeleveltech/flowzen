@@ -278,15 +278,19 @@ describe('promotion', () => {
 
   it('answers a name clash with a verdict instead of a 500', async () => {
     // The unique index on (organizationId, name) used to surface as a bare
-    // "Something went wrong" — P2002 carries no HTTP status.
+    // "Something went wrong" — P2002 carries no HTTP status. The SAME name is
+    // the company itself, so it blocks: as a warning, overriding it hit the
+    // index and came back as the 500 again (12 Nov).
     (prisma.outreachEntry.findFirst as any).mockResolvedValue(lead({ status: OutreachStatus.INTERESTED }));
     (prisma.company.findMany as any).mockResolvedValue([
       { id: 'co-1', name: 'Prestige Group', people: [] },
     ]);
-    const res = await promote();
-    expect(res.status).toBe(409);
-    expect(res.body.data.action).toBe('WARN');
-    expect(res.body.data.canForce).toBe(true);
+    for (const body of [{}, { force: true }]) {
+      const res = await promote(body);
+      expect(res.status).toBe(409);
+      expect(res.body.data.action).toBe('BLOCK');
+      expect(res.body.data.canForce).toBe(false);
+    }
     expect(written.company).toBeUndefined();
   });
 

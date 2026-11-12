@@ -25,6 +25,17 @@ export function loginHref(): string {
  */
 export function safeNextPath(raw: string | null | undefined): string {
   if (!raw) return '/my-work';
+  // Browsers drop tabs and newlines from a URL, so "/\t/evil.example" is read
+  // as "//evil.example" — another site. No control characters at all.
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u001f\u007f\s]/.test(raw)) return '/my-work';
   if (!raw.startsWith('/') || raw.startsWith('//') || raw.startsWith('/\\')) return '/my-work';
+  // And whatever it resolves to must still be this site.
+  try {
+    const base = 'https://flowzen.invalid';
+    if (new URL(raw, base).origin !== base) return '/my-work';
+  } catch {
+    return '/my-work';
+  }
   return raw;
 }

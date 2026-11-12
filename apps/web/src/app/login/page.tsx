@@ -146,11 +146,9 @@ export default function LoginPage() {
             </button>
           </form>
 
+          {/* No sign-up: everybody here is invited by an admin (12 Nov). */}
           <p className="mt-6 text-center text-sm text-secondary">
-            Don&apos;t have an account?{' '}
-            <Link href="/register" className="text-primary font-medium hover:underline">
-              Create workspace
-            </Link>
+            No account yet? Ask your admin to invite you.
           </p>
         </motion.div>
       </div>

@@ -37,7 +37,7 @@ export function SectionCard({
     <section className="space-y-3">
       <div className="flex items-end justify-between gap-4">
         <div className="min-w-0">
-          <h2 className="text-[15px] font-semibold tracking-tight text-primary">{title}</h2>
+          <h2 className="text-base font-semibold tracking-tight text-primary">{title}</h2>
           {description && <p className="mt-1 max-w-2xl text-sm leading-relaxed text-secondary">{description}</p>}
         </div>
         {aside && <div className="shrink-0">{aside}</div>}

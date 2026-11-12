@@ -13,6 +13,7 @@
  * accident.
  */
 
+import { localToday } from '@/lib/utils';
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -126,7 +127,7 @@ export function EventModal({
       setAssetIds(event.gear.map((g) => g.assetId));
       return;
     }
-    const day = start?.date ?? new Date().toISOString().slice(0, 10);
+    const day = start?.date ?? localToday();
     const time = start?.time ?? '10:00';
     setKind('MEETING');
     setTitle('');

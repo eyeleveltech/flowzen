@@ -71,3 +71,18 @@ export async function readableTaskIds(user: AccessUser): Promise<string[] | null
   const rows = await prisma.task.findMany({ where, select: { id: true } });
   return rows.map((r) => r.id);
 }
+
+/**
+ * Of these tasks, the ones this person may change — for lists that show more
+ * than that. A Head sees every task on a project, but changes only their own
+ * departments' (taskChangeableWhere), so each row says which it is and the
+ * screen offers the edit only where the save will go through.
+ */
+export async function changeableTaskIds(user: AccessUser, ids: string[]): Promise<Set<string>> {
+  if (ids.length === 0) return new Set();
+  const rows = await prisma.task.findMany({
+    where: await taskChangeableWhere(user, { id: { in: ids }, organizationId: user.organizationId }),
+    select: { id: true },
+  });
+  return new Set(rows.map((r) => r.id));
+}

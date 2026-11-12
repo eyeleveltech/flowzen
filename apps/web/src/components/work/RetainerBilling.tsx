@@ -177,7 +177,12 @@ export function BillingNext({
           gstPercent={subject.gstPercent}
           proforma={
             live && proforma
-              ? { id: proforma.id, number: proforma.number, gst: Math.round((proforma.total - proforma.amount) * 100) / 100 }
+              ? {
+                  id: proforma.id,
+                  number: proforma.number,
+                  // The server's figure leaves out the round-off; total − amount had it in.
+                  gst: proforma.gst ?? Math.round((proforma.total - proforma.amount) * 100) / 100,
+                }
               : null
           }
           onClose={() => setOpen(null)}

@@ -1051,7 +1051,16 @@ projectsRouter.patch('/:id/milestones/:milestoneId', requirePermission('work.all
       // Cancelled ones do not count: a cancelled proforma is a document that was
       // withdrawn, and holding the milestone down for it would mean a mistake
       // can never be undone.
-      include: { _count: { select: { proformas: { where: { status: { not: 'CANCELLED' } } } } } },
+      include: {
+        _count: {
+          select: {
+            proformas: { where: { status: { not: 'CANCELLED' } } },
+            // A tax invoice settles it — raised from Tally with no proforma
+            // is the normal path, and it is just as much "billed".
+            invoices: { where: { status: { not: 'CANCELLED' } } },
+          },
+        },
+      },
     });
     if (!existing) {
       res.status(404).json({ success: false, error: 'Milestone not found' });
@@ -1078,6 +1087,19 @@ projectsRouter.patch('/:id/milestones/:milestoneId', requirePermission('work.all
       MilestoneStatus.PAID,
     ];
     if (status !== undefined && LADDER.indexOf(status) < LADDER.indexOf(existing.status)) {
+      // Not below Invoiced while a tax invoice stands against it: walked back
+      // to Pending it offered "Raise proforma" again, and a second request
+      // went to a client already invoiced — and its amount could be edited
+      // under a month's reported revenue.
+      if (LADDER.indexOf(status) < LADDER.indexOf(MilestoneStatus.INVOICED) && existing._count.invoices > 0) {
+        res.status(400).json({
+          success: false,
+          error:
+            'A tax invoice has been recorded against this milestone, so it cannot go back below Invoiced. ' +
+            'Cancel the invoice first, on the client under Invoices & Proformas.',
+        });
+        return;
+      }
       if (status === MilestoneStatus.PENDING && existing._count.proformas > 0) {
         res.status(400).json({
           success: false,
@@ -1172,13 +1194,22 @@ projectsRouter.delete('/:id/milestones/:milestoneId', requirePermission('work.al
       // Cancelled ones do not count: a cancelled proforma is a document that was
       // withdrawn, and holding the milestone down for it would mean a mistake
       // can never be undone.
-      include: { _count: { select: { proformas: { where: { status: { not: 'CANCELLED' } } } } } },
+      include: {
+        _count: {
+          select: {
+            proformas: { where: { status: { not: 'CANCELLED' } } },
+            // A tax invoice settles it — raised from Tally with no proforma
+            // is the normal path, and it is just as much "billed".
+            invoices: { where: { status: { not: 'CANCELLED' } } },
+          },
+        },
+      },
     });
     if (!existing) {
       res.status(404).json({ success: false, error: 'Milestone not found' });
       return;
     }
-    if (existing.status !== MilestoneStatus.PENDING || existing._count.proformas > 0) {
+    if (existing.status !== MilestoneStatus.PENDING || existing._count.proformas > 0 || existing._count.invoices > 0) {
       res.status(400).json({ success: false, error: 'This milestone has a live proforma against it. Cancel the proforma first — on the client, under Invoices & Proformas — and this can be removed.' });
       return;
     }

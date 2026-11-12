@@ -55,7 +55,7 @@ export function ProjectMilestonesBilling() {
   return (
     <section className="mt-8 space-y-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-sm font-bold text-primary">Project milestones</h2>
+        <h2 className="text-sm font-semibold text-primary">Project milestones</h2>
         <p className="text-micro text-secondary">
           Milestone amounts are before GST · invoice balances include GST · Proforma → Invoice → Paid
         </p>

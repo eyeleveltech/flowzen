@@ -37,6 +37,7 @@ export async function computeProposedAllocations(month?: string): Promise<{ user
       workType: true,
       monthCardId: true,
       projectId: true,
+      monthCard: { select: { status: true } },
       assignees: { select: { userId: true } },
     },
   });
@@ -47,6 +48,13 @@ export async function computeProposedAllocations(month?: string): Promise<{ user
   for (const t of completedTasks) {
     const workId = t.monthCardId ?? t.projectId;
     if (!workId) continue;
+    /*
+     * Not a month that is closed. An October task finished in November put a
+     * November row on October's card, and the card's profit counts every row
+     * on it — so October's reported profit moved after it was closed, and the
+     * row could not even be edited (the card refuses changes once closed).
+     */
+    if (t.monthCard?.status === 'CLOSED') continue;
     // Once per person on the task. A task two designers finished together is
     // a month's work for both of them, and the split this feeds is what people
     // cost is apportioned by.
@@ -68,8 +76,24 @@ export async function computeProposedAllocations(month?: string): Promise<{ user
     const total = [...perWork.values()].reduce((s, w) => s + w.count, 0);
     if (total === 0) continue;
 
+    /*
+     * Largest remainder: each share rounded down, then the points left over go
+     * to the biggest fractions. Rounding each on its own gave 1/1/4 tasks as
+     * 17 + 17 + 67 = 101% — overallocated, and 101% of a salary in people cost.
+     */
+    const works = [...perWork.values()];
+    const exact = works.map((w) => (w.count / total) * 100);
+    const shares = exact.map(Math.floor);
+    let left = 100 - shares.reduce((a, b) => a + b, 0);
+    for (const i of exact.map((x, i) => i).sort((a, b) => exact[b] - Math.floor(exact[b]) - (exact[a] - Math.floor(exact[a])))) {
+      if (left <= 0) break;
+      shares[i] += 1;
+      left -= 1;
+    }
+    const shareOf = new Map(works.map((w, i) => [w.workId, shares[i]]));
+
     for (const w of perWork.values()) {
-      const proposedPercent = Math.round((w.count / total) * 100);
+      const proposedPercent = shareOf.get(w.workId) ?? 0;
 
       const existing = await prisma.peopleAllocation.findUnique({
         where: { userId_month_workId: { userId, month: targetMonth, workId: w.workId } },

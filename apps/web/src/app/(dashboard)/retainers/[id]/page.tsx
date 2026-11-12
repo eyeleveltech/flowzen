@@ -33,6 +33,7 @@
  * per-retainer one, so it isn't duplicated on this screen.
  */
 
+import { localToday } from '@/lib/utils';
 import { useCallback, useEffect, useState } from 'react';
 import { useWorkCacheNudge } from '@/hooks/useWorkCacheNudge';
 import { usePageHeader } from '@/hooks/usePageHeader';
@@ -650,7 +651,7 @@ export default function RetainerMonthCardPage() {
   const donePercent = countedTasks.length
     ? Math.round((doneTasks.length / countedTasks.length) * 100)
     : 0;
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = localToday();
 
   /*
    * A closed month is a reported month.

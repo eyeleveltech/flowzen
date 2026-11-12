@@ -15,6 +15,7 @@
  * what shows up through task assignees and the activity feed instead.
  */
 
+import { localToday } from '@/lib/utils';
 import { use, useCallback, useEffect, useState } from 'react';
 import { InvoiceStatusBadge } from '@/components/work/InvoiceStatusBadge';
 import { moneyDate } from '@/lib/money';
@@ -88,6 +89,8 @@ type Milestone = {
 type Task = {
   id: string;
   title: string;
+  /** False: another department's task — a Head may look, not change. */
+  canChange?: boolean;
   status: TStatus;
   priority: string;
   taskType?: string | null;
@@ -270,7 +273,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
    */
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   /** Today, for the late comparison in the task table. */
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = localToday();
   const { user: me } = useAuthStore();
   /*
    * Empty means no filter, and it is a list rather than a single choice
@@ -1050,7 +1053,8 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                               options={TASK_STATUS_OPTIONS}
                               ariaLabel={`Status for ${t.title}`}
                               buttonClassName="px-2.5 py-1.5 text-xs w-32"
-                              disabled={busyId === t.id}
+                              // Another department's task: a Head may look, not change.
+                              disabled={busyId === t.id || t.canChange === false}
                             />
                           </td>
                         </tr>

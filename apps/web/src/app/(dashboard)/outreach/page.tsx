@@ -499,6 +499,8 @@ export default function OutreachPage() {
 
   const openPromote = (entry: OutreachItem) => {
     setPromotingEntry(entry);
+    // The last lead's duplicate warning — and its override — do not carry over.
+    setPromoteVerdict(null);
     // Asked, not assumed — it was prefilled Chennai, so every client
     // elsewhere was filed there unless somebody noticed.
     setPromoteCity('');
@@ -1195,7 +1197,8 @@ export default function OutreachPage() {
                 {history.map((h) => (
                   <li key={h.id} className="text-xs">
                     <span className="text-secondary">
-                      {new Date(h.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} ·{' '}
+                      {/* Activity rows carry `at`; `createdAt` read "Invalid Date". */}
+                      {new Date(h.at ?? h.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} ·{' '}
                     </span>
                     <span className="font-semibold text-primary">
                       {h.verb === 'touch_logged'

@@ -164,7 +164,7 @@ export default function InternalProjectPage() {
           <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="flex items-center gap-2.5">
-                <h1 className="text-xl font-semibold text-primary">{project.name}</h1>
+                <h1 className="text-2xl font-semibold tracking-tight text-primary">{project.name}</h1>
                 <Badge tone={project.status === 'ACTIVE' ? 'good' : 'neutral'}>
                   {project.status === 'ACTIVE' ? 'Active' : 'Done'}
                 </Badge>

@@ -5,6 +5,22 @@ import { loadWorkCalendar, todayIn, type WorkCalendar } from '../utils/workCalen
 import { createFrom, dayOf, nextDueFor, type RepeatRule } from '../services/taskRepeat.js';
 import { createTaskRecord } from '../services/taskCreate.js';
 
+/** The week (Monday to Sunday) or month a day falls in, as two days. */
+function periodOf(frequency: RepeatFrequency, day: string): { from: string; to: string } {
+  const at = Date.parse(`${day}T00:00:00Z`);
+  if (frequency === RepeatFrequency.MONTHLY) {
+    const d = new Date(at);
+    const last = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0));
+    return { from: `${day.slice(0, 7)}-01`, to: last.toISOString().slice(0, 10) };
+  }
+  const weekday = (new Date(at).getUTCDay() + 6) % 7;
+  const monday = at - weekday * 86_400_000;
+  return {
+    from: new Date(monday).toISOString().slice(0, 10),
+    to: new Date(monday + 6 * 86_400_000).toISOString().slice(0, 10),
+  };
+}
+
 /**
  * Repeating tasks: the hourly job that makes each next copy.
  *
@@ -125,7 +141,25 @@ async function repeatOne(
   if (s.frequency === RepeatFrequency.DAILY && !finished) return null;
 
   // 4 – 5. The next date, and whether it is time to make it.
-  const nextDue = nextDueFor(s, calendar, lastDay, today);
+  let nextDue = nextDueFor(s, calendar, lastDay, today);
+  /*
+   * Each week (or month) gets one copy. The next date is worked out from the
+   * latest copy's due date, so a Thursday copy moved to Tuesday made a second
+   * one for that same Thursday within the hour. A copy already in the period
+   * — moved or not, deleted or not — moves the next one on.
+   */
+  for (let guard = 0; nextDue && s.frequency !== RepeatFrequency.DAILY && guard < 3; guard++) {
+    const period = periodOf(s.frequency, nextDue);
+    const already = await prisma.task.count({
+      where: {
+        repeatId: s.id,
+        deletedAt: undefined,
+        dueDate: { gte: new Date(`${period.from}T00:00:00Z`), lte: new Date(`${period.to}T00:00:00Z`) },
+      },
+    });
+    if (already === 0) break;
+    nextDue = nextDueFor(s, calendar, period.to, today);
+  }
   if (!nextDue || today < createFrom(s, nextDue)) return null;
 
   // 6. A retainer copy waits for its month's card.

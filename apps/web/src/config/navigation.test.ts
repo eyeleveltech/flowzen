@@ -103,7 +103,8 @@ describe('what each preset actually gets', () => {
     // one the other half keeps in a WhatsApp thread instead. What they cannot
     // do inside it — hand anything over, see what it cost — the server refuses.
     //
-    expect(seenBy('EMPLOYEE')).toEqual(['My Work', 'Assets']);
+    // And the Calendar: everybody books and is booked on shoots and meetings.
+    expect(seenBy('EMPLOYEE')).toEqual(['My Work', 'Calendar', 'Assets']);
   });
 
   it('shows an Employee both rows without a heading over either', () => {
@@ -111,9 +112,11 @@ describe('what each preset actually gets', () => {
     // three items there — so the section used to reduce to a MANAGEMENT
     // heading carrying one row about who is holding a lens. A heading over a
     // single link groups nothing and, here, described it wrongly.
+    // My Work and the Calendar share the first section now, so it keeps its
+    // heading; Assets alone under MANAGEMENT still goes without one.
     const sections = visibleSections(as('EMPLOYEE'));
-    expect(sections.map((s) => s.title)).toEqual([null, null]);
-    expect(sections.map((s) => s.items.length)).toEqual([1, 1]);
+    expect(sections.map((s) => s.title)).toEqual(['DAILY', null]);
+    expect(sections.map((s) => s.items.length)).toEqual([2, 1]);
   });
 
   it('keeps the headings for everybody with more than one row under them', () => {
@@ -219,7 +222,8 @@ describe('every screen in the app is behind the guard, not just the listed ones'
   /** Deliberately open, each for a reason — same three the sidebar allows. */
   // Trash: each section asks for the access that deleted it (TrashTab), and
   // the server refuses the rest — there is no one permission for the page.
-  const OPEN = new Set(['/my-work', '/profile', '/assets', '/trash', '/how-it-works']);
+  // `/[...missing]` is the not-found page for any address that is no screen.
+  const OPEN = new Set(['/my-work', '/profile', '/assets', '/trash', '/how-it-works', '/[...missing]']);
 
   it('gates every route under (dashboard) that is not deliberately open', () => {
     const routes = readdirSync(DASHBOARD, { withFileTypes: true })

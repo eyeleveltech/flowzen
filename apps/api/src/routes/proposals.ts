@@ -610,7 +610,9 @@ const versionCreateSchema = z.object({
   // Same relaxation as v1's own create schema above: optional, falls back to
   // 0 / empty rather than null — a revised version isn't always re-priced
   // right away, and neither column is nullable.
-  value: z.number().min(0, 'Value cannot be negative').optional().default(0),
+  // Left out, a revised version keeps the value of the one before it (the
+  // route fills it in); only a first version falls back to 0.
+  value: z.number().min(0, 'Value cannot be negative').optional(),
   scopeSummary: z.string().optional().default(''),
   fileUrl: z.string().url().optional().or(z.literal('')),
   /*
@@ -653,6 +655,12 @@ proposalsRouter.post('/:id/versions', requirePermission('pipeline.write'), async
       res.status(400).json({ success: false, error: 'Cannot add versions to a proposal that is already won.' });
       return;
     }
+    // Lost or expired too: a version moved the stage to In negotiation while
+    // the outcome stayed Lost, and the deal sat stuck between the two.
+    if (proposal.outcome) {
+      res.status(400).json({ success: false, error: 'This deal is closed. Reopen it first, or start a new proposal.' });
+      return;
+    }
 
     const step = await nextStepForSave(orgId, proposal, parsed.data);
     if ('error' in step) {
@@ -667,7 +675,9 @@ proposalsRouter.post('/:id/versions', requirePermission('pipeline.write'), async
       data: {
         proposalId: id,
         n: nextN,
-        value: parsed.data.value,
+        // Blank means "not re-priced": the last version's value, not ₹0 — a
+        // BD (who cannot see values) logging a scope change wiped the deal.
+        value: parsed.data.value ?? proposal.versions[0]?.value ?? 0,
         scopeSummary: parsed.data.scopeSummary.trim(),
         fileUrl: parsed.data.fileUrl || null,
       },
@@ -1812,6 +1822,29 @@ proposalsRouter.post('/:id/restore', requirePermission('pipeline.write'), async 
     }
 
     await prisma.proposal.update({ where: { id }, data: { deletedAt: null } });
+
+    /*
+     * Deleting the only win moved the company back to Prospect (or Past);
+     * restoring it has to move it forward again. It was left a Prospect with a
+     * Won deal, and setting up the retainer was refused — "still a prospect,
+     * win a proposal first" — for a deal that could not be won twice.
+     */
+    if (existing.outcome === ProposalOutcome.WON) {
+      const company = await prisma.company.findFirst({ where: { id: existing.companyId, organizationId: orgId }, select: { status: true } });
+      if (company && company.status !== CompanyStatus.CLIENT) {
+        await prisma.company.update({ where: { id: existing.companyId }, data: { status: CompanyStatus.CLIENT } });
+        await prisma.activity.create({
+          data: {
+            organizationId: orgId,
+            entityType: 'Company',
+            entityId: existing.companyId,
+            actorId: req.user!.userId,
+            verb: 'company_status_changed',
+            payload: { from: company.status, to: CompanyStatus.CLIENT, reason: 'Won proposal restored' },
+          },
+        });
+      }
+    }
 
     await prisma.activity.create({
       data: {

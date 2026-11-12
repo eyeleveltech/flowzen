@@ -213,7 +213,7 @@ describe('4. a proforma raised from a proposal', () => {
   };
   beforeEach(() => {
     (prisma.organization.findUnique as any).mockResolvedValue(ORG);
-    (prisma.company.findFirst as any).mockResolvedValue({ id: 'co-1', billingAddress: null, gstin: null, stateName: 'Tamil Nadu', stateCode: '33' });
+    (prisma.company.findFirst as any).mockResolvedValue({ id: 'co-1', billingAddress: null, gstin: null, stateName: 'Tamil Nadu', stateCode: '33', people: [] });
     (prisma.proforma.findMany as any).mockResolvedValue([]);
     (prisma.proforma.create as any).mockImplementation(async ({ data }: any) => ({ id: 'pf-new', ...data }));
   });
@@ -244,7 +244,8 @@ describe('4. a proforma raised from a proposal', () => {
     (prisma.proposal.findFirst as any).mockResolvedValue({ id: 'prop-1', stage: 'IN_NEGOTIATION' });
     await raise();
     expect(prisma.proposal.updateMany).toHaveBeenCalledWith({
-      where: { id: 'prop-1', organizationId: 'org-1', stage: { not: 'WON' } },
+      // Nor a Verbal yes, which is further on (12 Nov).
+      where: { id: 'prop-1', organizationId: 'org-1', stage: { notIn: ['WON', 'VERBAL_YES'] } },
       data: { stage: 'PROFORMA_ISSUED' },
     });
   });

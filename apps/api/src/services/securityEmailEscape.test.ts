@@ -42,6 +42,8 @@ describe('the helper', () => {
   });
 });
 
+// The two tests below load the calendar and digest modules for the first time
+// inside the test; on a machine running the whole suite that takes seconds.
 describe('H3: the calendar email', () => {
   it('sends an event titled with markup as plain text', async () => {
     p.user.findMany.mockResolvedValue([{ id: 'usr-shyam', name: '<i>Shyam</i> K', email: 'shyam@x' }]);
@@ -71,7 +73,7 @@ describe('H3: the calendar email', () => {
     expect(html).not.toMatch(/<img|<b>|<script|<i>/);
     expect(html).toContain('&lt;b&gt;x&lt;/b&gt;&lt;img src=x&gt;');
     expect(html).toContain('&lt;i&gt;Shyam&lt;/i&gt;');
-  });
+  }, 30_000);
 });
 
 describe('H4: the morning digest', () => {
@@ -103,5 +105,5 @@ describe('H4: the morning digest', () => {
     expect(html).not.toMatch(/<img|<b>x|<u>/);
     expect(html).toContain('Task &lt;b&gt;x&lt;/b&gt;&lt;img src=x&gt; is overdue');
     expect(html).toContain('&lt;u&gt;Akmal&lt;/u&gt;');
-  });
+  }, 30_000);
 });

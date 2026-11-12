@@ -1727,6 +1727,10 @@ proposalDocumentsRouter.post('/documents/:docId/mark-sent', requirePermission('p
       res.status(400).json({ success: false, error: 'Cannot add versions to a proposal that is already won.' });
       return;
     }
+    if (proposal.outcome) {
+      res.status(400).json({ success: false, error: 'This deal is closed. Reopen it first, or start a new proposal.' });
+      return;
+    }
     const step = await nextStepForSave(orgId, proposal, parsed.data);
     if ('error' in step) {
       res.status(400).json({ success: false, error: step.error });

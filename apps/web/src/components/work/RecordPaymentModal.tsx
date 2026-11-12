@@ -6,6 +6,7 @@
  * instead (Money → an invoice's Payments).
  */
 
+import { localToday } from '@/lib/utils';
 import { useState } from 'react';
 import toast from 'react-hot-toast';
 import { api, ApiError } from '@/lib/api-v2';
@@ -54,7 +55,7 @@ export function RecordPaymentModal({
   const gst = useInvoiceGst(amount, { defaultOn: start.on, ratePercent: start.ratePercent, defaultGst: start.gst });
   const [mode, setMode] = useState(payment?.mode ?? 'NEFT');
   const [reference, setReference] = useState(payment?.reference ?? '');
-  const [receivedAt, setReceivedAt] = useState((payment?.receivedAt ?? new Date().toISOString()).slice(0, 10));
+  const [receivedAt, setReceivedAt] = useState(payment?.receivedAt ? payment.receivedAt.slice(0, 10) : localToday());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

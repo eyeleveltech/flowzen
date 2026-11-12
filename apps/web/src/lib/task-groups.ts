@@ -25,6 +25,8 @@ export type TaskGroup<T> = {
 export type GroupableTask = {
   id: string;
   dueDate: string;
+  /** On hold past its date is grouped apart — waiting, not finished. */
+  status?: string;
   isOverdue?: boolean;
   clientName: string | null;
   companyId: string | null;
@@ -139,6 +141,8 @@ export function byDue<T extends GroupableTask>(tasks: T[], today: string) {
     if (due === today) return [{ key: 'today', label: 'Today', rank: 1 }];
     if (due > today && due <= sunday) return [{ key: 'week', label: 'This week', rank: 2 }];
     if (due > sunday) return [{ key: 'later', label: 'Later', rank: 3 }];
+    // Past its date and on hold: waiting, not finished and not overdue.
+    if (t.status === 'ON_HOLD') return [{ key: 'held', label: 'On hold, past its date', rank: 1.5 }];
     return [{ key: 'earlier', label: 'Earlier — finished', rank: 4 }];
   });
 }

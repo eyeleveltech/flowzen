@@ -619,7 +619,8 @@ async function teamByDepartment(
     for (const dept of deptsOf(t)) {
       const r = rowFor(dept);
       if (t.status === 'TODO' || t.status === 'IN_PROGRESS') r.active += 1;
-      const late = due < today;
+      // On hold is never overdue (internalWork.ts isLate).
+      const late = t.status !== 'ON_HOLD' && due < today;
       if (late) r.overdue += 1;
       if (due >= today && due <= weeks.comingUntil) r.dueThisWeek += 1;
       if (t.status === 'ON_HOLD' && waitingOnShown(t) === 'CLIENT') r.waitingOnClient += 1;

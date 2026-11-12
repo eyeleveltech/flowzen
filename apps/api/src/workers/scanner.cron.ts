@@ -106,7 +106,10 @@ export async function evaluateAgencyHealthRules(organizationId: string): Promise
           assigneeId: p.ownerId,
           createdById: p.ownerId,
           assignees: { create: { userId: p.ownerId } },
-          dueDate: now,
+          // Today in the studio's calendar. `now` in a date column is the UTC
+          // day, which is yesterday until 05:30 IST — the deal goes stale at
+          // midnight, so the task was born overdue.
+          dueDate: asStoredDay(stalledToday),
           assignedAt: now,
           status: TaskStatus.TODO,
           notes: `No contact on this proposal for ${daysSince} days. Get in touch, then mark this done — that counts as the follow-up on the deal.`,
@@ -200,7 +203,10 @@ export async function evaluateAgencyHealthRules(organizationId: string): Promise
       organizationId,
       deletedAt: null,
       status: { notIn: ['DONE', 'CANCELLED', 'ON_HOLD'] },
-      dueDate: { lt: now },
+      // Before today, in the studio's day. `dueDate` is a date stored as UTC
+      // midnight, so `lt: now` called a task overdue from 05:30 IST on the
+      // day it was due.
+      dueDate: { lt: new Date(`${stalledToday}T00:00:00Z`) },
     },
     include: { assignee: true },
     take: 30,
@@ -635,7 +641,9 @@ export async function evaluateAgencyHealthRules(organizationId: string): Promise
     where: {
       returnedAt: null,
       kind: 'BOOKING',
-      dueAt: { lt: now },
+      // The due-back day is a day, stored at UTC midnight: overdue from the
+      // day after, not from 05:30 on the day it is due back.
+      dueAt: { lt: new Date(`${stalledToday}T00:00:00Z`) },
       asset: { organizationId, deletedAt: null },
     },
     include: {
@@ -644,7 +652,11 @@ export async function evaluateAgencyHealthRules(organizationId: string): Promise
     },
   });
   for (const m of overdueBookings) {
-    const days = Math.floor((now.getTime() - (m.dueAt as Date).getTime()) / (1000 * 3600 * 24));
+    // Whole days since the due-back day, counted in the studio's calendar.
+    const days = Math.round(
+      (Date.parse(`${stalledToday}T00:00:00Z`) - Date.parse(`${(m.dueAt as Date).toISOString().slice(0, 10)}T00:00:00Z`)) /
+        (1000 * 3600 * 24),
+    );
     const escalated = days >= 3;
     alerts.push({
       rule: 'ASSET_OVERDUE',
@@ -911,7 +923,20 @@ export async function runAgencyHealthScanner(): Promise<number> {
           },
         });
 
-        if (!existing) {
+        if (existing) {
+          /*
+           * Still true, and it may have got worse. Only new alerts were
+           * written, so one raised at MED never escalated and its words froze:
+           * "due back 0 days ago" a week later, "renewing in 45 days" for six
+           * weeks. The bell, the digest and the brief sort on this severity.
+           */
+          if (existing.severity !== item.severity || existing.message !== item.message) {
+            await prisma.alert.update({
+              where: { id: existing.id },
+              data: { severity: item.severity, message: item.message },
+            });
+          }
+        } else {
           const created = await prisma.alert.create({
             data: {
               organizationId: org.id,

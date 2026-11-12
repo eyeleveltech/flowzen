@@ -1,6 +1,8 @@
 import { Router, type Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
+import { changeableTaskIds } from '../services/taskAccess.js';
+import { todayIn } from '../utils/workCalendar.js';
 import { maskInvoiceFigures, maskPaymentFigures } from '../utils/invoiceFigures.js';
 import { authenticate, requirePermission, type AuthRequest, hasPermission } from '../middleware/auth.js';
 import { rollActiveRetainers } from '../workers/monthCard.cron.js';
@@ -753,7 +755,12 @@ retainersRouter.get(
        */
       const byMonth = new Map<string, { month: string; status: string; tasks: unknown[] }>();
       // People flattened, and each repeat's next date (services/taskRepeat).
-      const flat = await withRepeatNext(orgId, tasks.map((t) => withPeople(t)));
+      const mayChange = await changeableTaskIds(req.user!, tasks.map((t) => t.id));
+      const flat = await withRepeatNext(
+        orgId,
+        // Whether this person's edit will be accepted (a Head: their departments').
+        tasks.map((t) => ({ ...withPeople(t), canChange: mayChange.has(t.id) })),
+      );
       for (const t of flat) {
         const key = t.monthCard?.month ?? 'unfiled';
         const group = byMonth.get(key) ?? {
@@ -1197,7 +1204,24 @@ retainersRouter.post(
 retainersRouter.post('/roll-month', requirePermission('setup.admin'), async (req: AuthRequest, res: Response, next) => {
   try {
     const { month } = req.body;
-    const result = await rollActiveRetainers(month);
+    /*
+     * A real month, and not one still to come. Typed as "2026-12" on 12 Nov,
+     * it closed every November card — costs on them refused — and opened
+     * December's at the full fee.
+     */
+    if (month !== undefined && month !== null && month !== '') {
+      if (typeof month !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+        res.status(400).json({ success: false, error: 'Give the month as YYYY-MM.' });
+        return;
+      }
+      const org = await prisma.organization.findUnique({ where: { id: req.user!.organizationId }, select: { timezone: true } });
+      const thisMonth = todayIn(org?.timezone || 'Asia/Kolkata', new Date()).slice(0, 7);
+      if (month > thisMonth) {
+        res.status(400).json({ success: false, error: `${month} has not started yet. The roll opens the month it is now (${thisMonth}).` });
+        return;
+      }
+    }
+    const result = await rollActiveRetainers(month || undefined);
     res.json({ success: true, ...result });
   } catch (error) {
     next(error);

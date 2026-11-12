@@ -12,6 +12,7 @@
  * is exactly what an asset register is for.
  */
 
+import { localToday } from '@/lib/utils';
 import { useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/api-v2';
 import { Modal, ScrollingModalBody, ModalFooter } from '@/components/ui/modal';
@@ -26,7 +27,7 @@ const OUTCOMES = [
   { value: 'LOST', label: 'Lost or stolen' },
 ];
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => localToday();
 
 export function RetireModal({
   open,

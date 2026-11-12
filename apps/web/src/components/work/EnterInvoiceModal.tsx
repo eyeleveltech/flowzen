@@ -12,6 +12,7 @@
  * board needed the same form.
  */
 
+import { localToday } from '@/lib/utils';
 import { useState } from 'react';
 import { api, ApiError } from '@/lib/api-v2';
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
@@ -46,7 +47,7 @@ export function EnterInvoiceModal({ companyId, monthCardId, monthLabel, defaultA
     ratePercent: gstPercent,
     defaultGst: proformaGst,
   });
-  const [raisedAt, setRaisedAt] = useState(new Date().toISOString().slice(0, 10));
+  const [raisedAt, setRaisedAt] = useState(localToday());
   const [dueAt, setDueAt] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);

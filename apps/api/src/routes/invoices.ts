@@ -296,6 +296,7 @@ invoicesRouter.get('/retainer-billing', requirePermission('money.figures'), asyn
             status: true,
             amount: true,
             total: true,
+            roundOff: true,
             raisedAt: true,
             validTill: true,
             sourceId: true,
@@ -347,6 +348,9 @@ invoicesRouter.get('/retainer-billing', requirePermission('money.figures'), asyn
                 status: pf.status,
                 amount: Number(pf.amount),
                 total: pf.total == null ? Number(pf.amount) : Number(pf.total),
+                // Total minus amount is the GST plus the rounding to a whole
+                // rupee; the GST alone is what an invoice records.
+                gst: pf.total == null ? 0 : Math.round((Number(pf.total) - Number(pf.amount) - Number(pf.roundOff ?? 0)) * 100) / 100,
                 raisedAt: pf.raisedAt,
                 validTill: pf.validTill,
               }
@@ -607,6 +611,8 @@ const createInvoiceSchema = z.object({
   workId: z.string().optional().nullable(),
   projectId: z.string().optional().nullable(),
   proformaId: z.string().optional().nullable(),
+  /** False: the person unticked "Link proforma" — do not link the standing one. */
+  linkProforma: z.boolean().optional(),
   monthCardId: z.string().optional().nullable(),
   /**
    * The billing milestone this invoice settles.
@@ -794,7 +800,7 @@ invoicesRouter.post(
        * named only the milestone, so its proforma stayed "unpaid" for ever
        * beside the invoice that paid it.
        */
-      if (!proformaId && (settlesMilestoneId || monthCardId)) {
+      if (!proformaId && parsed.data.linkProforma !== false && (settlesMilestoneId || monthCardId)) {
         const standing = await prisma.proforma.findFirst({
           where: {
             organizationId: orgId,
@@ -886,6 +892,13 @@ invoicesRouter.post(
       } catch (e) {
         if (e instanceof MoneyRefusal) {
           res.status(400).json({ success: false, error: e.message });
+          return;
+        }
+        if (typed && (e as { code?: string }).code === 'P2002') {
+          res.status(409).json({
+            success: false,
+            error: `Invoice number ${typed} is already used — a cancelled invoice keeps its number. Use the number Tally gave this one.`,
+          });
           return;
         }
         throw e;

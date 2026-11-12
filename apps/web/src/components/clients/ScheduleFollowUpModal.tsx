@@ -15,6 +15,7 @@
  * client it is about rather than merely mentioning them.
  */
 
+import { localDay } from '@/lib/utils';
 import { useState } from 'react';
 import toast from 'react-hot-toast';
 import { api, ApiError } from '@/lib/api-v2';
@@ -29,7 +30,7 @@ import { DueTimeField } from '@/components/work/DueTimeField';
 
 /** A week out — the commonest answer, and a date box that starts empty is a
  *  date box somebody has to think about before they can type anything. */
-const inAWeek = () => new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10);
+const inAWeek = () => localDay(new Date(Date.now() + 7 * 864e5));
 
 export function ScheduleFollowUpModal({
   company,

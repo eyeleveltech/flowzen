@@ -300,7 +300,7 @@ describe("Zen's draftTask", () => {
   });
 
   it('drafts an internal task with no project, and says so', async () => {
-    const out = (await draftTask({ title: 'Renew domain', dueDate: '2026-10-20' }, 'org-1', 'usr-des')) as any;
+    const out = (await draftTask({ title: 'Renew domain', dueDate: '2026-10-20', typeOfWork: 'OTHER' }, 'org-1', 'usr-des')) as any;
     expect(out.draft.body).toMatchObject({ workType: 'INTERNAL', title: 'Renew domain' });
     expect(out.draft.body.internalProjectId).toBeUndefined();
     expect(out.draft.shows.belongsTo).toBe('Internal — no project (general internal task)');
@@ -311,11 +311,11 @@ describe("Zen's draftTask", () => {
       { id: 'ip-hiring', name: 'Hiring' },
       { id: 'ip-site', name: 'Website revamp' },
     ]);
-    const out = (await draftTask({ title: 'Shortlist', dueDate: '2026-10-20', internalProject: 'hiring' }, 'org-1', 'usr-des')) as any;
+    const out = (await draftTask({ title: 'Shortlist', dueDate: '2026-10-20', typeOfWork: 'OTHER', internalProject: 'hiring' }, 'org-1', 'usr-des')) as any;
     expect(out.draft.body.internalProjectId).toBe('ip-hiring');
     expect(out.draft.shows.belongsTo).toBe('Internal — Hiring');
 
-    const unknown = (await draftTask({ title: 'Shortlist', dueDate: '2026-10-20', internalProject: 'payroll' }, 'org-1', 'usr-des')) as any;
+    const unknown = (await draftTask({ title: 'Shortlist', dueDate: '2026-10-20', typeOfWork: 'OTHER', internalProject: 'payroll' }, 'org-1', 'usr-des')) as any;
     expect(unknown.needs).toEqual(['internalProject']);
     expect(unknown.candidates.internalProjects).toEqual(['Hiring', 'Website revamp']);
   });

@@ -720,6 +720,7 @@ export function ManagementAssistant({
                         ['Assigned to', m.proposed.shows.assignedTo],
                         ['Due', m.proposed.shows.due],
                         ['Priority', m.proposed.shows.priority],
+                        ...(m.proposed.shows.typeOfWork ? [['Type of work', m.proposed.shows.typeOfWork]] : []),
                         ...(m.proposed.shows.notes ? [['Notes', m.proposed.shows.notes]] : []),
                       ].map(([label, value]) => (
                         <Fragment key={label}>

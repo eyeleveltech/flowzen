@@ -49,7 +49,8 @@ const addDays = (day: string, n: number) => {
 /** Which "when" a task's due date falls in. A finished task is never overdue — it is "Earlier". */
 export function dueWhen(t: FilterableTask, today: string): string {
   const due = t.dueDate.slice(0, 10);
-  if (due < today) return FINISHED.includes(t.status) ? 'EARLIER' : 'OVERDUE';
+  // A held task past its date sits with today's, as My Work's own groups put it.
+  if (due < today) return FINISHED.includes(t.status) ? 'EARLIER' : t.status === 'ON_HOLD' ? 'TODAY' : 'OVERDUE';
   if (due === today) return 'TODAY';
   if (due <= addDays(today, 7)) return 'WEEK';
   return 'LATER';

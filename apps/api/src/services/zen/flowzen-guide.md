@@ -617,7 +617,7 @@ Flowzen has no task approval step any more (removed 28 Oct 2026). A task is fini
 ## Logins (/logins)
 Logins are Management-only and Zen can't see them. Sidebar → MANAGEMENT → Logins keeps the studio's own and its clients' usernames and passwords for Management alone; nothing about them — not names, not counts — is available to Zen, the API, search or anyone else.
 
-## Subscriptions
+## Subscriptions (/subscriptions)
 [Subscriptions](/subscriptions) in the sidebar under MANAGEMENT, **Management only** (hidden from everyone else and the routes refuse them; the old /money?tab=subscriptions address forwards there): what the studio spends on which platform — Adobe, Canva, Google Workspace, ChatGPT, Hostinger — worked out from the platforms' own invoices. Nothing else is tracked: no seats, logins, cards or trials.
 - **Upload the invoice:** drop one or several PDF, PNG or JPG files (10 MB each). Flowzen sends each to the organisation's AI (Anthropic, from Settings → Zen) and reads only fixed fields: vendor, invoice number, date, billing period, plan, currency, subtotal, tax and type, total, vendor GSTIN. A **review card** shows the file beside the fields, all editable; fields the reader was unsure of are highlighted. Nothing is saved until **Save**. With AI off or a failed reading, the card opens empty to fill in by hand. The invoice's text is never treated as instructions.
 - **Platforms** are made by their first invoice and matched by name after that (the card lets you pick another). A platform is a name, Active or Cancelled, and notes.

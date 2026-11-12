@@ -349,7 +349,7 @@ export default function ProposalPage({ params }: { params: Promise<{ id: string 
                         aria-selected={mode === key}
                         onClick={() => setMode(key)}
                         className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors ${
-                          mode === key ? 'bg-white font-semibold text-primary shadow-sm' : 'text-secondary hover:text-primary'
+                          mode === key ? 'bg-white font-semibold text-primary' : 'text-secondary hover:text-primary'
                         }`}
                       >
                         <Icon className="h-4 w-4" /> {label}
@@ -359,6 +359,7 @@ export default function ProposalPage({ params }: { params: Promise<{ id: string 
                   <label className="flex items-center gap-2 text-xs text-secondary">
                     Layout
                     <select
+                      aria-label="Layout"
                       value={doc.layout}
                       onChange={(e) => void setLayout(doc.id, e.target.value as ProposalLayout)}
                       disabled={!editable}

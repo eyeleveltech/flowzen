@@ -134,24 +134,24 @@ export default function CostSheet() {
       ) : rows.length === 0 ? (
         <p className="text-sm text-secondary">Nothing has been spent on this yet.</p>
       ) : (
-        <table className="w-full text-sm">
+        <table className="data-table w-full text-sm">
           <thead>
-            <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-secondary">
-              <th className="py-2 pr-3 font-medium">Date</th>
-              <th className="py-2 pr-3 font-medium">Paid towards</th>
-              <th className="py-2 pr-3 font-medium">Paid to</th>
-              <th className="py-2 pr-3 font-medium">Company</th>
-              <th className="py-2 text-right font-medium">Amount</th>
+            <tr className="eyebrow border-b border-border text-left text-secondary">
+              <th className="font-medium">Date</th>
+              <th className="font-medium">Paid towards</th>
+              <th className="font-medium">Paid to</th>
+              <th className="font-medium">Company</th>
+              <th className="text-right font-medium">Amount</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => (
               <tr key={r.id} className="border-b border-border/60 align-top">
-                <td className="py-2 pr-3 whitespace-nowrap text-secondary">{formatDate(r.incurredAt, tz, locale, true)}</td>
-                <td className="py-2 pr-3 font-medium text-primary">{r.category}</td>
-                <td className="py-2 pr-3">{r.vendor}</td>
-                <td className="py-2 pr-3 text-secondary">{r.paidBy}</td>
-                <td className="py-2 text-right whitespace-nowrap">
+                <td className="whitespace-nowrap text-secondary">{formatDate(r.incurredAt, tz, locale, true)}</td>
+                <td className="font-medium text-primary">{r.category}</td>
+                <td>{r.vendor}</td>
+                <td className="text-secondary">{r.paidBy}</td>
+                <td className="text-right whitespace-nowrap">
                   {typeof r.amount === 'number' ? formatMoney(r.amount) : '—'}
                 </td>
               </tr>
@@ -162,7 +162,7 @@ export default function CostSheet() {
               <td colSpan={4} className="py-3 pr-3 text-right text-sm font-semibold text-primary">
                 Total
               </td>
-              <td className="py-3 text-right text-sm font-semibold text-primary whitespace-nowrap">
+              <td className="text-right text-sm font-semibold text-primary whitespace-nowrap">
                 {figuresHidden ? '—' : formatMoney(total)}
               </td>
             </tr>

@@ -101,22 +101,22 @@ function PriceChanges({ compare }: { compare: ProposalCompare }) {
   return (
     <div className="rounded-2xl border border-border bg-white p-4">
       <h3 className="eyebrow text-secondary">The price</h3>
-      <table className="mt-2 w-full text-sm tabular-nums">
+      <table className="data-table mt-2 w-full text-sm tabular-nums">
         <thead>
           <tr className="text-left text-micro text-secondary">
-            <th className="py-1 font-medium" />
-            <th className="py-1 text-right font-medium">v{compare.a.n}</th>
-            <th className="py-1 text-right font-medium">v{compare.b.n}</th>
-            <th className="py-1 text-right font-medium">Change</th>
+            <th className="font-medium" />
+            <th className="text-right font-medium">v{compare.a.n}</th>
+            <th className="text-right font-medium">v{compare.b.n}</th>
+            <th className="text-right font-medium">Change</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
             <tr key={r.label} className="border-t border-border">
-              <td className="py-1.5 text-body">{r.label}</td>
-              <td className="py-1.5 text-right text-secondary">{formatMoney(r.a)}</td>
-              <td className="py-1.5 text-right font-semibold text-primary">{formatMoney(r.b)}</td>
-              <td className="py-1.5 text-right">
+              <td className="text-body">{r.label}</td>
+              <td className="text-right text-secondary">{formatMoney(r.a)}</td>
+              <td className="text-right font-semibold text-primary">{formatMoney(r.b)}</td>
+              <td className="text-right">
                 <Delta before={r.a} after={r.b} />
               </td>
             </tr>

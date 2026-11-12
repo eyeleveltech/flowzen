@@ -126,10 +126,12 @@ export function registerRow(
   if (boughtAfterYearEnd) return { openingWdv: 0, depreciationForYear: 0, closingWdv: 0 };
 
   const openingWdv = asset.purchasedAt >= window.start ? 0 : bookValue(asset, window.start);
-  // The closing figure is read a day BEFORE the next year opens, so the year's
-  // last month is counted in the year it belongs to rather than the next one.
-  const closingAt = new Date(window.endExclusive.getTime() - 1);
-  const closingWdv = bookValue(asset, closingAt);
+  // The closing figure is read as the next year opens, so it is exactly the
+  // next year's opening figure. Read a moment before, kit bought on the 1st
+  // lost a month between the two years: ₹1,20,000 over 12 months bought on
+  // 1 Jan closed at ₹1,00,000 and opened the next year at ₹90,000, and that
+  // ₹10,000 of depreciation was in neither year (12 Nov).
+  const closingWdv = bookValue(asset, window.endExclusive);
 
   const openedAt = asset.purchasedAt >= window.start ? asset.purchasePrice : openingWdv;
   return {

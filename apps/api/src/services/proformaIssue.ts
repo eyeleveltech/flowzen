@@ -173,6 +173,11 @@ export async function issueProforma(orgId: string, actorId: string, input: Profo
     if (milestone.status !== 'PENDING') {
       throw new ProformaRefusal(400, 'This milestone already has a proforma raised against it');
     }
+    // Pending on paper but invoiced in fact: never ask the client twice.
+    const invoiced = await prisma.invoice.count({ where: { milestoneId: milestone.id, status: { not: 'CANCELLED' } } });
+    if (invoiced > 0) {
+      throw new ProformaRefusal(400, 'This milestone has already been invoiced — there is nothing left to raise a proforma for.');
+    }
   }
 
   // A proposal: this organisation's. It was read and then updated by bare id,
@@ -329,10 +334,12 @@ export async function issueProforma(orgId: string, actorId: string, input: Profo
         });
         // A WON deal stays won: a proforma raised for it afterwards (a second
         // instalment, say) is billing, not the deal moving backwards.
-        if (source && source.stage !== 'WON' && source.stage !== 'PROFORMA_ISSUED') {
+        // Nor a Verbal yes, which is further on than Proforma issued: an
+        // advance or a corrected proforma dropped it a column and its weight.
+        if (source && source.stage !== 'WON' && source.stage !== 'PROFORMA_ISSUED' && source.stage !== 'VERBAL_YES') {
           stageFrom = source.stage;
           await tx.proposal.updateMany({
-            where: { id: sourceId, organizationId: orgId, stage: { not: 'WON' } },
+            where: { id: sourceId, organizationId: orgId, stage: { notIn: ['WON', 'VERBAL_YES'] } },
             data: { stage: 'PROFORMA_ISSUED' },
           });
         }

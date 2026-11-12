@@ -246,6 +246,8 @@ export default function MoneyPage() {
   const load = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: ['invoices'] });
     await queryClient.invalidateQueries({ queryKey: ['money'] });
+    // The Billing board's months too: paid here, it must stop offering "Record payment".
+    await queryClient.invalidateQueries({ queryKey: ['retainer-billing'] });
   }, [queryClient]);
 
   /** Refresh after a cost is added, confirmed or deleted. */

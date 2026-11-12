@@ -53,6 +53,13 @@ export async function openMovementFor(assetId: string, tx: Tx | typeof prisma = 
 
 /** Read the asset inside the org, or refuse. The house scoped-read pattern. */
 async function loadAsset(tx: Tx, assetId: string, organizationId: string): Promise<Asset> {
+  /*
+   * Lock the asset's row for the rest of this transaction. The "is it already
+   * out?" check after this is a plain read, and two checkouts at the same
+   * moment both read "no" and both wrote — one camera, two open movements.
+   * With the lock the second waits for the first, then sees it.
+   */
+  await tx.$queryRaw`SELECT id FROM "assets" WHERE id = ${assetId} FOR UPDATE`;
   const asset = await tx.asset.findFirst({
     where: { id: assetId, organizationId, deletedAt: null },
   });

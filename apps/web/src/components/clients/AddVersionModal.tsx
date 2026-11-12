@@ -45,7 +45,9 @@ export function AddVersionModal({ proposalId, nextVersionNumber, nextStep, nextS
     setError(null);
     try {
       await api.proposals.addVersion(proposalId, {
-        value: parsedValue,
+        // Blank keeps the last version's value (the server fills it in) — it
+        // used to save ₹0 and wipe the deal from the pipeline's totals.
+        value: value.trim() === '' ? undefined : parsedValue,
         scopeSummary: scopeSummary.trim(),
         fileUrl: fileUrl.trim() || undefined,
         ...nextStepBody(step),

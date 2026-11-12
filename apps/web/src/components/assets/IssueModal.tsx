@@ -14,6 +14,7 @@
  * both. Making somebody choose is the point, not friction.
  */
 
+import { localDay } from '@/lib/utils';
 import { useEffect, useState } from 'react';
 import { api, ApiError, type AssetReservationRow } from '@/lib/api-v2';
 import { Modal, ScrollingModalBody, ModalFooter } from '@/components/ui/modal';
@@ -43,7 +44,7 @@ const COPY: Record<IssueMode, { title: string; verb: string; hint: string }> = {
   },
 };
 
-const inAWeek = () => new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
+const inAWeek = () => localDay(new Date(Date.now() + 7 * 86_400_000));
 
 export function IssueModal({
   open,

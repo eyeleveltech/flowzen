@@ -127,6 +127,8 @@ beforeEach(() => {
   }));
   (prisma.activity.create as any).mockResolvedValue({});
   (prisma.taskRepeat.updateMany as any).mockResolvedValue({ count: 1 });
+  // No copy already in the week being made, unless a test says so.
+  (prisma.task.count as any).mockResolvedValue(0);
 });
 
 const made = () => (prisma.task.create as any).mock.calls.map((c: any[]) => c[0].data);
@@ -149,6 +151,19 @@ describe('the repeat job', () => {
     });
     const log = (prisma.activity.create as any).mock.calls[0][0].data;
     expect(log).toMatchObject({ verb: 'task_repeated', actorId: null });
+  });
+
+  it('weekly: a copy moved earlier in its week is not made again for that week (12 Nov)', async () => {
+    // Thursday 8 Oct's copy was moved to Tuesday 6 Oct. The latest due date is
+    // the 6th, whose next Thursday is the 8th — but that week has its copy.
+    lastDueDate = new Date('2026-10-06T00:00:00Z');
+    (prisma.task.count as any).mockImplementation(async ({ where }: any) =>
+      where.dueDate.gte.toISOString().slice(0, 10) === '2026-10-05' ? 1 : 0,
+    );
+    // Monday the 5th: without the check, a second copy for Thursday the 8th.
+    const out = await runTaskRepeats(MONDAY);
+    expect(out.created).toBe(0);
+    expect(prisma.task.create).not.toHaveBeenCalled();
   });
 
   it('weekly: waits until three days before', async () => {

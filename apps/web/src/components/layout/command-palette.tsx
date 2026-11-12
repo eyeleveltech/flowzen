@@ -58,7 +58,7 @@ interface SearchResults {
   /** The API works out where a task links to — it belongs to a project OR a deal. */
   tasks: { id: string; title: string; context: string | null; href: string }[];
   quotes: { id: string; number: string; company: { name: string } }[];
-  invoices: { id: string; number: string; company: { name: string } }[];
+  invoices: { id: string; number: string; company: { id?: string; name: string } }[];
 }
 
 /** One group of rows in the palette, with its heading. */
@@ -357,12 +357,14 @@ export function CommandPalette() {
           id: i.id,
           label: i.number,
           sub: i.company.name,
-          href: '/money',
+          // Money needs money.figures; a Head or BD finds invoices on the
+          // client's own page, which they can open.
+          href: permissions?.includes('money.figures') || !i.company.id ? '/money' : `/companies/${i.company.id}?tab=MONEY`,
         })),
       });
     }
     return s;
-  }, [results]);
+  }, [results, permissions]);
 
   /*
    * "Ask Zen" — first, when the box is empty or the words are about Zen.

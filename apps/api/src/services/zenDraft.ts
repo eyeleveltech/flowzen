@@ -1,4 +1,6 @@
 import { prisma } from '../lib/prisma.js';
+import { TaskType } from '@prisma/client';
+import { TASK_TYPE_LABEL } from './taskTypes.js';
 import type { AiTool } from './ai/types.js';
 import { findOpenTwin, twinDay, twinStatus } from './taskDuplicates.js';
 
@@ -86,6 +88,8 @@ export type TaskDraft = {
     internalProjectId?: string;
     assigneeId: string;
     priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+    /** Required on every task form, so on Zen's too. */
+    taskType: TaskType;
     notes?: string;
     /**
      * Refuse at Create if the same task (title, person, due day) has gone up
@@ -102,6 +106,7 @@ export type TaskDraft = {
     assignedTo: string;
     due: string;
     priority: string;
+    typeOfWork: string;
     notes: string | null;
   };
   /** An open task like this one already on the board — shown on the card as a warning. */
@@ -121,6 +126,8 @@ export type DraftArgs = {
   internalProject?: string;
   assignee?: string;
   priority?: string;
+  /** DESIGN, VIDEO… — or its label ("Social Media"). Required, as on every task form. */
+  typeOfWork?: string;
   notes?: string;
   /** They were told it is already on the board and want another anyway. */
   allowDuplicate?: boolean;
@@ -209,6 +216,24 @@ export async function draftTask(
     };
   }
 
+  /*
+   * The type of work, required here as on every task form (6 Nov). Zen used
+   * to put tasks up with none, the one way a typeless task still got made.
+   */
+  const asked = args.typeOfWork?.trim();
+  const taskType = asked
+    ? ((Object.keys(TASK_TYPE_LABEL) as TaskType[]).find(
+        (k) => k === asked.toUpperCase().replace(/[\s-]+/g, '_') || TASK_TYPE_LABEL[k].toLowerCase() === asked.toLowerCase(),
+      ) ?? null)
+    : null;
+  if (!taskType) {
+    return {
+      needs: ['typeOfWork'],
+      because: asked ? `"${asked}" is not a type of work.` : 'Every task needs its type of work.',
+      candidates: { typesOfWork: Object.values(TASK_TYPE_LABEL) },
+    };
+  }
+
   /* ── the form so far ────────────────────────────────────────────────────── */
   const priorities = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'] as const;
   const priority = priorities.find((p) => p === args.priority?.toUpperCase()) ?? 'MEDIUM';
@@ -219,6 +244,7 @@ export async function draftTask(
     workType: 'INTERNAL',
     assigneeId: assignee.id,
     priority,
+    taskType,
   };
   if (args.notes?.trim()) body.notes = args.notes.trim();
 
@@ -257,6 +283,7 @@ export async function draftTask(
     assignedTo: `${assignee.name} — ${assignee.dept}`,
     due: dueDate,
     priority,
+    typeOfWork: TASK_TYPE_LABEL[taskType],
     notes: body.notes ?? null,
   };
 
@@ -473,6 +500,11 @@ export const ZEN_DRAFT_TOOLS: AiTool[] = [
         },
         assignee: { type: 'string', description: 'Who is doing it. Defaults to the person asking.' },
         priority: { type: 'string', enum: ['LOW', 'MEDIUM', 'HIGH', 'URGENT'] },
+        typeOfWork: {
+          type: 'string',
+          enum: ['DESIGN', 'VIDEO', 'DIGITAL_MARKETING', 'SOCIAL_MEDIA', 'DEVELOPMENT', 'BUSINESS_DEVELOPMENT', 'ACCOUNTS', 'MANAGEMENT', 'OTHER'],
+          description: 'The type of work — required on every task, as on every task form. Pick from what the task is; ask if it is not clear.',
+        },
         notes: { type: 'string', description: 'Anything the person doing it needs to know.' },
         allowDuplicate: {
           type: 'boolean',

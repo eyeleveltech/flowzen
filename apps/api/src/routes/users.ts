@@ -482,7 +482,14 @@ usersRouter.delete('/:id', requirePermission('setup.admin'), async (req: AuthReq
     const wasInvite = Boolean(user.inviteToken);
     await prisma.user.update({
       where: { id },
-      data: { removedAt: new Date(), inviteToken: null, inviteTokenExpiresAt: null },
+      data: {
+        removedAt: new Date(),
+        inviteToken: null,
+        inviteTokenExpiresAt: null,
+        resetToken: null,
+        resetTokenExpiresAt: null,
+        sessionsValidFrom: new Date(),
+      },
     });
     await prisma.activity.create({
       data: {
@@ -523,6 +530,26 @@ usersRouter.patch('/:id', requirePermission('setup.admin'), async (req: AuthRequ
     }
 
     const { name, email, preset, permissions, monthlyCost, departmentId, active, force } = parsed.data;
+
+    /*
+     * Your own account: you cannot switch yourself off or change your own
+     * access level. The only admin doing either left nobody able to run the
+     * workspace — and /auth/register is closed once one exists. Somebody
+     * else with Setup access changes yours.
+     */
+    if (id === req.user!.userId && (active === false || (preset !== undefined && preset !== existing.preset))) {
+      res.status(400).json({
+        success: false,
+        error: active === false ? 'You cannot switch off your own account.' : 'You cannot change your own access level. Ask another admin.',
+      });
+      return;
+    }
+    // Making somebody Management opens Logins, Zen and every figure: only
+    // Management may do it, not anyone handed the Setup switch.
+    if (preset === RolePreset.MANAGEMENT && existing.preset !== RolePreset.MANAGEMENT && req.user!.preset !== RolePreset.MANAGEMENT) {
+      res.status(403).json({ success: false, error: 'Only Management can give someone Management access.' });
+      return;
+    }
 
     // This organisation's, and not archived.
     let placed: { id: string; name: string } | null = null;
@@ -617,8 +644,23 @@ usersRouter.patch('/:id', requirePermission('setup.admin'), async (req: AuthRequ
         ...(monthlyCost !== undefined ? { monthlyCost } : {}),
         ...(placed ? { departmentId: placed.id, dept: placed.name } : {}),
         ...(active !== undefined ? { active } : {}),
+        ...(active !== undefined && active !== existing.active
+          ? {
+              // Every session signed in before this stops working — a lost
+              // laptop's cookie does not come back when the account does.
+              sessionsValidFrom: new Date(),
+              // And a reset link asked for earlier cannot reopen the account.
+              ...(active === false ? { resetToken: null, resetTokenExpiresAt: null } : {}),
+            }
+          : {}),
       },
     });
+
+    // No longer HEAD or Management: no longer a department's head, so its
+    // page (which checks the head, not the preset) is closed to them too.
+    if (preset !== undefined && preset !== RolePreset.HEAD && preset !== RolePreset.MANAGEMENT) {
+      await prisma.department.updateMany({ where: { organizationId: orgId, headId: id }, data: { headId: null } });
+    }
 
     await prisma.activity.create({
       data: {

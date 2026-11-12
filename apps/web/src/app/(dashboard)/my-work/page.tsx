@@ -299,12 +299,21 @@ export default function MyWorkPage() {
   const forgetTaskParam = () => {
     if (taskParam) router.replace('/my-work');
   };
-  const openLinked = async (id: string) => {
+  const openLinked = async (id: string, opts: { afterChange?: boolean } = {}) => {
     try {
       const { task } = await api.tasks.one(id);
       setLinkedId(id);
       setSelected(task as unknown as TaskItem);
     } catch (e) {
+      // Re-read after a change — a delete, say: it is gone because they
+      // removed it, so close quietly. "That task isn't here" right after
+      // "Task deleted" read as a fault.
+      if (opts.afterChange && e instanceof ApiError && e.status === 404) {
+        setSelected(null);
+        setLinkedId(null);
+        forgetTaskParam();
+        return;
+      }
       toast.error(
         e instanceof ApiError && e.status === 404
           ? "That task isn't here — it may have been deleted, or it isn't one you can open."
@@ -490,7 +499,7 @@ export default function MyWorkPage() {
     const job = jobLabel(t);
     return (
       <>
-        <td className="w-8 pr-0 text-secondary">{grip}</td>
+        <td className="w-8 text-secondary">{grip}</td>
         <td>
           {/*
             A button inside the row rather than a click handler alone: the row
@@ -887,7 +896,9 @@ export default function MyWorkPage() {
                 <DragDropContext onBeforeCapture={onBeforeCapture} onDragEnd={(r) => void onDragEnd(r)}>
                   {section('Overdue', shown.overdue, 'overdue')}
                   {section('Due today', shown.today, 'today')}
-                  {section('Later this week', [...shown.thisWeek, ...shown.later], 'week')}
+                  {/* This week and beyond, arranged as one: "Later this week" was
+                      wrong for a task due next month. */}
+                  {section('Coming up', [...shown.thisWeek, ...shown.later], 'week')}
                   {section('Done this week', shown.completed)}
                 </DragDropContext>
               )}
@@ -910,7 +921,7 @@ export default function MyWorkPage() {
         onChanged={async () => {
           await load();
           // Not on this list, so the list cannot refresh it: ask for it again.
-          if (linkedId) void openLinked(linkedId);
+          if (linkedId) void openLinked(linkedId, { afterChange: true });
         }}
       />
     </div>

@@ -12,6 +12,7 @@
  * this form's.
  */
 
+import { localToday } from '@/lib/utils';
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { api, ApiError, type Company } from '@/lib/api-v2';
@@ -105,7 +106,7 @@ export function NewRetainerModal({ open, onClose, onCreated, prefill, initial, d
     setMonthlyValue(prefill?.monthlyValue != null ? String(prefill.monthlyValue) : '');
     setGstPercent('18');
     setBilling('IN_ADVANCE');
-    setStartDate(new Date().toISOString().slice(0, 10));
+    setStartDate(localToday());
     setTermMonths('');
     setFirstProjectName('');
     setOwnerId('');

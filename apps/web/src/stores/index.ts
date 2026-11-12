@@ -1,5 +1,6 @@
 'use client';
 import { create } from 'zustand';
+import { currentSubscription } from '@/lib/pushDevice';
 
 interface User {
   id: string;
@@ -48,6 +49,26 @@ export const useAuthStore = create<AuthStore>((set) => ({
   },
 
   logout: async () => {
+    const api = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+    /*
+     * This browser stops receiving this person's phone notifications. On a
+     * shared machine the next person to sign in kept getting the last one's.
+     * Before the session ends, while the request can still say who it is.
+     */
+    try {
+      const sub = await currentSubscription();
+      if (sub) {
+        await fetch(`${api}/push/sign-out-device`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ endpoint: sub.endpoint }),
+        });
+        await sub.unsubscribe();
+      }
+    } catch {
+      // Never in the way of signing out.
+    }
     try {
       await fetch(process.env.NEXT_PUBLIC_API_URL ? `${process.env.NEXT_PUBLIC_API_URL}/auth/logout` : 'http://localhost:4000/api/auth/logout', { method: 'POST', credentials: 'include' });
     } catch (e) {

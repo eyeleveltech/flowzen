@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import request from 'supertest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -247,6 +247,14 @@ describe('changing and cancelling', () => {
 });
 
 describe('POST /calendar/clashes', () => {
+  // Written on 1 Oct about gear due back on the 9th and 10th — held there, so
+  // the dates do not turn into "overdue" as the real calendar moves on.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-01T00:00:00Z'));
+  });
+  afterEach(() => vi.useRealTimers());
+
   it('warns about each thing in the way, and saves nothing', async () => {
     (prisma.asset.findMany as any).mockResolvedValue([
       { id: 'as-a7', tag: 'EL/CAM/001', name: 'Sony A7', status: 'IN_STOCK', currentHolder: null, movements: [] },

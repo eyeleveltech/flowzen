@@ -20,6 +20,16 @@ const twMerge = extendTailwindMerge({
   extend: { classGroups: { 'font-size': [{ text: ['micro'] }] } },
 });
 
+/**
+ * A day as this person's own calendar has it — "2026-11-12". Never the UTC
+ * date (`toISOString().slice(0, 10)`), which is yesterday until 05:30 IST:
+ * an invoice raised at 01:00 on 1 April landed in the last financial year.
+ */
+export function localDay(d: Date = new Date()): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+export const localToday = (): string => localDay();
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }

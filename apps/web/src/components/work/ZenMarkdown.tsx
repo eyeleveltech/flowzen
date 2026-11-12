@@ -78,16 +78,16 @@ export function ZenMarkdown({ text, onInternalLink }: { text: string; onInternal
     // A table scrolls inside the bubble rather than pushing the panel wider.
     table: ({ children }) => (
       <div className="my-2 overflow-x-auto first:mt-0 last:mb-0">
-        <table className="w-full border-collapse text-xs tabular-nums">{children}</table>
+        <table className="data-table w-full border-collapse text-xs tabular-nums">{children}</table>
       </div>
     ),
     th: ({ children, style }) => (
-      <th style={style} className="border-b border-border px-2 py-1.5 text-left font-semibold text-primary">
+      <th style={style} className="border-b border-border text-left font-semibold text-primary">
         {children}
       </th>
     ),
     td: ({ children, style }) => (
-      <td style={style} className="border-b border-border/60 px-2 py-1.5 align-top">
+      <td style={style} className="border-b border-border/60 align-top text-xs">
         {children}
       </td>
     ),

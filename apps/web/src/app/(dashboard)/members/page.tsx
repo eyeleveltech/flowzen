@@ -145,8 +145,10 @@ export default function MembersPage() {
   }, [queryClient]);
 
   // Derive team stats
-  const totalOpen = members.reduce((s, m) => s + m.openTasksCount, 0);
-  const totalOverdue = members.reduce((s, m) => s + m.overdueTasksCount, 0);
+  // Each task once: adding up the people counted a three-person task three times.
+  const totalOpen = data?.success && data.openTaskCount != null ? data.openTaskCount : members.reduce((s, m) => s + m.openTasksCount, 0);
+  const totalOverdue =
+    data?.success && data.overdueTaskCount != null ? data.overdueTaskCount : members.reduce((s, m) => s + m.overdueTasksCount, 0);
   /*
    * Client holds only, as the tile says — it summed every task on hold,
    * colleague and internal holds included, under "not your team's delay".
@@ -256,7 +258,7 @@ export default function MembersPage() {
           value={members.length}
           note={`across ${teamsWithPeople} team${teamsWithPeople !== 1 ? 's' : ''}`}
         />
-        <StatTile label="Open Tasks" value={totalOpen} note="this week" />
+        <StatTile label="Open Tasks" value={totalOpen} note="not done or cancelled" />
         <StatTile
           label="Overdue"
           value={totalOverdue}

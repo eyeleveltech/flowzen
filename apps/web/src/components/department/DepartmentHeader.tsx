@@ -57,13 +57,13 @@ export function DepartmentHeader({
       <div className="flex flex-col gap-5 px-6 py-6 sm:px-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-micro font-semibold uppercase tracking-[0.14em] text-white/55">{dateLine}</p>
+            <p className="eyebrow text-white/55">{dateLine}</p>
             <h2 className="mt-1 truncate text-3xl font-semibold tracking-[-0.02em]">{department.name}</h2>
             <p className="mt-2 flex flex-wrap gap-x-2 gap-y-0.5 text-sm text-white/75">
               {day.map((part, i) => (
                 <span key={part.text} className="whitespace-nowrap">
                   {i > 0 && <span className="mr-2 text-white/30" aria-hidden="true">·</span>}
-                  <span className={part.tone === 'late' ? 'font-semibold text-[#f2c879]' : undefined}>{part.text}</span>
+                  <span className={part.tone === 'late' ? 'font-semibold text-warning-on-dark' : undefined}>{part.text}</span>
                 </span>
               ))}
             </p>
@@ -96,7 +96,7 @@ export function DepartmentHeader({
                   {getInitials(p.name)}
                   {/* They have said what they are on — the only thing this dot means. */}
                   {p.nowTaskId && (
-                    <span className="absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full bg-[#7fcf9f] ring-2 ring-primary" title="Has said what they're working on" />
+                    <span className="absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full bg-success-on-dark ring-2 ring-primary" title="Has said what they're working on" />
                   )}
                 </span>
                 <span className="min-w-0">

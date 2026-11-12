@@ -96,6 +96,8 @@ beforeEach(() => {
     gstin: null,
     stateName: 'Karnataka',
     stateCode: '29',
+    // The billing contact is read off the first person (30 Oct); Prisma always sends the list.
+    people: [],
   });
   (prisma.proforma.findMany as any).mockResolvedValue([]);
   (prisma.invoice.findMany as any).mockResolvedValue([]);

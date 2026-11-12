@@ -1,5 +1,6 @@
 'use client';
 
+import { localToday } from '@/lib/utils';
 import { useState, useEffect, useCallback, use } from 'react';
 import { InvoiceStatusBadge } from '@/components/work/InvoiceStatusBadge';
 import { moneyDate } from '@/lib/money';
@@ -1075,7 +1076,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                     t.status !== 'CANCELLED' &&
                     t.status !== 'ON_HOLD' &&
                     due != null &&
-                    due.toISOString().slice(0, 10) < new Date().toISOString().slice(0, 10);
+                    due.toISOString().slice(0, 10) < localToday();
                   return (
                     <button
                       key={t.id}

@@ -41,7 +41,7 @@ describe('Accounts can bill a project from /money', () => {
   it('lists the milestones to bill: the next one per project, and every one with a document out', async () => {
     const project = (id: string) => ({ id, name: `Project ${id}`, status: 'LIVE', company: { id: 'co-1', name: 'Suvai' } });
     p.milestone.findMany.mockResolvedValue([
-      { id: 'm1', label: 'Advance', percent: 40, amount: 40000, status: 'INVOICED', order: 0, project: project('a'), proformas: [], invoices: [{ id: 'inv-1', number: 'EL/INV/26-27/001', amount: 47200, gstAmount: 7200, status: 'RAISED', dueAt: day('2026-10-30'), payments: [{ amount: 7200 }] }] },
+      { id: 'm1', label: 'Advance', percent: 40, amount: 40000, status: 'INVOICED', order: 0, project: project('a'), proformas: [], invoices: [{ id: 'inv-1', number: 'EL/INV/26-27/001', amount: 47200, gstAmount: 7200, status: 'RAISED', dueAt: day('2099-12-31'), payments: [{ amount: 7200 }] }] },
       { id: 'm2', label: 'Draft', percent: 30, amount: 30000, status: 'PENDING', order: 1, project: project('a'), proformas: [], invoices: [] },
       { id: 'm3', label: 'Final', percent: 30, amount: 30000, status: 'PENDING', order: 2, project: project('a'), proformas: [], invoices: [] },
       { id: 'm4', label: 'Advance', percent: 50, amount: 50000, status: 'PROFORMA_RAISED', order: 0, project: project('b'), proformas: [{ id: 'pf-1', number: 'EL/PI/01-10-2026/004', status: 'UNPAID', amount: 50000, total: 59000, validTill: day('2026-10-15') }], invoices: [] },

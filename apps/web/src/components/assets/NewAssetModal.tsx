@@ -16,6 +16,7 @@
  * kit that was bought before any of this existed.
  */
 
+import { localToday } from '@/lib/utils';
 import { useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/api-v2';
 import { Modal, ScrollingModalBody, ModalFooter } from '@/components/ui/modal';
@@ -29,7 +30,7 @@ import {
   CONDITION_OPTIONS,
 } from '@/lib/assets';
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => localToday();
 
 export function NewAssetModal({
   open,

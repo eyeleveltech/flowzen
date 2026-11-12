@@ -148,7 +148,7 @@ function PersonCard({
       <div className="mx-5 mt-4 space-y-2.5">
         {now ? (
           <div className="rounded-lg bg-success-tint px-3 py-2.5">
-            <p className="mb-1 flex items-center gap-1.5 text-micro font-semibold uppercase tracking-[0.08em] text-success">
+            <p className="eyebrow mb-1 flex items-center gap-1.5 text-success">
               <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden="true" />
               Working on now
             </p>
@@ -161,7 +161,7 @@ function PersonCard({
           </p>
         )}
         <div className="px-3">
-          <p className="mb-1 text-micro font-semibold uppercase tracking-[0.08em] text-secondary">Next up</p>
+          <p className="eyebrow mb-1 text-secondary">Next up</p>
           {next ? taskButton(next) : <p className="text-sm text-secondary">Nothing waiting on their list</p>}
         </div>
       </div>

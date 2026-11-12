@@ -665,6 +665,7 @@ describe('drafting a task', () => {
     drafting({
       title: 'September social media report',
       dueDate: '2026-09-26',
+      typeOfWork: 'OTHER',
       client: 'VOSO',
     });
 
@@ -701,7 +702,7 @@ describe('drafting a task', () => {
   it('tells the model plainly that nothing has been created', async () => {
     // The failure this prevents is Zen answering "done — I've created it" over
     // a task that exists only as a card waiting for a click.
-    const fetchMock = drafting({ title: 'x', dueDate: '2026-09-26', client: 'VOSO' });
+    const fetchMock = drafting({ title: 'x', dueDate: '2026-09-26', typeOfWork: 'OTHER', client: 'VOSO' });
     await request(app)
       .post('/api/assistant/ask')
       .set(...auth(MANAGEMENT))
@@ -732,7 +733,7 @@ describe('drafting a task', () => {
   });
 
   it('suggests the actual team when a name matches nobody', async () => {
-    const fetchMock = drafting({ title: 'x', dueDate: '2026-09-26', assignee: 'Rajesh' });
+    const fetchMock = drafting({ title: 'x', dueDate: '2026-09-26', typeOfWork: 'OTHER', assignee: 'Rajesh' });
     await request(app)
       .post('/api/assistant/ask')
       .set(...auth(MANAGEMENT))
@@ -757,7 +758,7 @@ describe('drafting a task', () => {
       { month: '2026-09', revenue: 0, costs: [] },
     ]);
 
-    const fetchMock = drafting({ title: 'x', dueDate: '2026-08-15', client: 'VOSO' });
+    const fetchMock = drafting({ title: 'x', dueDate: '2026-08-15', typeOfWork: 'OTHER', client: 'VOSO' });
     const res = await request(app)
       .post('/api/assistant/ask')
       .set(...auth(MANAGEMENT))
@@ -771,7 +772,7 @@ describe('drafting a task', () => {
   });
 
   it('records that it drafted, so the log says what Zen did', async () => {
-    drafting({ title: 'x', dueDate: '2026-09-26', client: 'VOSO' });
+    drafting({ title: 'x', dueDate: '2026-09-26', typeOfWork: 'OTHER', client: 'VOSO' });
     await request(app)
       .post('/api/assistant/ask')
       .set(...auth(MANAGEMENT))

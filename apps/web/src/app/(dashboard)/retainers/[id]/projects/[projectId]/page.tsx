@@ -19,6 +19,7 @@
  * looking at. The money stays where it belongs, on the retainer.
  */
 
+import { localToday } from '@/lib/utils';
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
@@ -94,7 +95,7 @@ export default function RetainerProjectPage() {
   const [addingTask, setAddingTask] = useState(false);
   const [editing, setEditing] = useState(false);
 
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = localToday();
 
   const load = useCallback(async () => {
     try {
@@ -465,7 +466,8 @@ export default function RetainerProjectPage() {
                           <Select
                             aria-label={`Status for ${t.title}`}
                             value={t.status}
-                            disabled={busyId === t.id}
+                            // Another department's task: a Head may look, not change.
+                            disabled={busyId === t.id || t.canChange === false}
                             onChange={(v) => void changeStatus(t, v as TaskStatusValue)}
                             options={TASK_STATUS_OPTIONS}
                           />

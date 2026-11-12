@@ -44,6 +44,8 @@ export const TASK_STATUS_TONE: Record<string, string> = {
 };
 
 export type RetainerTask = {
+  /** False: another department's task — a Head may look, not change. */
+  canChange?: boolean;
   id: string;
   title: string;
   /** Which piece of retainer work it is part of, if any. */

@@ -22,6 +22,8 @@ export const TASK_VIEW_KEYS: readonly (readonly string[])[] = [
   ['internal-projects'],
   ['internal-project'],
   ['calendar'],
+  // My Department's overview, work, calendar and people panels.
+  ['department'],
 ];
 
 const listeners = new Set<() => void>();

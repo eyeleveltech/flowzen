@@ -11,6 +11,7 @@
  * clients, which a proposal uses before the standard one while they hold.
  */
 
+import { localToday } from '@/lib/utils';
 import { useEffect, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -81,7 +82,7 @@ function FloorsCard() {
       {loadError && <ErrorNote>{loadError}</ErrorNote>}
       <label className="block max-w-xs">
         <span className="text-xs font-medium text-body">Any client (₹ a month)</span>
-        <input type="number" min={0} className={`${INPUT} mt-1`} value={base} onChange={(e) => setBase(e.target.value)} />
+        <input type="number" min={0} aria-label="Any client (₹ a month)" className={`${INPUT} mt-1`} value={base} onChange={(e) => setBase(e.target.value)} />
       </label>
 
       <div className="space-y-2">
@@ -267,30 +268,30 @@ function ServiceFields({ value, onChange }: { value: Draft; onChange: (d: Draft)
     <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
       <label className="block sm:col-span-2">
         <span className="text-micro text-secondary">Name</span>
-        <input className={INPUT} value={value.name} onChange={(e) => set({ name: e.target.value })} maxLength={120} placeholder="Social media management" />
+        <input aria-label="Name" className={INPUT} value={value.name} onChange={(e) => set({ name: e.target.value })} maxLength={120} placeholder="Social media management" />
       </label>
       <label className="block">
         <span className="text-micro text-secondary">Billed</span>
-        <select className={INPUT} value={value.billing} onChange={(e) => set({ billing: e.target.value as Draft['billing'] })}>
+        <select aria-label="Billed" className={INPUT} value={value.billing} onChange={(e) => set({ billing: e.target.value as Draft['billing'] })}>
           <option value="MONTHLY">Monthly</option>
           <option value="ONE_TIME">One-time</option>
         </select>
       </label>
       <label className="block">
         <span className="text-micro text-secondary">Per</span>
-        <input className={INPUT} value={value.unit} onChange={(e) => set({ unit: e.target.value })} maxLength={30} placeholder="month, video…" />
+        <input aria-label="Per" className={INPUT} value={value.unit} onChange={(e) => set({ unit: e.target.value })} maxLength={30} placeholder="month, video…" />
       </label>
       <label className="block">
         <span className="text-micro text-secondary">Standard rate (₹)</span>
-        <input type="number" min={0} className={INPUT} value={value.standardRate} onChange={(e) => set({ standardRate: e.target.value })} />
+        <input type="number" min={0} aria-label="Standard rate (₹)" className={INPUT} value={value.standardRate} onChange={(e) => set({ standardRate: e.target.value })} />
       </label>
       <label className="block sm:col-span-2">
         <span className="text-micro text-secondary">Category</span>
-        <input className={INPUT} value={value.category} onChange={(e) => set({ category: e.target.value })} maxLength={60} placeholder="Social, Performance, Production…" />
+        <input aria-label="Category" className={INPUT} value={value.category} onChange={(e) => set({ category: e.target.value })} maxLength={60} placeholder="Social, Performance, Production…" />
       </label>
       <label className="block sm:col-span-2 lg:col-span-3">
         <span className="text-micro text-secondary">Description (prints under the service)</span>
-        <input className={INPUT} value={value.description} onChange={(e) => set({ description: e.target.value })} maxLength={2000} />
+        <input aria-label="Description (prints under the service)" className={INPUT} value={value.description} onChange={(e) => set({ description: e.target.value })} maxLength={2000} />
       </label>
     </div>
   );
@@ -350,7 +351,7 @@ function ClientRatesCard() {
 
   const end = async (r: ClientRateRow) => {
     try {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = localToday();
       await api.proposalDocs.updateClientRate(r.id, { validTo: today < r.validFrom ? r.validFrom : today });
       toast.success(`${r.company.name}'s rate for ${r.service.name} ends today`);
       void load();
@@ -359,7 +360,7 @@ function ClientRatesCard() {
     }
   };
 
-  const shown = (rates ?? []).filter((r) => showEnded || r.active || r.validFrom > new Date().toISOString().slice(0, 10));
+  const shown = (rates ?? []).filter((r) => showEnded || r.active || r.validFrom > localToday());
   const canAdd = form.companyId && form.catalogItemId && Number(form.rate) > 0;
 
   return (
@@ -371,32 +372,32 @@ function ClientRatesCard() {
       {rates && shown.length === 0 && !adding && <p className="text-sm text-secondary">No agreed rates. Every client gets the standard rates.</p>}
       {shown.length > 0 && (
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="data-table w-full text-sm">
             <thead>
               <tr className="text-left text-micro text-secondary">
-                <th className="py-1.5 font-medium">Client</th>
-                <th className="py-1.5 font-medium">Service</th>
-                <th className="py-1.5 text-right font-medium">Rate</th>
-                <th className="py-1.5 font-medium pl-4">Holds</th>
+                <th className="font-medium">Client</th>
+                <th className="font-medium">Service</th>
+                <th className="text-right font-medium">Rate</th>
+                <th className="font-medium">Holds</th>
                 <th />
               </tr>
             </thead>
             <tbody>
               {shown.map((r) => (
                 <tr key={r.id} className={`border-t border-border ${r.active ? '' : 'opacity-60'}`}>
-                  <td className="py-2 font-semibold text-primary">{r.company.name}</td>
-                  <td className="py-2 text-body">
+                  <td className="font-semibold text-primary">{r.company.name}</td>
+                  <td className="text-body">
                     {r.service.name}
                     {r.note && <span className="block text-micro text-secondary">{r.note}</span>}
                   </td>
-                  <td className="py-2 text-right tabular-nums text-primary">
+                  <td className="text-right tabular-nums text-primary">
                     {formatMoney(r.agreedRate)}
                     <span className="text-micro text-secondary"> / {r.service.unit}</span>
                   </td>
-                  <td className="py-2 pl-4 text-xs text-secondary">
+                  <td className="text-xs text-secondary">
                     {formatDate(r.validFrom, undefined, undefined, true)} to {r.validTo ? formatDate(r.validTo, undefined, undefined, true) : 'until ended'}
                   </td>
-                  <td className="py-2 text-right">
+                  <td className="text-right">
                     {r.active && !r.validTo && (
                       <Button size="sm" variant="ghost" onClick={() => void end(r)}>
                         End it
@@ -420,7 +421,7 @@ function ClientRatesCard() {
           <div className="grid gap-2 sm:grid-cols-2">
             <label className="block">
               <span className="text-micro text-secondary">Client</span>
-              <select className={INPUT} value={form.companyId} onChange={(e) => setForm({ ...form, companyId: e.target.value })}>
+              <select aria-label="Client" className={INPUT} value={form.companyId} onChange={(e) => setForm({ ...form, companyId: e.target.value })}>
                 <option value="">Choose a client…</option>
                 {companies.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -431,7 +432,7 @@ function ClientRatesCard() {
             </label>
             <label className="block">
               <span className="text-micro text-secondary">Service</span>
-              <select className={INPUT} value={form.catalogItemId} onChange={(e) => setForm({ ...form, catalogItemId: e.target.value })}>
+              <select aria-label="Service" className={INPUT} value={form.catalogItemId} onChange={(e) => setForm({ ...form, catalogItemId: e.target.value })}>
                 <option value="">Choose a service…</option>
                 {services.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -443,21 +444,21 @@ function ClientRatesCard() {
             </label>
             <label className="block">
               <span className="text-micro text-secondary">Agreed rate (₹)</span>
-              <input type="number" min={0} className={INPUT} value={form.rate} onChange={(e) => setForm({ ...form, rate: e.target.value })} />
+              <input type="number" min={0} aria-label="Agreed rate (₹)" className={INPUT} value={form.rate} onChange={(e) => setForm({ ...form, rate: e.target.value })} />
             </label>
             <div className="grid grid-cols-2 gap-2">
               <label className="block">
                 <span className="text-micro text-secondary">From</span>
-                <input type="date" className={INPUT} value={form.from} onChange={(e) => setForm({ ...form, from: e.target.value })} />
+                <input type="date" aria-label="From" className={INPUT} value={form.from} onChange={(e) => setForm({ ...form, from: e.target.value })} />
               </label>
               <label className="block">
                 <span className="text-micro text-secondary">Until (optional)</span>
-                <input type="date" className={INPUT} value={form.to} onChange={(e) => setForm({ ...form, to: e.target.value })} />
+                <input type="date" aria-label="Until (optional)" className={INPUT} value={form.to} onChange={(e) => setForm({ ...form, to: e.target.value })} />
               </label>
             </div>
             <label className="block sm:col-span-2">
               <span className="text-micro text-secondary">Why (optional)</span>
-              <input className={INPUT} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} maxLength={300} placeholder="e.g. Partner rate through Vyoma" />
+              <input aria-label="Why (optional)" className={INPUT} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} maxLength={300} placeholder="e.g. Partner rate through Vyoma" />
             </label>
           </div>
           <div className="mt-3 flex justify-end gap-2">

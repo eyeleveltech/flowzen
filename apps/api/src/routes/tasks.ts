@@ -22,12 +22,14 @@ import { taskInScope } from '../services/teamScope.js';
  * else every task in the organisation was in reach — renamed, closed, held,
  * taken over and deleted by id. Out of reach now reads "Task not found".
  */
-import { taskChangeableWhere, taskReadableWhere } from '../services/taskAccess.js';
+import { changeableTaskIds, taskChangeableWhere, taskReadableWhere } from '../services/taskAccess.js';
 import { findOpenTwin, twinDay, twinStatus } from '../services/taskDuplicates.js';
 import { pushTaskAssigned, pushTaskEdited } from '../services/push.js';
 import { clearFocusOff, clearFocusOn, ENDS_FOCUS, focusRefusal } from '../services/taskFocus.js';
 import { NO_PROJECT_WHERE } from '../services/internalWork.js';
 import { recordFollowUpDone } from '../services/followUpTask.js';
+import { studioToday } from '../services/salesFollowUp.js';
+import { moneyClock, orgToday } from '../utils/moneyDates.js';
 import { codeWord, TASK_STATUS_WORD, WORK_TYPE_WORD } from '../utils/codeWords.js';
 
 export const tasksRouter = Router();
@@ -92,7 +94,15 @@ tasksRouter.get('/my', requirePermission('work.own'), async (req: AuthRequest, r
     });
 
     const now = new Date();
-    const todayStr = now.toISOString().slice(0, 10);
+    // The studio's day, not the server's UTC one: between midnight and 05:30
+    // IST the UTC date is still yesterday, which put yesterday's work in
+    // "Due today" and coloured it late.
+    const { timezone } = await moneyClock(orgId);
+    const todayStr = orgToday(timezone, now);
+    // "Done this week" is since Monday, as My Department counts it — it was
+    // every task ever finished, 150 rows after a few months.
+    const weekday = (new Date(`${todayStr}T00:00:00Z`).getUTCDay() + 6) % 7;
+    const mondayStr = new Date(Date.parse(`${todayStr}T00:00:00Z`) - weekday * 86_400_000).toISOString().slice(0, 10);
     const endOfWeek = new Date(now.getTime() + 7 * 24 * 3600 * 1000);
 
     // Brief §8/§11.4: "Elapsed is shown against the median for that task
@@ -115,6 +125,7 @@ tasksRouter.get('/my', requirePermission('work.own'), async (req: AuthRequest, r
       const isToday = t.status !== 'DONE' && (dueStr === todayStr || (held && dueStr < todayStr));
       const isThisWeek = t.status !== 'DONE' && !isOverdue && !isToday && new Date(t.dueDate) <= endOfWeek;
       const isDone = t.status === 'DONE';
+      const doneThisWeek = isDone && t.completedAt != null && orgToday(timezone, t.completedAt) >= mondayStr;
       // Anything open and due beyond the 7-day window still needs a bucket —
       // a retainer's template tasks are created a month out, and a task that
       // fits none of overdue/today/thisWeek/done was silently disappearing
@@ -186,6 +197,7 @@ tasksRouter.get('/my', requirePermission('work.own'), async (req: AuthRequest, r
         isThisWeek,
         isLater,
         isDone,
+        doneThisWeek,
       };
     });
 
@@ -228,8 +240,8 @@ tasksRouter.get('/my', requirePermission('work.own'), async (req: AuthRequest, r
     const overdue = inTheirOrder(placed.filter((t) => t.isOverdue));
     const thisWeek = inTheirOrder(placed.filter((t) => t.isThisWeek));
     const later = inTheirOrder(placed.filter((t) => t.isLater));
-    // History, not a plan — it stays in the order it was finished.
-    const completed = placed.filter((t) => t.isDone);
+    // History, not a plan — it stays in the order it was finished. This week's.
+    const completed = placed.filter((t) => t.isDone && t.doneThisWeek);
 
     res.json({
       success: true,
@@ -346,10 +358,52 @@ tasksRouter.put('/my/order', requirePermission('work.own'), async (req: AuthRequ
  * company list, then fetch a whole company detail payload again every time the
  * picker changed.
  */
+/**
+ * GET /api/tasks/targets/company/:id — what a task inside one client's work
+ * can be filed under: every month of its running retainers, and its live
+ * projects. Names and months only.
+ *
+ * The project and retainer pages' New task form read this off the full
+ * client record, which needs `company.read` — a Head opens those pages
+ * (work.all) without it, so the form sat on "Loading…" and could not save.
+ */
+tasksRouter.get('/targets/company/:id', requirePermission('work.own'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const company = await prisma.company.findFirst({
+      where: { id: String(req.params.id), organizationId: orgId },
+      select: {
+        retainers: {
+          where: { status: 'ACTIVE' },
+          orderBy: { createdAt: 'desc' },
+          select: { monthCards: { orderBy: { month: 'desc' }, select: { id: true, month: true } } },
+        },
+        projects: {
+          where: { status: 'LIVE', deletedAt: null },
+          orderBy: { name: 'asc' },
+          select: { id: true, name: true },
+        },
+      },
+    });
+    if (!company) {
+      res.status(404).json({ success: false, error: 'Client not found' });
+      return;
+    }
+    res.json({
+      success: true,
+      monthCards: company.retainers.flatMap((r) => r.monthCards),
+      projects: company.projects,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 tasksRouter.get('/targets', requirePermission('work.own'), async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
-    const thisMonth = new Date().toISOString().slice(0, 7);
+    // The studio's month — on the 1st before 05:30 IST the UTC one is last month.
+    const thisMonth = (await studioToday(orgId)).slice(0, 7);
 
     const [companies, internalProjects] = await Promise.all([
       prisma.company.findMany({
@@ -653,11 +707,12 @@ tasksRouter.get('/all', requirePermission('work.all'), async (req: AuthRequest, 
      * morning in IST, which would mark a day's work overdue before anybody
      * started it. Same fix as zenDraft.ts.
      */
-    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    // The studio's day. The local-getter version above did nothing on a server
+    // that runs in UTC. A due date is a stored day (UTC midnight), read as one.
+    const today = await studioToday(orgId, now);
 
     const formatted = tasks.map((t) => {
-      const due = new Date(t.dueDate);
-      const dueStr = `${due.getFullYear()}-${String(due.getMonth() + 1).padStart(2, '0')}-${String(due.getDate()).padStart(2, '0')}`;
+      const dueStr = new Date(t.dueDate).toISOString().slice(0, 10);
       const settled = t.status === TaskStatus.DONE || t.status === TaskStatus.CANCELLED;
       const workingHours = workingMinutesOn(calendar, t.assignedAt, t.completedAt ?? now, t.waitingTotalMinutes);
 
@@ -921,6 +976,7 @@ tasksRouter.get('/', requirePermission('work.own'), async (req: AuthRequest, res
     ]);
 
     const calendar = await loadWorkCalendar(orgId);
+    const mayChange = await changeableTaskIds(req.user!, tasks.map((t) => t.id));
 
     const formatted = tasks.map((t) => {
       const workingHours = workingMinutesOn(
@@ -933,6 +989,8 @@ tasksRouter.get('/', requirePermission('work.own'), async (req: AuthRequest, res
         ...withPeople(t),
         workingHoursText: workingHours.formatted,
         workingMinutes: workingHours.totalMinutes,
+        // Whether this person's edit will be accepted (a Head: their departments').
+        canChange: mayChange.has(t.id),
       };
     });
 
@@ -1628,6 +1686,16 @@ tasksRouter.patch('/:id', requirePermission('work.own'), async (req: AuthRequest
 
     res.json({ success: true, task });
   } catch (error) {
+    // Another copy of the same repeat already falls on that day.
+    if ((error as { code?: string }).code === 'P2002') {
+      res.status(409).json({ success: false, error: 'Another copy of this repeating task is already due that day. Pick a different day.' });
+      return;
+    }
+    // A retainer month's task must sit under one of its projects.
+    if (String((error as { message?: string }).message ?? '').includes('tasks_month_card_needs_project')) {
+      res.status(400).json({ success: false, error: 'A task on a retainer month has to be under one of its projects.' });
+      return;
+    }
     next(error);
   }
 });
@@ -1655,9 +1723,11 @@ tasksRouter.patch('/:id', requirePermission('work.own'), async (req: AuthRequest
 // `work.all` — a Head or Management. Anyone else gets a 403 rather than a 404,
 // because the task plainly exists and pretending otherwise is not security.
 
-const canRemove = (req: AuthRequest, task: { createdById: string; assigneeId: string }) =>
+const canRemove = (req: AuthRequest, task: { createdById: string; assigneeId: string; assignees?: { userId: string }[] }) =>
   task.createdById === req.user!.userId ||
   task.assigneeId === req.user!.userId ||
+  // Everybody on it, not only the lead — the second person saw Delete and got a 403.
+  (task.assignees ?? []).some((a) => a.userId === req.user!.userId) ||
   (req.user!.permissions ?? []).includes('work.all');
 
 tasksRouter.delete('/:id', requirePermission('work.own'), async (req: AuthRequest, res: Response, next) => {
@@ -1668,6 +1738,7 @@ tasksRouter.delete('/:id', requirePermission('work.own'), async (req: AuthReques
     // Somebody else's task outside a Head's departments is "not found" to them.
     const task = await prisma.task.findFirst({
       where: await taskChangeableWhere(req.user!, { id, organizationId: orgId, deletedAt: null }),
+      include: { assignees: { select: { userId: true } } },
     });
     if (!task) {
       res.status(404).json({ success: false, error: 'Task not found' });

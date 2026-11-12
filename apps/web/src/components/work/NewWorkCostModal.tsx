@@ -6,6 +6,7 @@
  * only which id it's filed under differs.
  */
 
+import { localToday } from '@/lib/utils';
 import { useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/api-v2';
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
@@ -74,7 +75,7 @@ export function NewWorkCostModal({ open, target, onClose, onCreated }: Props) {
       setVendor('');
       setPaidBy('');
       setAmount('');
-      setIncurredAt(new Date().toISOString().slice(0, 10));
+      setIncurredAt(localToday());
       setRecurring(false);
       setCommittedNotPaid(false);
       setError(null);

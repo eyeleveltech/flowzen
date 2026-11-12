@@ -399,6 +399,21 @@ export async function consent(
         select: { id: true },
       });
 
+  /*
+   * Reconnecting with fewer boxes ticked narrows what this app already holds.
+   * Only the grant used to change, so a refresh token from an earlier
+   * sign-in (90 days) kept making tokens with the wider list it was issued.
+   */
+  if (existing) {
+    const live = await prisma.oAuthToken.findMany({ where: { grantId: grant.id, revokedAt: null }, select: { id: true, scopes: true } });
+    for (const t of live) {
+      const narrowed = t.scopes.filter((sc) => (scopes as readonly string[]).includes(sc));
+      if (narrowed.length !== t.scopes.length) {
+        await prisma.oAuthToken.update({ where: { id: t.id }, data: { scopes: narrowed } });
+      }
+    }
+  }
+
   const code = `${CODE_PREFIX}${secret()}`;
   await prisma.oAuthCode.create({
     data: {

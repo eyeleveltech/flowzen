@@ -15,6 +15,7 @@
  * and what the proforma step has always done.
  */
 
+import { localToday } from '@/lib/utils';
 import { useState } from 'react';
 import toast from 'react-hot-toast';
 import { api, ApiError, formatMoney } from '@/lib/api-v2';
@@ -28,7 +29,7 @@ import { PAYMENT_MODES } from '@/lib/money';
 // One list of payment modes, the same words everywhere (lib/money).
 const MODES = PAYMENT_MODES;
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => localToday();
 
 export type MilestoneForBilling = {
   id: string;
@@ -68,7 +69,8 @@ export function MilestoneInvoiceModal({
     const total = Number(milestone.invoice?.amount ?? 0);
     return invoicing ? null : paymentGstStart(total, { total, gst: Number(milestone.invoice?.gstAmount ?? 0) });
   });
-  const startAmount = payStart?.on ? payStart.base : due;
+  const invoiceTotal = Number(milestone.invoice?.amount ?? 0);
+  const startAmount = payStart?.on ? payStart.base : !invoicing && invoiceTotal > 0 ? invoiceTotal : due;
 
   const [number, setNumber] = useState('');
   const [amount, setAmount] = useState(startAmount > 0 ? String(startAmount) : '');

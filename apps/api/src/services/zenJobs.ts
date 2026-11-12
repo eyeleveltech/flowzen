@@ -210,6 +210,11 @@ export const ZEN_JOB_TOOLS = [
               workstream: { type: 'string', description: "Which piece of that client's work. Leave out for the default." },
               assignee: { type: 'string', description: 'Who is doing it. Defaults to the person asking.' },
               priority: { type: 'string', enum: ['LOW', 'MEDIUM', 'HIGH', 'URGENT'] },
+              typeOfWork: {
+                type: 'string',
+                enum: ['DESIGN', 'VIDEO', 'DIGITAL_MARKETING', 'SOCIAL_MEDIA', 'DEVELOPMENT', 'BUSINESS_DEVELOPMENT', 'ACCOUNTS', 'MANAGEMENT', 'OTHER'],
+                description: 'Required on every task. Pick from what the task is; ask if it is not clear.',
+              },
               notes: { type: 'string' },
             },
             required: ['title', 'dueDate'],

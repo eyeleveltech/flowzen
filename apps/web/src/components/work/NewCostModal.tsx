@@ -11,6 +11,7 @@
  * Company and Capital costs don't.
  */
 
+import { localToday } from '@/lib/utils';
 import { useEffect, useState } from 'react';
 import { api, ApiError, type Company } from '@/lib/api-v2';
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
@@ -44,7 +45,7 @@ export function NewCostModal({ onClose, onCreated }: { onClose: () => void; onCr
   const [otherCategory, setOtherCategory] = useState('');
   const [vendor, setVendor] = useState('');
   const [amount, setAmount] = useState('');
-  const [incurredAt, setIncurredAt] = useState(new Date().toISOString().slice(0, 10));
+  const [incurredAt, setIncurredAt] = useState(localToday());
   const [paidBy, setPaidBy] = useState('');
   /** The rate on the bill. '' is no GST, which is not 0%. */
   const [gstPercent, setGstPercent] = useState('');

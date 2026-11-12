@@ -75,7 +75,10 @@ async function compute(user: ScopeUser): Promise<TeamScope> {
 
   const departmentIds = led.map((d) => d.id);
   const people = await prisma.user.findMany({
-    where: { organizationId: user.organizationId, active: true, departmentId: { in: departmentIds } },
+    // Switched off too: their open tasks are still the department's to hand
+    // over, and dropping them made those tasks vanish from the Head's lists
+    // and answer "not found" when the Head tried to reassign them.
+    where: { organizationId: user.organizationId, departmentId: { in: departmentIds } },
     select: { id: true, departmentId: true },
   });
 

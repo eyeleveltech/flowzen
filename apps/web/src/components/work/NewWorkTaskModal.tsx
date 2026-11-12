@@ -101,27 +101,24 @@ export function NewWorkTaskModal({
     setRetainerProjectId(defaultRetainerProjectId ?? '');
     setError(null);
 
-    void api.companies
-      .get(companyId)
+    // Its own small source, needing only work.own — the full client record
+    // needs company.read, which a Head on a project page does not hold, so the
+    // form sat on "Loading…". Every month card of a running retainer, not just
+    // the latest — the page this opens from can be showing any month, and the
+    // pre-selection below needs that exact card to be a real option.
+    void api.tasks
+      .companyTargets(companyId)
       .then((res) => {
-        const company = (res as { company?: any }).company ?? res;
         const options: WorkOption[] = [];
-        for (const r of company.retainers ?? []) {
-          if (r.status !== 'ACTIVE') continue;
-          // Every month card, not just the latest — the page this modal opens
-          // from can be showing any month via its own navigator, and the
-          // pre-selection below needs that exact card to be a real option.
-          for (const monthCard of r.monthCards ?? []) {
-            options.push({ key: `m:${monthCard.id}`, label: `Retainer — ${monthCard.month}`, kind: 'MONTH_CARD', monthCardId: monthCard.id });
-          }
+        for (const monthCard of res.monthCards) {
+          options.push({ key: `m:${monthCard.id}`, label: `Retainer — ${monthCard.month}`, kind: 'MONTH_CARD', monthCardId: monthCard.id });
         }
-        for (const p of company.projects ?? []) {
-          if (p.status !== 'LIVE') continue;
+        for (const p of res.projects) {
           options.push({ key: `p:${p.id}`, label: `Project — ${p.name}`, kind: 'PROJECT', projectId: p.id });
         }
         setWorkOptions(options);
       })
-      .catch(() => {});
+      .catch((e) => setError(e instanceof ApiError ? e.message : 'Could not load where this task can go'));
   }, [open, companyId, defaultTarget, defaultRetainerProjectId, me?.id]);
 
   const selected = workOptions.find((o) => o.key === selectedKey);

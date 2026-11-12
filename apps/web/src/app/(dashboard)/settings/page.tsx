@@ -21,7 +21,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { qk } from '@/hooks/queries';
 import Link from 'next/link';
-import { Check, KeyRound, Mail } from 'lucide-react';
+import { Check, Mail } from 'lucide-react';
 import {
   api,
   ApiError,
@@ -475,19 +475,12 @@ export default function SettingsPage() {
 
             {/* Rows, like a settings list: what it is on the left, the control on the right. */}
             <SectionCard title="Signing in" description="How people reach the app." flush>
-              <SettingRow
-                icon={KeyRound}
-                title="Password sign-in"
-                description="Turn off only once everyone signs in with Google Workspace, or people will be locked out."
-                action={
-                  <Toggle
-                    checked={form.allowPasswordLogin}
-                    onChange={(v) => set('allowPasswordLogin', v)}
-                    label="Allow signing in with a password"
-                    labelClassName="sr-only"
-                  />
-                }
-              />
+              {/*
+                No "Password sign-in" switch (12 Nov). Nothing read it — turning
+                it off changed nothing — and with no other way to sign in yet, a
+                switch that worked would lock everybody out. It comes back with
+                Google Workspace sign-in, if that is ever built.
+              */}
               <SettingRow
                 icon={Mail}
                 title="Outgoing email"
@@ -1022,7 +1015,7 @@ export default function SettingsPage() {
 function SaveBar({ saving, saved }: { saving: boolean; saved: boolean }) {
   return (
     /* Above the phone's tab bar, which is fixed to the bottom under `md`. */
-    <div className="sticky bottom-[4.75rem] z-10 flex items-center justify-end gap-3 rounded-xl border border-line bg-white/95 px-5 py-3 shadow-sm backdrop-blur md:bottom-4">
+    <div className="sticky bottom-[4.75rem] z-10 flex items-center justify-end gap-3 rounded-xl border border-line bg-white/95 px-5 py-3 shadow-overlay backdrop-blur md:bottom-4">
       <span className="mr-auto text-micro text-secondary">
         These settings apply to everybody in the agency.
       </span>

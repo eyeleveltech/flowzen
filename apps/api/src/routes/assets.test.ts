@@ -340,6 +340,8 @@ function mockOpenMovement(existing: unknown, opts: { createThrows?: boolean } = 
 
   (prisma.$transaction as any).mockImplementation(async (cb: any) =>
     cb({
+      // The row lock taken before the one-open-movement check (12 Nov).
+      $queryRaw: async () => [],
       asset: { findFirst: async () => CAMERA, update: assetUpdate },
       user: { findFirst: async () => ({ id: 'usr-emp' }) },
       assetMovement: {
@@ -374,6 +376,7 @@ describe('the one-open-movement invariant', () => {
     let openRow: unknown = null;
     (prisma.$transaction as any).mockImplementation(async (cb: any) =>
       cb({
+        $queryRaw: async () => [],
         asset: { findFirst: async () => CAMERA, update: async ({ data }: any) => ({ ...CAMERA, ...data }) },
         user: { findFirst: async () => ({ id: 'usr-emp' }) },
         assetMovement: {

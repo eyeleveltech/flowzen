@@ -807,7 +807,7 @@ function ImportWizard({ onClose }: { onClose: () => void }) {
               <FileUp className="h-6 w-6 text-secondary" />
               <span className="text-sm font-medium text-primary">Choose the CSV</span>
               <span className="text-xs text-secondary">Columns are matched from their headers; you can change any of them next.</span>
-              <input type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => e.target.files?.[0] && pick(e.target.files[0])} />
+              <input type="file" accept=".csv,text/csv" aria-label="Import logins from a CSV file" className="hidden" onChange={(e) => e.target.files?.[0] && pick(e.target.files[0])} />
             </label>
           </div>
         ) : (

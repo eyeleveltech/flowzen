@@ -539,12 +539,20 @@ assetsRouter.get(
           organizationId: orgId,
           deletedAt: null,
           purchasedAt: { lt: window.endExclusive },
+          // Not gear disposed of before this year began: a camera sold in 2025
+          // was still on FY 2026-27's books, depreciating.
+          OR: [{ disposedAt: null }, { disposedAt: { gte: window.start } }],
         },
         orderBy: [{ category: 'asc' }, { purchasedAt: 'asc' }],
       });
 
       const rows = assets.map((a) => {
-        const row = registerRow(depreciable(a), window);
+        // Disposed of during the year: written off up to that day, and off the
+        // books at the close.
+        const gone = a.disposedAt && a.disposedAt < window.endExclusive ? a.disposedAt : null;
+        const row = gone
+          ? { ...registerRow(depreciable(a), { start: window.start, endExclusive: new Date(gone.getTime() + 1) }), closingWdv: 0 }
+          : registerRow(depreciable(a), window);
         return {
           id: a.id,
           tag: a.tag,

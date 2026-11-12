@@ -141,6 +141,21 @@ pushRouter.get('/subscriptions', async (req: AuthRequest, res: Response, next: N
   }
 });
 
+/**
+ * POST /api/push/sign-out-device { endpoint } — this browser, as its person
+ * signs out. Without it a shared office machine kept receiving the last
+ * person's phone notifications after they had signed out.
+ */
+pushRouter.post('/sign-out-device', async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const endpoint = typeof req.body?.endpoint === 'string' ? req.body.endpoint : '';
+    if (endpoint) await prisma.pushSubscription.deleteMany({ where: { endpoint, userId: req.user!.userId } });
+    res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
 /** DELETE /api/push/subscriptions/:id — one of the caller's own devices. */
 pushRouter.delete('/subscriptions/:id', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
