@@ -87,9 +87,6 @@ export function NewTaskModal({
   /** Decides the dialog's own name: a head opening it is not writing a task for themselves. */
   const { may: mayAssignOthers } = useMayAssignOthers();
 
-  useEffect(() => {
-    if (!open) return;
-  }, [open]);
   const [scope, setScope] = useState<'INTERNAL' | 'CLIENT'>('INTERNAL');
   const [companyId, setCompanyId] = useState('');
   const [targetKey, setTargetKey] = useState('');
@@ -109,9 +106,12 @@ export function NewTaskModal({
     setDueTime(initialDueTime ?? ''); setRepeat(''); setPriority('MEDIUM'); setDescription('');
       setScope('INTERNAL'); setCompanyId(''); setTargetKey(''); setInternalProjectId(''); setError(null);
       setTaskType('');
+      // Nobody but you, until you pick — last time's people did not carry over
+      // until now, and a new task opened already assigned to them.
+      setAssigneeIds([]);
       // Nobody, until somebody says otherwise — see tasks.ts on why this
-    // field means nothing when it is filled in by default.
-    setAssignedById('');
+      // field means nothing when it is filled in by default.
+      setAssignedById('');
     }
   }, [open, me?.id, initialDueDate, initialDueTime]);
 
@@ -276,7 +276,18 @@ export function NewTaskModal({
             manage their own work still sees their own name and no picker, so
             the dialog keeps its original behaviour for them.
           */}
+          {/* The one order every task form uses: what, where it belongs,
+              who, who asked, what kind of work, when, how often, the detail. */}
           <AssigneeField value={assigneeIds} onChange={setAssigneeIds} />
+          <AssignedByField value={assignedById} onChange={setAssignedById} />
+          <FieldSelect
+            label="Type of work"
+            value={taskType}
+            onChange={setTaskType}
+            required
+            placeholder="Choose…"
+            options={TASK_TYPE_OPTIONS}
+          />
           <div className="grid grid-cols-2 gap-4">
             <Field label="Due date" type="date" value={dueDate} onChange={setDueDate} required />
             <DueTimeField value={dueTime} onChange={setDueTime} />
@@ -288,15 +299,6 @@ export function NewTaskModal({
             onChange={setRepeat}
             options={repeatOptions(dueDate)}
             hint={repeat ? REPEAT_HINT : undefined}
-          />
-          <AssignedByField value={assignedById} onChange={setAssignedById} />
-          <FieldSelect
-            label="Type of work"
-            value={taskType}
-            onChange={setTaskType}
-            required
-            placeholder="Choose…"
-            options={TASK_TYPE_OPTIONS}
           />
           <Field label="Description" value={description} onChange={setDescription} textarea rows={3} />
           {error && <ErrorNote>{error}</ErrorNote>}

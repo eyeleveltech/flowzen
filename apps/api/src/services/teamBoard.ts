@@ -153,7 +153,9 @@ export async function composeTeamBoard(orgId: string, people: BoardPerson[], now
   const placeOf = new Map(places.map((p) => [`${p.userId}:${p.taskId}`, p.sortOrder]));
 
   const isOpen = (t: { status: string }) => OPEN.includes(t.status);
-  const isOverdue = (t: { status: string; dueDate: Date }) => isOpen(t) && dayOf(t.dueDate) < today;
+  // On hold is never overdue — it has its own count, "waiting".
+  const isOverdue = (t: { status: string; dueDate: Date }) =>
+    isOpen(t) && t.status !== TaskStatus.ON_HOLD && dayOf(t.dueDate) < today;
 
   const rows = people.map((p) => {
     const mine = tasks.filter((t) => t.assignees.some((a) => a.user.id === p.id));

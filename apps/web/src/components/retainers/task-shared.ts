@@ -94,9 +94,9 @@ export const currentMonth = () => {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 };
 
-/** Past its due date, and neither finished nor called off. */
+/** Past its due date, and neither finished, called off nor on hold — a held task is waiting, not late. */
 export const isTaskLate = (t: { status: string; dueDate: string }, todayKey: string) =>
-  t.status !== 'DONE' && t.status !== 'CANCELLED' && t.dueDate.slice(0, 10) < todayKey;
+  t.status !== 'DONE' && t.status !== 'CANCELLED' && t.status !== 'ON_HOLD' && t.dueDate.slice(0, 10) < todayKey;
 
 /**
  * What the status filter offers.

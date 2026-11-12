@@ -17,7 +17,7 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { MailPlus, UserCheck } from 'lucide-react';
+import { MailPlus, UserCheck, UserX } from 'lucide-react';
 import { api, ApiError, type Member } from '@/lib/api-v2';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -33,6 +33,7 @@ export function NotSignedInPeople() {
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [sent, setSent] = useState<Sent | null>(null);
   const [switchingOn, setSwitchingOn] = useState<string | null>(null);
+  const [removingId, setRemovingId] = useState<string | null>(null);
 
   // Under 'team', so everything that refreshes the team table refreshes this.
   const { data } = useQuery({ queryKey: ['team', 'accounts'], queryFn: () => api.users.list() });
@@ -58,6 +59,43 @@ export function NotSignedInPeople() {
       setSwitchingOn(null);
     }
   };
+
+  /** Off this list for good: an invitation cancelled, or somebody who has left. */
+  const remove = async (m: Member) => {
+    const invite = m.status === 'PENDING';
+    const ok = await confirmDialog({
+      title: invite ? `Cancel ${m.name}’s invitation?` : `Remove ${m.name}?`,
+      message: invite
+        ? 'The link they were sent stops working, and they leave this list. You can invite the same email again later.'
+        : 'They leave this list and every list of people. Their name stays on the tasks, costs and history they are part of. Inviting the same email again brings them back.',
+      confirmText: invite ? 'Cancel invitation' : 'Remove',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    setRemovingId(m.id);
+    try {
+      const res = await api.users.remove(m.id);
+      toast.success(res.message);
+      await queryClient.invalidateQueries({ queryKey: ['team'] });
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Could not remove them');
+    } finally {
+      setRemovingId(null);
+    }
+  };
+
+  const removeButton = (m: Member) => (
+    <Button
+      size="sm"
+      variant="ghost"
+      loading={removingId === m.id}
+      onClick={() => void remove(m)}
+      aria-label={m.status === 'PENDING' ? `Cancel ${m.name}’s invitation` : `Remove ${m.name}`}
+    >
+      <UserX className="h-3.5 w-3.5" />
+      {m.status === 'PENDING' ? 'Cancel invite' : 'Remove'}
+    </Button>
+  );
 
   const resend = async (m: Member) => {
     setResendingId(m.id);
@@ -99,10 +137,13 @@ export function NotSignedInPeople() {
             {pending.map((m) =>
               row(
                 m,
-                <Button size="sm" variant="secondary" loading={resendingId === m.id} onClick={() => void resend(m)}>
-                  <MailPlus className="h-3.5 w-3.5" />
-                  Resend invite
-                </Button>,
+                <>
+                  <Button size="sm" variant="secondary" loading={resendingId === m.id} onClick={() => void resend(m)}>
+                    <MailPlus className="h-3.5 w-3.5" />
+                    Resend invite
+                  </Button>
+                  {removeButton(m)}
+                </>,
                 m.inviteExpired ? <Badge tone="warn">Link expired</Badge> : <Badge tone="neutral">Link sent</Badge>,
               ),
             )}
@@ -117,15 +158,18 @@ export function NotSignedInPeople() {
             {off.map((m) =>
               row(
                 m,
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  loading={switchingOn === m.id}
-                  onClick={() => void switchOn(m)}
-                >
-                  <UserCheck className="h-3.5 w-3.5" />
-                  Switch back on
-                </Button>,
+                <>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    loading={switchingOn === m.id}
+                    onClick={() => void switchOn(m)}
+                  >
+                    <UserCheck className="h-3.5 w-3.5" />
+                    Switch back on
+                  </Button>
+                  {removeButton(m)}
+                </>,
               ),
             )}
           </ul>

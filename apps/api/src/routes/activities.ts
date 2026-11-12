@@ -5,6 +5,7 @@ import { authenticate, hasPermission, type AuthRequest } from '../middleware/aut
 import { parsePagination } from '../utils/query.js';
 import { TaskWorkType, TaskStatus, type Prisma } from '@prisma/client';
 import { canReadTask, readableTaskIds } from '../services/taskAccess.js';
+import { FOLLOW_UP_TASK_TYPE } from '../services/followUpTask.js';
 import {
   ACTIVITY_READ_PERMISSION as READ_PERMISSION,
   canReadActivityType,
@@ -259,6 +260,7 @@ activitiesRouter.post('/', async (req: AuthRequest, res: Response, next: NextFun
             organizationId: orgId,
             title: `Follow up — ${company.name}`,
             workType: TaskWorkType.INTERNAL,
+            taskType: FOLLOW_UP_TASK_TYPE,
             companyId: company.id,
             assigneeId: company.ownerId ?? userId,
             createdById: userId,

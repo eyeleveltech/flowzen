@@ -27,6 +27,7 @@ import { findOpenTwin, twinDay, twinStatus } from '../services/taskDuplicates.js
 import { pushTaskAssigned, pushTaskEdited } from '../services/push.js';
 import { clearFocusOff, clearFocusOn, ENDS_FOCUS, focusRefusal } from '../services/taskFocus.js';
 import { NO_PROJECT_WHERE } from '../services/internalWork.js';
+import { recordFollowUpDone } from '../services/followUpTask.js';
 import { codeWord, TASK_STATUS_WORD, WORK_TYPE_WORD } from '../utils/codeWords.js';
 
 export const tasksRouter = Router();
@@ -107,8 +108,11 @@ tasksRouter.get('/my', requirePermission('work.own'), async (req: AuthRequest, r
       const typeMedianMinutes = medianByGroup.get(taskTypeGroupKey(t)) ?? null;
 
       const dueStr = new Date(t.dueDate).toISOString().slice(0, 10);
-      const isOverdue = t.status !== 'DONE' && dueStr < todayStr;
-      const isToday = t.status !== 'DONE' && dueStr === todayStr;
+      // On hold is never overdue (services/internalWork.ts isLate): a held
+      // task past its date sits with today's, where its hold is shown.
+      const held = t.status === 'ON_HOLD';
+      const isOverdue = t.status !== 'DONE' && !held && dueStr < todayStr;
+      const isToday = t.status !== 'DONE' && (dueStr === todayStr || (held && dueStr < todayStr));
       const isThisWeek = t.status !== 'DONE' && !isOverdue && !isToday && new Date(t.dueDate) <= endOfWeek;
       const isDone = t.status === 'DONE';
       // Anything open and due beyond the 7-day window still needs a bucket —
@@ -695,7 +699,8 @@ tasksRouter.get('/all', requirePermission('work.all'), async (req: AuthRequest, 
         workingMinutes: workingHours.totalMinutes,
         // The repeat, if it is a copy in one; `nextDue` is added below.
         repeat: t.repeat,
-        isOverdue: !settled && dueStr < today,
+        // Not on hold: a held task is waiting, not late (internalWork.ts isLate).
+        isOverdue: !settled && t.status !== TaskStatus.ON_HOLD && dueStr < today,
         isToday: !settled && dueStr === today,
       };
     });
@@ -1893,6 +1898,9 @@ tasksRouter.patch('/:id/status', requirePermission('work.own'), async (req: Auth
     });
     // Done, cancelled or on hold: nobody is working on it now any more.
     if (ENDS_FOCUS.includes(status as TaskStatus)) await clearFocusOn(id);
+    // A follow-up done is the client contacted: their open deals record the
+    // touch, so the stalled-deal rule does not chase them again tomorrow.
+    if (status === TaskStatus.DONE && !wasFinished) await recordFollowUpDone(task, req.user!.userId);
 
     const verb = isFinished && !wasFinished ? (status === 'DONE' ? 'task_completed' : 'task_cancelled') : !isFinished && wasFinished ? 'task_reopened' : 'task_status_changed';
     await prisma.activity.create({

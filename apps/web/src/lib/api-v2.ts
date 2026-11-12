@@ -2250,6 +2250,11 @@ export const api = {
         };
         message?: string;
       }>('/users/invite', body),
+    /**
+     * Off the "Not signed in" list: an invitation cancelled, or a switched-off
+     * person removed for good. Never a live account. History keeps the name.
+     */
+    remove: (id: string) => del<{ success: boolean; message: string }>(`/users/${id}`),
     /** A fresh seven-day link on a pending invitation; the link comes back either way. */
     resendInvite: (id: string) =>
       post<{ inviteLink: string; expiresInDays: number } & Delivery>(`/users/${id}/resend-invite`),

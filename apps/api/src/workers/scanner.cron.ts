@@ -1,6 +1,7 @@
 import { prisma } from '../lib/prisma.js';
 import { emitToOrganization } from '../sse.js';
 import { EXTERNAL_RULES } from '../services/alertRules.js';
+import { FOLLOW_UP_TASK_TYPE, proposalFollowUpKey } from '../services/followUpTask.js';
 import { AlertSeverity, TaskWorkType, TaskStatus } from '@prisma/client';
 import { logger } from '../utils/logger.js';
 import { jobProfit, percentComplete, costRisk } from '../utils/jobProfit.js';
@@ -80,9 +81,10 @@ export async function evaluateAgencyHealthRules(organizationId: string): Promise
     // last touch means this stall has already been chased. Only the open ones
     // used to count: marking the task done made the next tick create it again,
     // so "Done" meant "see it again tomorrow" until somebody logged a touch.
-    const marker = `proposal_followup:${p.id}`;
+    const marker = proposalFollowUpKey(p.id);
     const lastFollowUp = await prisma.task.findFirst({
-      where: { organizationId, deletedAt: null, notes: marker },
+      // The key is in workId now; older ones carry it in their notes.
+      where: { organizationId, deletedAt: null, OR: [{ workId: marker }, { notes: marker }] },
       orderBy: { createdAt: 'desc' },
       select: { id: true, status: true, completedAt: true, updatedAt: true },
     });
@@ -96,6 +98,8 @@ export async function evaluateAgencyHealthRules(organizationId: string): Promise
           organizationId,
           title: `Follow up — ${p.company.name} proposal`,
           workType: TaskWorkType.INTERNAL,
+          workId: marker,
+          taskType: FOLLOW_UP_TASK_TYPE,
           // So the chase shows on the client it is about, rather than only in
           // whoever's My Work it landed in.
           companyId: p.company.id,
@@ -105,7 +109,7 @@ export async function evaluateAgencyHealthRules(organizationId: string): Promise
           dueDate: now,
           assignedAt: now,
           status: TaskStatus.TODO,
-          notes: marker,
+          notes: `No contact on this proposal for ${daysSince} days. Get in touch, then mark this done — that counts as the follow-up on the deal.`,
         },
       });
     }
@@ -190,12 +194,12 @@ export async function evaluateAgencyHealthRules(organizationId: string): Promise
     }
   }
 
-  // 5. RULE: TASK_OVERDUE
+  // 5. RULE: TASK_OVERDUE — not a held task, which TASK_WAITING_HOLD covers.
   const overdueTasks = await prisma.task.findMany({
     where: {
       organizationId,
       deletedAt: null,
-      status: { notIn: ['DONE', 'CANCELLED'] },
+      status: { notIn: ['DONE', 'CANCELLED', 'ON_HOLD'] },
       dueDate: { lt: now },
     },
     include: { assignee: true },

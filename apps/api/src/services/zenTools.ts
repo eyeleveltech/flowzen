@@ -400,7 +400,7 @@ export async function runZenTool(
           ...(status === 'ON_HOLD' ? { status: 'ON_HOLD' as never } : {}),
           ...(status === 'CANCELLED' ? { status: 'CANCELLED' as never } : {}),
           ...(status === 'LATE'
-            ? { status: { notIn: ['DONE', 'CANCELLED'] as never }, dueDate: { lt: new Date(today) } }
+            ? { status: { in: ['TODO', 'IN_PROGRESS'] as never }, dueDate: { lt: new Date(today) } }
             : {}),
         },
         select: {

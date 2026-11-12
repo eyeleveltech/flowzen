@@ -58,15 +58,12 @@ import { byClient, byDepartment, byDue, byPerson, byWork, type TaskGroup } from 
 
 const STATUS_OPTIONS = [
   /*
-   * The default, and not a status in the database.
-   *
-   * Due-date order with everything included opened the screen on work
-   * delivered in June. What a head of department came to see is what is still
-   * owed, which spans To do, In progress and On hold — the server reads this
-   * one value as all three, and it can be ticked alongside Done, which is how
-   * "everything except cancelled" gets asked for.
+   * Real statuses only. There used to be an "Unfinished" choice standing for
+   * To do, In progress and On hold together, ticked by default — so unticking
+   * On hold changed nothing: "Unfinished" was still ticked and still brought
+   * the held tasks in. What is still owed is now those three, ticked one by
+   * one, and any of them can be taken away.
    */
-  { value: 'UNFINISHED', label: 'Unfinished' },
   { value: 'TODO', label: 'To do' },
   { value: 'IN_PROGRESS', label: 'In progress' },
   { value: 'ON_HOLD', label: 'On hold' },
@@ -74,8 +71,11 @@ const STATUS_OPTIONS = [
   { value: 'CANCELLED', label: 'Cancelled' },
 ];
 
-/** The drawer's own list: real statuses only, so it cannot set "Unfinished". */
-const DRAWER_STATUS_OPTIONS = STATUS_OPTIONS.filter((o) => o.value && o.value !== 'UNFINISHED');
+/** The drawer's own list — the same statuses. */
+const DRAWER_STATUS_OPTIONS = STATUS_OPTIONS;
+
+/** What the screen opens on: everything still owed. */
+const STILL_OWED = ['TODO', 'IN_PROGRESS', 'ON_HOLD'];
 
 /**
  * "Internal — no project" in the client filter: internal tasks filed under no
@@ -153,7 +153,7 @@ export default function AllWorkPage() {
    */
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [depts, setDepts] = useState<string[]>([]);
-  const [statuses, setStatuses] = useState<string[]>(['UNFINISHED']);
+  const [statuses, setStatuses] = useState<string[]>(STILL_OWED);
   // `?noProject=1` — Live work's "General — no project" card — opens on it.
   const searchParams = useSearchParams();
   const [clients, setClients] = useState<string[]>(() => (searchParams.get('noProject') === '1' ? [NO_PROJECT] : []));
@@ -270,7 +270,7 @@ export default function AllWorkPage() {
     types.length > 0 ||
     overdueOnly ||
     q.trim().length > 0 ||
-    !(statuses.length === 1 && statuses[0] === 'UNFINISHED');
+    !(statuses.length === STILL_OWED.length && STILL_OWED.every((s) => statuses.includes(s)));
 
   // The row as the list has it now, not as it was clicked — an edit or a
   // status change shows in the open drawer as soon as the list refetches.
@@ -539,7 +539,7 @@ export default function AllWorkPage() {
               value={statuses}
               onChange={setStatuses}
               placeholder="Any status"
-              options={STATUS_OPTIONS.filter((o) => o.value)}
+              options={STATUS_OPTIONS}
             />
           </div>
           <Button

@@ -250,6 +250,14 @@ export function NewWorkTaskModal({
               a task. */}
           <AssigneeField value={assigneeIds} onChange={setAssigneeIds} />
           <AssignedByField value={assignedById} onChange={setAssignedById} />
+          <FieldSelect
+            label="Type of work"
+            value={taskType}
+            onChange={setTaskType}
+            required
+            placeholder="Choose…"
+            options={TASK_TYPE_OPTIONS}
+          />
           <div className="grid grid-cols-2 gap-4">
             <Field label="Due date" type="date" value={dueDate} onChange={setDueDate} required />
             <DueTimeField value={dueTime} onChange={setDueTime} />
@@ -261,14 +269,6 @@ export function NewWorkTaskModal({
             onChange={setRepeat}
             options={repeatOptions(dueDate)}
             hint={repeat ? REPEAT_HINT : undefined}
-          />
-          <FieldSelect
-            label="Type of work"
-            value={taskType}
-            onChange={setTaskType}
-            required
-            placeholder="Choose…"
-            options={TASK_TYPE_OPTIONS}
           />
           <Field label="Description" value={description} onChange={setDescription} textarea rows={3} />
           {error && <ErrorNote>{error}</ErrorNote>}

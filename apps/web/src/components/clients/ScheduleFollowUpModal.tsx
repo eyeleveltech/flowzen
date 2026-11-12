@@ -63,6 +63,8 @@ export function ScheduleFollowUpModal({
       await api.tasks.create({
         title: `Follow up — ${company.name}`,
         workType: 'INTERNAL',
+        // Chasing a client is sales work — the type every follow-up carries.
+        taskType: 'BUSINESS_DEVELOPMENT',
         companyId: company.id,
         assigneeId,
         assigneeIds: [assigneeId],
@@ -92,10 +94,10 @@ export function ScheduleFollowUpModal({
           {error && <ErrorNote onDismiss={() => setError(null)}>{error}</ErrorNote>}
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Follow up on" value={dueDate} onChange={setDueDate} type="date" required disabled={busy} />
-            <DueTimeField label="Time" value={dueTime} onChange={setDueTime} hint="Optional" disabled={busy} />
+            <Field label="Due date" value={dueDate} onChange={setDueDate} type="date" required disabled={busy} />
+            <DueTimeField value={dueTime} onChange={setDueTime} disabled={busy} />
             <FieldSelect
-              label="Who"
+              label="Assign to"
               value={assigneeId}
               onChange={setAssigneeId}
               required
@@ -106,7 +108,7 @@ export function ScheduleFollowUpModal({
           </div>
 
           <Field
-            label="What about"
+            label="Description"
             value={note}
             onChange={setNote}
             textarea

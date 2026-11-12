@@ -270,6 +270,11 @@ model User {
   /// pickers and off the team roster without a third status enum.
   inviteToken          String?    @unique
   inviteTokenExpiresAt DateTime?
+  /// Taken off the Team page's "Not signed in" list: an invitation cancelled,
+  /// or somebody switched off for good. The row stays — their name is on
+  /// tasks, costs and history — but no list of people shows it. Inviting the
+  /// same email again brings the row back as a fresh invitation.
+  removedAt            DateTime?
   /// A one-hour link an admin hands over when somebody is locked out. Separate
   /// from inviteToken so issuing one cannot cancel a pending invitation.
   resetToken           String?    @unique

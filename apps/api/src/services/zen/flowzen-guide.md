@@ -113,6 +113,8 @@ Team work (Heads and Management): the delivery view.
 - **"Delivery" table:** each person's Open, Overdue, Waiting and "Avg close". "List" or "By department". Export CSV.
 - **Row menu:** Edit details, Assign a task, Kit they hold, Access & permissions, Send a password link (valid 60 minutes), Switch off account. All but "Assign a task" and "Kit they hold" need Setup access.
 - **Invite** (Setup access): name, email, department, access preset. The invite link is shown and emailed.
+- **Not signed in** (Setup access, under the table): people invited who have not joined ("Resend invite", "Cancel invite") and accounts switched off ("Switch back on", "Remove"). Cancel invite stops the link working; Remove takes a switched-off person off every list of people, while their name stays on their tasks, costs and history. Inviting the same email again brings them back as a fresh invitation. A live account cannot be removed — switch it off first.
+- **Overdue never counts On hold:** a held task is waiting, not late, everywhere in the app (Team, My department, All tasks, My Work, the bell).
 - **Opening a person:** shows their tasks grouped by state, each linked to its project or retainer month.
 - **Board** is no longer a tab here: it became **My department** (/my-department), and an old /members?tab=board link goes there.
 
@@ -133,7 +135,7 @@ A department head's page for their department: their people and everything those
 
 All work (Heads and Management; a Head sees their departments' work).
 
-- **Filters:** search, Person, Department, Client (including "Internal", and "Internal — no project" for internal tasks filed under no project), Project, Type of work (including "Not set"), Status and "Overdue only". Status starts on "Unfinished" (To do, In progress, On hold). /all-work?noProject=1 opens on "Internal — no project".
+- **Filters:** search, Person, Department, Client (including "Internal", and "Internal — no project" for internal tasks filed under no project), Project, Type of work (including "Not set"), Status and "Overdue only". Status starts with To do, In progress and On hold ticked; untick any of them (On hold, say) to hide it. An On hold task is never counted or marked as overdue. /all-work?noProject=1 opens on "Internal — no project".
 - **Group by:** None (the default), Project or retainer, Client, Person, Department, or Due (Overdue, Today, This week, Later, Earlier). Each group folds open and shut and shows a count; the filters still apply inside. A task with two people is under both in Person and Department. The choice is remembered in that browser. Grouping is of the tasks shown, so past the 500-task limit it says so.
 - **Tiles:** "Open" (To do + In progress), "Overdue", "On hold" and "Nobody on it".
 - **Sorting:** click a column header.
@@ -160,7 +162,7 @@ Companies access (BD, Accounts, Management). Real companies; outreach leads are 
   - **Work:**
     - Retainers ("Add retainer") and projects ("Add project"). Both only for a Client.
     - Sample work ("Add sample").
-    - Follow-ups ("Schedule follow-up", which creates a task for that person).
+    - Follow-ups ("Schedule follow-up", which creates a task for that person, Type of work Business development). Marking a follow-up Done counts as following up: the client's open deals record a touch ("“Follow up — …” marked done" on their history), so a stalled deal is not chased again the next day.
   - **Proposals:** "New proposal", and every proposal with its versions.
   - **Invoices & Proformas:** proformas (Edit and Cancel while unpaid; Download; Email) and tax invoices.
   - **Audit Trail:** the history of the company and everything under it.

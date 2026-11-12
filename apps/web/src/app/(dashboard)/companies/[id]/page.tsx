@@ -1071,7 +1071,11 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                 {[...openFollowUps, ...doneFollowUps].map((t: any) => {
                   const due = t.dueDate ? new Date(t.dueDate) : null;
                   const overdue =
-                    t.status !== 'DONE' && due != null && due.toISOString().slice(0, 10) < new Date().toISOString().slice(0, 10);
+                    t.status !== 'DONE' &&
+                    t.status !== 'CANCELLED' &&
+                    t.status !== 'ON_HOLD' &&
+                    due != null &&
+                    due.toISOString().slice(0, 10) < new Date().toISOString().slice(0, 10);
                   return (
                     <button
                       key={t.id}

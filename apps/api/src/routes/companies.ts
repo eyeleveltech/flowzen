@@ -12,6 +12,7 @@ import { authenticate, requireManagement, requirePermission, type AuthRequest, h
 import { CompanyStatus, PersonRole, Prisma, TaskWorkType, TaskStatus } from '@prisma/client';
 import { DEFAULT_INDUSTRY, DEFAULT_LEAD_SOURCE } from '@flowzen/shared';
 import { checkForDuplicates, checkForImport } from '../services/duplicateCheck.js';
+import { FOLLOW_UP_TASK_TYPE } from '../services/followUpTask.js';
 import { resolveState } from '../services/documentModel.js';
 import { parsePagination } from '../utils/query.js';
 import { toCsv, parseCsv } from '../utils/csv.js';
@@ -1191,6 +1192,7 @@ companiesRouter.post('/', requirePermission('company.write'), async (req: AuthRe
             organizationId: orgId,
             title: `Follow up — ${company.name}`,
             workType: TaskWorkType.INTERNAL,
+            taskType: FOLLOW_UP_TASK_TYPE,
             // Linked, not just named. Before this the client lived in the
             // title and nowhere else, so their own page could not show what
             // was outstanding against them.

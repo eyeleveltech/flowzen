@@ -485,7 +485,8 @@ export default function MyWorkPage() {
    */
   const cells = (t: TaskItem, grip: React.ReactNode) => {
     const finished = t.status === 'DONE' || t.status === 'CANCELLED';
-    const late = !finished && t.dueDate.slice(0, 10) < todayKey;
+    // On hold is never late: it is waiting, and says on what.
+    const late = !finished && t.status !== 'ON_HOLD' && t.dueDate.slice(0, 10) < todayKey;
     const job = jobLabel(t);
     return (
       <>

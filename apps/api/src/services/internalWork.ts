@@ -35,9 +35,14 @@ export function daysBetween(today: string, day: string): number {
   return Math.round((Date.parse(`${day}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000);
 }
 
-/** Late, the way the rest of the app means it: past its due date and not finished. */
+/**
+ * Late, the way the rest of the app means it: past its due date, not
+ * finished, and not on hold. A held task is waiting on somebody else — the
+ * client, a colleague — and calling it overdue blamed whoever it is waiting
+ * with; its hold is shown instead, and the wait is timed apart.
+ */
 export const isLate = (t: { status: string; dueDate: Date }, today: string) =>
-  t.status !== 'DONE' && t.status !== 'CANCELLED' && dayOf(t.dueDate) < today;
+  t.status !== 'DONE' && t.status !== 'CANCELLED' && t.status !== 'ON_HOLD' && dayOf(t.dueDate) < today;
 
 export type ProgressTask = {
   id: string;

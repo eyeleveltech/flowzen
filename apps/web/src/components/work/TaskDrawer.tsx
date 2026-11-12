@@ -201,7 +201,9 @@ export function TaskDrawer({
     // Falls back to the lead when a caller has not sent the whole set, so a
     // screen that only knows one person still opens a usable form.
     setAssigneeIds(taskProp?.assignees?.map((a) => a.id) ?? (taskProp?.assignee ? [taskProp.assignee.id] : []));
-    setAssignedById(taskProp?.assignedBy?.id ?? taskProp?.creator?.id ?? '');
+    // Who it says — not the creator, which every save then wrote in as
+    // "assigned by" whether anybody had said so or not.
+    setAssignedById(taskProp?.assignedBy?.id ?? '');
     setTaskType(taskProp?.taskType ?? '');
     setDueDate(dateValue(taskProp?.dueDate));
     setDueTime(taskProp?.dueTime ?? '');
@@ -256,6 +258,16 @@ export function TaskDrawer({
   const save = async () => {
     if (!title.trim()) {
       toast.error('A task needs a title');
+      return;
+    }
+    // There is no form submit here, so `required` on the fields enforces
+    // nothing on its own: the same three things the create forms insist on.
+    if (!dueDate) {
+      toast.error('A task needs a due date');
+      return;
+    }
+    if (!taskType) {
+      toast.error('Choose the type of work');
       return;
     }
     setSaving(true);
@@ -405,7 +417,7 @@ export function TaskDrawer({
         {editing ? (
           <>
             <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
-              <Field label="Title" value={title} onChange={setTitle} required />
+              <Field label="What needs doing?" value={title} onChange={setTitle} required />
               {/*
                 Reassigning, and who may do it.
 
@@ -421,13 +433,16 @@ export function TaskDrawer({
                 first is the lead — the one a person's load, the overload alerts
                 and "whose task is this" all resolve to.
               */}
-              <AssigneeField label="Assigned to" value={assigneeIds} onChange={setAssigneeIds} />
+              <AssigneeField value={assigneeIds} onChange={setAssigneeIds} />
               <AssignedByField value={assignedById} onChange={setAssignedById} />
+              {/* Required, as on every create form — an older task with no
+                  type is asked for one the first time it is edited. */}
               <FieldSelect
                 label="Type of work"
                 value={taskType}
                 onChange={setTaskType}
-                placeholder="Not set"
+                required
+                placeholder="Choose…"
                 options={TASK_TYPE_OPTIONS}
               />
               {/* The same choice as the New task form: an internal project, or No project. */}
@@ -468,7 +483,7 @@ export function TaskDrawer({
               )}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field label="Due date" type="date" value={dueDate} onChange={setDueDate} required />
-                <DueTimeField value={dueTime} onChange={setDueTime} hint="Optional" />
+                <DueTimeField value={dueTime} onChange={setDueTime} />
                 <FieldSelect label="Priority" value={priority} onChange={setPriority} options={PRIORITY_OPTIONS} />
               </div>
               <FieldSelect
@@ -485,14 +500,7 @@ export function TaskDrawer({
                 )}
                 hint={repeat ? REPEAT_HINT : undefined}
               />
-              <Field
-                label="Notes"
-                value={notes}
-                onChange={setNotes}
-                textarea
-                rows={4}
-                placeholder="Anything whoever picks this up needs to know"
-              />
+              <Field label="Description" value={notes} onChange={setNotes} textarea rows={3} />
             </div>
             <div className="flex shrink-0 items-center justify-end gap-2.5 border-t border-border bg-surface px-6 py-4">
               <Button variant="ghost" onClick={() => setEditing(false)}>

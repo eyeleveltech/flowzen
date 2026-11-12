@@ -54,7 +54,8 @@ usersRouter.get('/', async (req: AuthRequest, res: Response, next) => {
     const scope = await teamScope(req.user!);
 
     const users = await prisma.user.findMany({
-      where: { organizationId: orgId },
+      // Not anybody taken off the team (DELETE /users/:id below).
+      where: { organizationId: orgId, removedAt: null },
       orderBy: [{ active: 'desc' }, { name: 'asc' }],
       select: {
         id: true,
@@ -227,7 +228,8 @@ usersRouter.post('/invite', requirePermission('setup.admin'), async (req: AuthRe
     }
 
     const existing = await prisma.user.findUnique({ where: { email: cleanEmail } });
-    if (existing) {
+    const comingBack = existing && existing.organizationId === orgId && !existing.active && existing.removedAt;
+    if (existing && !comingBack) {
       // Say what to do instead — a bare refusal left no way forward for a
       // lapsed invitation or somebody coming back.
       const sameOrg = existing.organizationId === orgId;
@@ -248,23 +250,25 @@ usersRouter.post('/invite', requirePermission('setup.admin'), async (req: AuthRe
     // into until accept-invite overwrites this with a real password.
     const placeholderHash = await hashPassword(crypto.randomBytes(32).toString('hex'));
 
-    const user = await prisma.user.create({
-      data: {
-        organizationId: orgId,
-        name: name.trim(),
-        email: cleanEmail,
-        passwordHash: placeholderHash,
-        departmentId: placed.department.id,
-        // Kept beside the id until Plan 4, for anything still reading text.
-        dept: placed.department.name,
-        monthlyCost: 0,
-        preset,
-        permissions: [],
-        active: false,
-        inviteToken,
-        inviteTokenExpiresAt,
-      },
-    });
+    const invited = {
+      name: name.trim(),
+      passwordHash: placeholderHash,
+      departmentId: placed.department.id,
+      // Kept beside the id until Plan 4, for anything still reading text.
+      dept: placed.department.name,
+      preset,
+      permissions: [],
+      active: false,
+      inviteToken,
+      inviteTokenExpiresAt,
+    };
+    // Somebody taken off the team earlier: the same row, invited afresh, so
+    // their history stays theirs. Their old password stops working.
+    const user = comingBack
+      ? await prisma.user.update({ where: { id: existing.id }, data: { ...invited, removedAt: null } })
+      : await prisma.user.create({
+          data: { organizationId: orgId, email: cleanEmail, monthlyCost: 0, ...invited },
+        });
 
     await prisma.activity.create({
       data: {
@@ -439,6 +443,66 @@ const updateSchema = z.object({
    */
   active: z.boolean().optional(),
   force: z.boolean().optional(),
+});
+
+// ── Take somebody off the "Not signed in" list ─────────────────────────────
+//
+// An invitation that will never be accepted, or a person who has left for
+// good, used to sit under "Not signed in" on the Team page forever: there was
+// Resend and Switch back on, and no way to say "not coming". This takes them
+// off every list of people. Only somebody who cannot sign in — invited, or
+// already switched off — never a live account, and never yourself.
+//
+// The row stays. Their name is on tasks, costs, salaries and the history, and
+// deleting it would rewrite all of that; Flowzen does not hard delete what a
+// person did (§16). The invitation link stops working at once. Inviting the
+// same email later brings the row back as a fresh invitation.
+
+usersRouter.delete('/:id', requirePermission('setup.admin'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const id = String(req.params.id);
+    const user = await prisma.user.findFirst({ where: { id, organizationId: orgId, removedAt: null } });
+    if (!user) {
+      res.status(404).json({ success: false, error: 'Person not found' });
+      return;
+    }
+    if (user.id === req.user!.userId) {
+      res.status(400).json({ success: false, error: 'You cannot remove yourself.' });
+      return;
+    }
+    if (user.active) {
+      res.status(409).json({
+        success: false,
+        error: `${user.name} can still sign in. Switch their account off first, then remove them under “Not signed in”.`,
+      });
+      return;
+    }
+
+    const wasInvite = Boolean(user.inviteToken);
+    await prisma.user.update({
+      where: { id },
+      data: { removedAt: new Date(), inviteToken: null, inviteTokenExpiresAt: null },
+    });
+    await prisma.activity.create({
+      data: {
+        organizationId: orgId,
+        entityType: 'User',
+        entityId: id,
+        actorId: req.user!.userId,
+        verb: wasInvite ? 'user_invite_cancelled' : 'user_removed',
+        payload: { name: user.name, email: user.email },
+      },
+    });
+    emitToOrganization(orgId, 'member:changed', { userId: id });
+
+    res.json({
+      success: true,
+      message: wasInvite ? `${user.name}’s invitation is cancelled.` : `${user.name} is off the team list.`,
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
 usersRouter.patch('/:id', requirePermission('setup.admin'), async (req: AuthRequest, res: Response, next) => {

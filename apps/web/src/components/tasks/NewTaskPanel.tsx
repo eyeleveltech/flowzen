@@ -16,12 +16,12 @@ import { Button } from '@/components/ui/button';
 import { Field, FieldSelect } from '@/components/ui/field';
 import { AssigneeField, AssignedByField } from '@/components/work/AssigneeField';
 import { api, ApiError } from '@/lib/api-v2';
-import { useTeamMembers } from '@/hooks/queries';
 import { PRIORITY_CONFIG } from '@/lib/priority';
-import { personOptions } from '@/lib/people';
 import { TASK_TYPE_OPTIONS } from '@/lib/task-type';
 import { useAuthStore } from '@/stores';
 import { DueTimeField } from '@/components/work/DueTimeField';
+import { ErrorNote } from '@/components/ui/empty-state';
+import { repeatOptions, REPEAT_HINT } from '@/lib/repeat';
 
 interface NewTaskPanelProps {
   isOpen: boolean;
@@ -44,7 +44,7 @@ export function NewTaskPanel({ isOpen, onClose, onSuccess, projectId, projectNam
   const [dueDate, setDueDate] = useState('');
   // Optional; empty means any time that day.
   const [dueTime, setDueTime] = useState('');
-  const team = useTeamMembers();
+  const [repeat, setRepeat] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -60,6 +60,7 @@ export function NewTaskPanel({ isOpen, onClose, onSuccess, projectId, projectNam
     setDescription('');
     setDueDate('');
     setDueTime('');
+    setRepeat('');
     setError(null);
   }, [isOpen, me?.id]);
 
@@ -79,6 +80,7 @@ export function NewTaskPanel({ isOpen, onClose, onSuccess, projectId, projectNam
         assignedById: assignedById || undefined,
         dueDate,
         dueTime: dueTime || undefined,
+        repeat: repeat || undefined,
         priority,
         taskType,
         notes: description.trim() || undefined,
@@ -96,21 +98,25 @@ export function NewTaskPanel({ isOpen, onClose, onSuccess, projectId, projectNam
     <Drawer isOpen={isOpen} onClose={onClose} variant="slideover" title="New task" guardUnsaved>
       <form onSubmit={handleSubmit} className="flex h-full flex-col bg-white">
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+          <Field label="What needs doing?" value={title} onChange={setTitle} required />
+
+          {/* Where it belongs — already decided by the project it was opened on. */}
           <div>
-            <span className="block text-sm font-medium text-body mb-1.5">Project</span>
-            <div className="w-full rounded-xl border border-border bg-subtle/40 px-4 py-2.5 text-sm text-primary font-medium">
+            <span className="eyebrow mb-1.25 block">Belongs to</span>
+            <div className="w-full rounded-xl border border-border bg-subtle/40 px-4 py-2.5 text-sm font-medium text-primary">
               {projectName}
             </div>
           </div>
-
-          <Field label="What needs doing?" value={title} onChange={setTitle} required />
 
           {/* One box, however many people — and for somebody who may only
               manage their own work, their own name and no picker at all.
               Shared with the other task forms so the rule cannot go missing
               from one of them. */}
           <AssigneeField value={assigneeIds} onChange={setAssigneeIds} />
-          <FieldSelect label="Priority" value={priority} onChange={setPriority} options={PRIORITY_OPTIONS} />
+          {/* Who wanted it done — not always the person typing it up, and
+              not something an employee may claim about somebody else. The
+              shared field decides whether to render at all. */}
+          <AssignedByField value={assignedById} onChange={setAssignedById} />
           <FieldSelect
             label="Type of work"
             value={taskType}
@@ -123,19 +129,19 @@ export function NewTaskPanel({ isOpen, onClose, onSuccess, projectId, projectNam
           <div className="grid grid-cols-2 gap-4">
             <Field label="Due date" type="date" value={dueDate} onChange={setDueDate} required />
             <DueTimeField value={dueTime} onChange={setDueTime} />
-            {/* Who wanted it done — not always the person typing it up, and
-                not something an employee may claim about somebody else. The
-                shared field decides whether to render at all. */}
-            <AssignedByField value={assignedById} onChange={setAssignedById} />
+            <FieldSelect label="Priority" value={priority} onChange={setPriority} options={PRIORITY_OPTIONS} />
           </div>
+          <FieldSelect
+            label="Repeat"
+            value={repeat}
+            onChange={setRepeat}
+            options={repeatOptions(dueDate)}
+            hint={repeat ? REPEAT_HINT : undefined}
+          />
 
-          <Field label="Description" value={description} onChange={setDescription} textarea rows={4} />
+          <Field label="Description" value={description} onChange={setDescription} textarea rows={3} />
 
-          {error && (
-            <div className="rounded-xl bg-danger-tint p-3.5 text-sm text-danger border border-danger/30 font-medium">
-              {error}
-            </div>
-          )}
+          {error && <ErrorNote>{error}</ErrorNote>}
         </div>
 
         <div className="border-t border-border bg-surface px-6 py-4">

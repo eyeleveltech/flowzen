@@ -281,14 +281,26 @@ describe('going stale counts from the last touch', () => {
       p.peopleAllocation.groupBy.mockResolvedValue([]);
       p.peopleAllocation.count.mockResolvedValue(0);
       await evaluateAgencyHealthRules('org-1');
-      return p.task.create.mock.calls.filter((c: any) => c[0]?.data?.notes === 'proposal_followup:quiet');
+      return p.task.create.mock.calls.filter((c: any) => c[0]?.data?.workId === 'proposal_followup:quiet');
     };
     beforeEach(() => p.task.create.mockClear());
 
     it('is made once, with the deal\'s client on it', async () => {
       const made = await scan(null);
       expect(made).toHaveLength(1);
-      expect(made[0][0].data).toMatchObject({ title: 'Follow up — Quiet Co proposal', companyId: 'co-1', assigneeId: 'usr-bd' });
+      expect(made[0][0].data).toMatchObject({
+        title: 'Follow up — Quiet Co proposal',
+        companyId: 'co-1',
+        assigneeId: 'usr-bd',
+        // Sales work, and its key out of the notes the company page shows.
+        taskType: 'BUSINESS_DEVELOPMENT',
+      });
+      expect(made[0][0].data.notes).not.toMatch(/proposal_followup/);
+      // Found again by the key, or by the notes on one made before it moved.
+      expect(p.task.findFirst.mock.calls.at(-1)[0].where.OR).toEqual([
+        { workId: 'proposal_followup:quiet' },
+        { notes: 'proposal_followup:quiet' },
+      ]);
     });
 
     it('is not made again while one is open', async () => {
@@ -308,6 +320,61 @@ describe('going stale counts from the last touch', () => {
         { lastTouchedAt: day('2026-09-20') },
       );
       expect(made).toHaveLength(1);
+    });
+  });
+
+  /*
+   * Marking the follow-up done IS following up (12 Nov). The deal kept
+   * reading "no contact for 9 days" after its follow-up was finished, so the
+   * stall — and the chase — came straight back.
+   */
+  describe('marking a follow-up done', () => {
+    const followUp = (over: Record<string, unknown> = {}) => ({
+      id: 'fu-1',
+      organizationId: 'org-1',
+      title: 'Follow up — Quiet Co proposal',
+      status: 'TODO',
+      companyId: 'co-1',
+      projectId: null,
+      monthCardId: null,
+      retainerProjectId: null,
+      internalProjectId: null,
+      workId: 'proposal_followup:quiet',
+      notes: null,
+      completedAt: null,
+      reopenCount: 0,
+      waitingSince: null,
+      waitingTotalMinutes: 0,
+      ...over,
+    });
+    const done = async (task: Record<string, unknown>) => {
+      p.task.findFirst.mockResolvedValue(task);
+      p.task.update.mockResolvedValue({ ...task, status: 'DONE' });
+      p.user.updateMany.mockResolvedValue({ count: 0 });
+      p.proposal.findMany.mockResolvedValue([{ id: 'quiet', company: { name: 'Quiet Co' } }]);
+      p.proposal.update.mockResolvedValue({});
+      p.outreachEntry.updateMany.mockResolvedValue({ count: 0 });
+      return request(app).patch('/api/tasks/fu-1/status').set('Authorization', auth).send({ status: 'DONE' });
+    };
+
+    it('moves the deal it chases to last touched now, with a line on its history', async () => {
+      const res = await done(followUp());
+      expect(res.status).toBe(200);
+      expect(p.proposal.findMany.mock.calls[0][0].where).toMatchObject({ organizationId: 'org-1', id: 'quiet', outcome: null });
+      expect(p.proposal.update).toHaveBeenCalledWith({ where: { id: 'quiet' }, data: { lastTouchedAt: new Date('2026-10-14T06:00:00Z') } });
+      const touch = p.activity.create.mock.calls.map((c: any) => c[0].data).find((d: any) => d.verb === 'touch_logged');
+      expect(touch).toMatchObject({ entityType: 'Proposal', entityId: 'quiet', payload: { channel: 'TASK', taskId: 'fu-1' } });
+    });
+
+    it('a follow-up the company page scheduled touches that client’s open deals', async () => {
+      await done(followUp({ title: 'Follow up — Quiet Co', workId: null }));
+      expect(p.proposal.findMany.mock.calls[0][0].where).toMatchObject({ companyId: 'co-1', outcome: null });
+    });
+
+    it('leaves the deals alone for a task that is not a follow-up', async () => {
+      await done(followUp({ projectId: 'proj-1', workId: null }));
+      expect(p.proposal.findMany).not.toHaveBeenCalled();
+      expect(p.proposal.update).not.toHaveBeenCalled();
     });
   });
 });

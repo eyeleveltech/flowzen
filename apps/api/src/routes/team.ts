@@ -129,7 +129,10 @@ teamRouter.get('/capacity', requirePermission('work.team'), async (req: AuthRequ
     const formatted = members.map((m) => {
       const mine = m.taskAssignments.map((a) => a.task);
       const openTasks = mine.filter((t) => t.status !== 'DONE' && t.status !== 'CANCELLED');
-      const overdueTasks = openTasks.filter((t) => new Date(t.dueDate).toISOString().slice(0, 10) < todayStr);
+      // On hold is never overdue; it is counted as waiting below.
+      const overdueTasks = openTasks.filter(
+        (t) => t.status !== 'ON_HOLD' && new Date(t.dueDate).toISOString().slice(0, 10) < todayStr,
+      );
       const waitingTasks = mine.filter((t) => t.status === 'ON_HOLD');
       for (const t of waitingTasks) if (waitingOnShown(t) === 'CLIENT') onClient.add(t.id);
       const completedTasks = mine.filter((t) => t.status === 'DONE');
@@ -326,7 +329,7 @@ teamRouter.get('/:id', requirePermission('work.team'), async (req: AuthRequest, 
     const tasks = member.taskAssignments.map((a) => a.task);
 
     const open = tasks.filter((t) => t.status !== 'DONE' && t.status !== 'CANCELLED');
-    const overdue = open.filter((t) => t.dueDate.toISOString().slice(0, 10) < todayStr);
+    const overdue = open.filter((t) => t.status !== 'ON_HOLD' && t.dueDate.toISOString().slice(0, 10) < todayStr);
     const waiting = tasks.filter((t) => t.status === 'ON_HOLD');
     const done = tasks.filter((t) => t.status === 'DONE');
 
@@ -379,7 +382,8 @@ teamRouter.get('/:id', requirePermission('work.team'), async (req: AuthRequest, 
         // Who else is on it — the reason a task can appear on two people's
         // screens without either of them wondering why.
         withOthers: t.assignees.map((a) => a.user).filter((u) => u.id !== member.id),
-        overdue: t.status !== 'DONE' && t.status !== 'CANCELLED' && t.dueDate.toISOString().slice(0, 10) < todayStr,
+        overdue:
+          t.status !== 'DONE' && t.status !== 'CANCELLED' && t.status !== 'ON_HOLD' && t.dueDate.toISOString().slice(0, 10) < todayStr,
         // Where the work lives, resolved to one shape whichever column it came
         // down. `href` is the screen that task is worked on, so a name in this
         // drawer is a way in rather than a label.

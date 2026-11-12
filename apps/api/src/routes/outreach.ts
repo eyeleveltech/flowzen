@@ -9,6 +9,7 @@ import { toCsv, parseCsv } from '../utils/csv.js';
 import { matchIndustry, resolveLeadSource, industrySchema, leadSourceSchema } from '../utils/enums.js';
 import { sendCsv } from '../utils/csvResponse.js';
 import { checkForDuplicates } from '../services/duplicateCheck.js';
+import { FOLLOW_UP_TASK_TYPE } from '../services/followUpTask.js';
 import { changesBetween } from '../utils/activityDiff.js';
 import { asStoredDay, dayKey } from '../utils/moneyDates.js';
 import {
@@ -955,6 +956,7 @@ outreachRouter.post('/:id/promote', requirePermission('company.write'), async (r
             organizationId: orgId,
             title: `${step} — ${name}`,
             workType: TaskWorkType.INTERNAL,
+            taskType: FOLLOW_UP_TASK_TYPE,
             companyId: company.id,
             assigneeId: useOwner,
             createdById: req.user!.userId,

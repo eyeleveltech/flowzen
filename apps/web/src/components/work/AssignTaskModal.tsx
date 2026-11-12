@@ -5,16 +5,19 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api, ApiError } from '@/lib/api-v2';
-import { useTeamMembers } from '@/hooks/queries';
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Field, FieldSelect } from '@/components/ui/field';
 import { ErrorNote } from '@/components/ui/empty-state';
 import { PRIORITY_CONFIG } from '@/lib/priority';
-import { personOptions } from '@/lib/people';
 import { TASK_TYPE_OPTIONS } from '@/lib/task-type';
 import { useAuthStore } from '@/stores';
 import { DueTimeField } from '@/components/work/DueTimeField';
+import { AssignedByField } from '@/components/work/AssigneeField';
+import { repeatOptions, REPEAT_HINT } from '@/lib/repeat';
+
+/** "No project" — a one-off studio job, the same choice the New task form offers. */
+const NO_PROJECT = 'none';
 
 const PRIORITY_OPTIONS = Object.entries(PRIORITY_CONFIG).map(([value, cfg]) => ({ value, label: cfg.label }));
 
@@ -48,10 +51,10 @@ export function AssignTaskModal({
   const me = useAuthStore((s) => s.user);
   const [title, setTitle] = useState('');
   const [assignedById, setAssignedById] = useState('');
-  const team = useTeamMembers();
   const [dueDate, setDueDate] = useState('');
   // Optional; empty means any time that day.
   const [dueTime, setDueTime] = useState('');
+  const [repeat, setRepeat] = useState('');
   const [priority, setPriority] = useState('MEDIUM');
   const [taskType, setTaskType] = useState('');
   const [description, setDescription] = useState('');
@@ -122,13 +125,15 @@ export function AssignTaskModal({
         title: title.trim(),
         dueDate,
         dueTime: dueTime || undefined,
+        repeat: repeat || undefined,
         assigneeId: person.id,
+        assigneeIds: [person.id],
         workType: scope === 'INTERNAL' ? 'INTERNAL' : selectedTarget?.workType === 'RETAINER' ? 'MONTH_CARD' : 'PROJECT',
         monthCardId: scope === 'CLIENT' ? selectedTarget?.monthCardId : undefined,
         // What the work is for, alongside the month that bills it. Omitted for
         // a one-time project, which is its own answer to both questions.
         retainerProjectId: scope === 'CLIENT' ? selectedTarget?.retainerProjectId : undefined,
-        internalProjectId: scope === 'INTERNAL' ? internalProjectId || undefined : undefined,
+        internalProjectId: scope === 'INTERNAL' && internalProjectId !== NO_PROJECT ? internalProjectId || undefined : undefined,
         projectId: scope === 'CLIENT' ? selectedTarget?.projectId : undefined,
         priority,
         taskType,
@@ -171,26 +176,22 @@ export function AssignTaskModal({
             With none created yet it says so and points at where they are made,
             rather than showing a required dropdown with nothing in it.
           */}
-          {scope === 'INTERNAL' &&
-            (internalProjects.length > 0 ? (
-              <FieldSelect
-                label="Which work"
-                value={internalProjectId}
-                onChange={setInternalProjectId}
-                required
-                placeholder="Choose…"
-                options={internalProjects.map((p) => ({ value: p.id, label: p.name }))}
-                hint="The studio's own work — a hiring round, the website, compliance."
-              />
-            ) : (
-              <p className="rounded-xl border border-border bg-subtle/40 px-3 py-2.5 text-xs text-secondary">
-                There is no internal work to file this under yet. Add one on{' '}
-                <a href="/live-work?tab=internal" className="font-medium text-primary hover:underline">
-                  Live work → Internal
-                </a>{' '}
-                first.
-              </p>
-            ))}
+          {/* The same question, worded the same, as the New task form — with
+              No project for a one-off job, so a person can be handed one even
+              before any internal project exists. */}
+          {scope === 'INTERNAL' && (
+            <FieldSelect
+              label="Which internal project?"
+              value={internalProjectId}
+              onChange={setInternalProjectId}
+              required
+              placeholder="Choose…"
+              options={[
+                { value: NO_PROJECT, label: 'No project (general internal task)' },
+                ...internalProjects.map((p) => ({ value: p.id, label: p.name })),
+              ]}
+            />
+          )}
 
           {scope === 'CLIENT' && (
             <>
@@ -217,27 +218,28 @@ export function AssignTaskModal({
 
           {/* Who wanted it done. The assignee is why this modal opened, so
               this is the only person still to name. */}
+          <AssignedByField value={assignedById} onChange={setAssignedById} />
           <FieldSelect
-            label="Assigned by"
-            value={assignedById}
-            onChange={setAssignedById}
-            placeholder="Nobody in particular"
-            options={personOptions(team)}
+            label="Type of work"
+            value={taskType}
+            onChange={setTaskType}
+            required
+            placeholder="Choose…"
+            options={TASK_TYPE_OPTIONS}
           />
 
           <div className="grid grid-cols-2 gap-4">
             <Field label="Due date" type="date" value={dueDate} onChange={setDueDate} required />
             <DueTimeField value={dueTime} onChange={setDueTime} />
             <FieldSelect label="Priority" value={priority} onChange={setPriority} options={PRIORITY_OPTIONS} />
-            <FieldSelect
-              label="Type of work"
-              value={taskType}
-              onChange={setTaskType}
-              required
-              placeholder="Choose…"
-              options={TASK_TYPE_OPTIONS}
-            />
           </div>
+          <FieldSelect
+            label="Repeat"
+            value={repeat}
+            onChange={setRepeat}
+            options={repeatOptions(dueDate)}
+            hint={repeat ? REPEAT_HINT : undefined}
+          />
           <Field label="Description" value={description} onChange={setDescription} textarea rows={3} />
           {error && <ErrorNote>{error}</ErrorNote>}
         </ModalBody>

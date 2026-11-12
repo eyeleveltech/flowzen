@@ -12,7 +12,7 @@
  * retainer project a task lands on is exactly what does not apply here.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { api, ApiError } from '@/lib/api-v2';
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal';
@@ -54,7 +54,26 @@ export function NewInternalTaskModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const canSave = Boolean(title.trim()) && Boolean(dueDate) && Boolean(taskType) && assigneeIds.length > 0 && !saving;
+  // A fresh form every time it opens: it stays mounted while closed, so what
+  // was typed last time — and its error — used to be waiting the next time.
+  useEffect(() => {
+    if (!open) return;
+    setTitle('');
+    setAssigneeIds([]);
+    setAssignedById('');
+    setTaskType('');
+    setPriority('MEDIUM');
+    setDueDate('');
+    setDueTime('');
+    setRepeat('');
+    setDescription('');
+    setError(null);
+  }, [open]);
+
+  // Nobody picked means you, as on every other task form. It used to need a
+  // name here, and somebody who may only add their own work sees no picker —
+  // so this form could never be saved by them.
+  const canSave = Boolean(title.trim()) && Boolean(dueDate) && Boolean(taskType) && !saving;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,8 +85,7 @@ export function NewInternalTaskModal({
         title: title.trim(),
         workType: 'INTERNAL',
         internalProjectId: project.id,
-        assigneeIds,
-        assigneeId: assigneeIds[0],
+        assigneeIds: assigneeIds.length > 0 ? assigneeIds : undefined,
         assignedById: assignedById || undefined,
         taskType: taskType || undefined,
         dueDate,
@@ -77,12 +95,6 @@ export function NewInternalTaskModal({
         notes: description.trim() || undefined,
       });
       toast.success('Task added');
-      setTitle('');
-      setAssigneeIds([]);
-      setDueDate('');
-    setDueTime('');
-    setRepeat('');
-      setDescription('');
       onCreated();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not add that task');
@@ -130,15 +142,7 @@ export function NewInternalTaskModal({
             disabled={saving}
           />
 
-          <Field
-            label="Description"
-            value={description}
-            onChange={setDescription}
-            textarea
-            rows={3}
-            disabled={saving}
-            placeholder="Anything whoever picks this up needs to know"
-          />
+          <Field label="Description" value={description} onChange={setDescription} textarea rows={3} disabled={saving} />
         </ModalBody>
 
         <ModalFooter>

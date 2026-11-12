@@ -44,6 +44,7 @@ import { useAuthStore } from '@/stores';
 import { TASK_FILTER_OPTIONS, matchesStatusFilter, isTaskLate } from '@/components/retainers/task-shared';
 import { NewProformaModal } from '@/components/clients/NewProformaModal';
 import { NewWorkTaskModal } from '@/components/work/NewWorkTaskModal';
+import { TaskDrawer, type DrawerTask } from '@/components/work/TaskDrawer';
 import { NewWorkCostModal } from '@/components/work/NewWorkCostModal';
 import { EditCostModal } from '@/components/work/EditCostModal';
 import { GstAmountFields } from '@/components/work/GstAmountFields';
@@ -261,6 +262,13 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const [editingCost, setEditingCost] = useState<any>(null);
   const [billing, setBilling] = useState<{ mode: 'INVOICE' | 'PAYMENT'; milestone: MilestoneForBilling } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  /*
+   * The task open in the drawer. A row here could not be opened at all — the
+   * table showed a title, a person and a date, and the notes, the history, who
+   * else is on it and the edit form were on every other task list but this
+   * one. Same drawer as the retainer project page and My Work.
+   */
+  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   /** Today, for the late comparison in the task table. */
   const todayStr = new Date().toISOString().slice(0, 10);
   const { user: me } = useAuthStore();
@@ -975,22 +983,28 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                   </thead>
                   <tbody className="divide-y divide-border">
                     {visibleTasks.map((t) => {
-                      const late =
-                        t.status !== 'DONE' &&
-                        t.status !== 'CANCELLED' &&
-                        t.dueDate.slice(0, 10) < todayStr;
+                      const late = isTaskLate(t, todayStr);
                       return (
-                        <tr key={t.id} className="transition-colors hover:bg-subtle">
+                        <tr
+                          key={t.id}
+                          onClick={() => setOpenTaskId(t.id)}
+                          className="cursor-pointer transition-colors hover:bg-subtle"
+                        >
                           <td>
-                            <span
-                              className={`font-medium ${
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenTaskId(t.id);
+                              }}
+                              className={`rounded-sm text-left font-medium outline-none hover:underline focus-visible:ring-2 focus-visible:ring-primary/40 ${
                                 t.status === 'DONE' || t.status === 'CANCELLED'
                                   ? 'text-secondary line-through'
                                   : 'text-primary'
                               }`}
                             >
                               {t.title}
-                            </span>{' '}
+                            </button>{' '}
                             <RepeatMark repeat={t.repeat} />
                             {t.status === 'ON_HOLD' && t.waitingOn && (
                               <p className="mt-0.5 text-micro text-secondary">
@@ -1029,7 +1043,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                               {getPriorityLabel(t.priority)}
                             </span>
                           </td>
-                          <td>
+                          <td onClick={(e) => e.stopPropagation()}>
                             <Select
                               value={t.status}
                               onChange={(v) => void changeTaskStatus(t, v as TStatus)}
@@ -1191,6 +1205,33 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           )}
         </Card>
       )}
+
+      <TaskDrawer
+        task={
+          (() => {
+            const t = tasks.find((x) => x.id === openTaskId);
+            return t
+              ? ({
+                  ...t,
+                  // Context this page has and the task record does not, so the
+                  // drawer names the client and the project rather than "Work".
+                  hasClient: true,
+                  companyId: project.company.id,
+                  clientName: project.company.name,
+                  clientHref: `/companies/${project.company.id}`,
+                  projectName: project.name,
+                  projectHref: `/projects/${id}`,
+                } as unknown as DrawerTask)
+              : null;
+          })()
+        }
+        statusOptions={TASK_STATUS_OPTIONS}
+        team={team}
+        busy={busyId === openTaskId}
+        onClose={() => setOpenTaskId(null)}
+        onStatusChange={(t, next) => void changeTaskStatus(t as unknown as Task, next as TStatus)}
+        onChanged={() => void load()}
+      />
 
       <NewWorkTaskModal
         open={addingTask}

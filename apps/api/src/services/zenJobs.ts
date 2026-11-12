@@ -551,7 +551,8 @@ async function prepareTaskChanges(args: Record<string, unknown>, orgId: string, 
   // One task named outright may be finished; a set is the work still owed.
   const status = args.status ? String(args.status) : args.task ? null : 'OPEN';
   if (status === 'OPEN') where.push({ status: { in: ['TODO', 'IN_PROGRESS', 'ON_HOLD'] } });
-  else if (status === 'LATE') where.push({ status: { in: ['TODO', 'IN_PROGRESS', 'ON_HOLD'] }, dueDate: { lt: new Date(`${today}T00:00:00Z`) } });
+  // Late is never on hold — the app's one rule (internalWork.ts isLate).
+  else if (status === 'LATE') where.push({ status: { in: ['TODO', 'IN_PROGRESS'] }, dueDate: { lt: new Date(`${today}T00:00:00Z`) } });
   else if (status) where.push({ status });
 
   const tasks = await prisma.task.findMany({ where: { AND: where } as never, select: TASK_SELECT, orderBy: { dueDate: 'asc' }, take: 51 });
