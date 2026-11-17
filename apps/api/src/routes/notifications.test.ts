@@ -4,6 +4,7 @@ import { app } from '../index.js';
 import { prisma } from '../lib/prisma.js';
 import { signJwt } from '../utils/jwt.js';
 import { RolePreset } from '@prisma/client';
+import { forgetAlertClauses } from '../services/alertClauseCache.js';
 
 /**
  * The bell, and the two things it was getting wrong.
@@ -98,7 +99,11 @@ beforeEach(() => {
     );
   };
 
-  (prisma.alert.findMany as any).mockImplementation(async ({ where }: any) => matches(where));
+  // The bell reads the page with my reads on each row, and the counts as one
+  // pass over what I may see (Perf Plan 2) — answered here as the database would.
+  (prisma.alert.findMany as any).mockImplementation(async ({ where, select }: any) =>
+    select?._count ? matches(where).map(() => ({ _count: { reads: 0 } })) : matches(where).map((a) => ({ ...a, reads: [] })),
+  );
   (prisma.alert.count as any).mockImplementation(async ({ where }: any) => matches(where).length);
   (prisma.alertRead.findMany as any).mockResolvedValue([]);
   (prisma.alertRead.createMany as any).mockResolvedValue({ count: 0 });
@@ -155,8 +160,26 @@ describe('who is told what', () => {
 describe('read is mine, not the organisation’s', () => {
   it('counts unread against my own reads', async () => {
     await request(app).get('/api/notifications').set(...auth('head'));
-    const countCall = (prisma.alert.count as any).mock.calls.at(-1)[0];
-    expect(countCall.where.reads).toEqual({ none: { userId: 'usr-head' } });
+    const calls = (prisma.alert.findMany as any).mock.calls.map((c: any) => c[0]);
+    // The page carries whether I read each row on it, and nobody else's reads.
+    expect(calls.find((c: any) => c.take)?.include.reads).toEqual({ where: { userId: 'usr-head' }, select: { id: true } });
+    // The badge counts my reads, across everything I may see.
+    expect(calls.find((c: any) => c.select?._count)?.select._count.select.reads).toEqual({ where: { userId: 'usr-head' } });
+  });
+
+  it('gives the total and the unread count from the same read', async () => {
+    // Three of the alerts the Head may see; one of them they have read.
+    (prisma.alert.findMany as any).mockImplementation(async ({ select, take }: any) => {
+      if (select?._count) return [{ _count: { reads: 1 } }, { _count: { reads: 0 } }, { _count: { reads: 0 } }];
+      if (take) return [{ ...ALERTS[0], reads: [{ id: 'r1' }] }];
+      return [];
+    });
+    const res = await request(app).get('/api/notifications').set(...auth('head'));
+    expect(res.body.total).toBe(3);
+    expect(res.body.unreadCount).toBe(2);
+    expect(res.body.notifications[0].read).toBe(true);
+    expect(prisma.alert.count).not.toHaveBeenCalled();
+    expect(prisma.alertRead.findMany).not.toHaveBeenCalled();
   });
 
   it('marks all read for me alone', async () => {
@@ -271,6 +294,31 @@ describe('your own work reaches you, whatever else is closed', () => {
     const call = (prisma.task.findMany as any).mock.calls.at(-1)[0];
     expect(call.where.assignees).toEqual({ some: { userId: 'usr-emp' } });
     expect(call.where.deletedAt).toBeNull();
+    // Open work only (Perf Plan 2): not every task they ever finished.
+    expect(call.where.status).toEqual({ notIn: ['DONE', 'CANCELLED'] });
+  });
+
+  it('works out who is told what once a minute, not on every open', async () => {
+    (prisma.task.findMany as any).mockClear();
+    await request(app).get('/api/notifications').set(...auth('employee'));
+    await request(app).get('/api/notifications').set(...auth('employee'));
+    await request(app).patch('/api/notifications/read-all').set(...auth('employee'));
+    expect(prisma.task.findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('works it out again when new alerts are announced', async () => {
+    (prisma.task.findMany as any).mockClear();
+    await request(app).get('/api/notifications').set(...auth('employee'));
+    forgetAlertClauses('org-1');
+    await request(app).get('/api/notifications').set(...auth('employee'));
+    expect(prisma.task.findMany).toHaveBeenCalledTimes(2);
+  });
+
+  it('never answers one person from another’s', async () => {
+    const emp = await rulesFor('employee');
+    const head = await rulesFor('head');
+    expect(emp).not.toEqual(head);
+    expect(await rulesFor('employee')).toEqual(emp);
   });
 
   it('does not run that query for somebody who can see the team anyway', async () => {

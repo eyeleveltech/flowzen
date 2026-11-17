@@ -1,6 +1,6 @@
 'use client';
 
-import { motion, AnimatePresence } from 'framer-motion';
+import { m, AnimatePresence } from 'framer-motion';
 import { useConfirmStore } from '@/stores';
 import { AlertTriangle, Info, HelpCircle, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -105,7 +105,7 @@ export function ConfirmDialog() {
           className="fixed inset-0 z-999 flex items-center justify-center p-4"
         >
           {/* Backdrop */}
-          <motion.div
+          <m.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -114,7 +114,7 @@ export function ConfirmDialog() {
           />
 
           {/* Modal Container */}
-          <motion.div
+          <m.div
             initial={{ opacity: 0, scale: 0.95, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -186,7 +186,7 @@ export function ConfirmDialog() {
                 {confirmText}
               </button>
             </div>
-          </motion.div>
+          </m.div>
         </div>
       )}
     </AnimatePresence>

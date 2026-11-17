@@ -576,6 +576,87 @@ describe('a model that thinks before it looks', () => {
     expect(JSON.stringify((prisma.zenMessage.create as any).mock.calls)).toContain("Zen can't help with that one.");
     expect(JSON.stringify((prisma.zenMessage.create as any).mock.calls)).not.toContain('I will start');
   });
+
+  /*
+   * Effort (Perf Plan 3): low by default, medium on "Think harder" — and the
+   * same level on every round of one answer, so its prompt cache holds.
+   */
+  const twoRounds = () => {
+    const seen: AiRequest[] = [];
+    const spy = vi.spyOn(anthropic, 'complete').mockImplementation(async (r) => {
+      seen.push(structuredClone(r));
+      return seen.length === 1
+        ? lookup([{ type: 'tool_use', id: 'toolu_1', name: 'searchClients', input: {} }])
+        : { text: 'Da One.', calls: [], stop: 'end', usage: { input: 20, output: 8, cacheRead: 3000, cacheCreation: 0 } };
+    });
+    return { seen, spy };
+  };
+
+  it('answers at low effort by default, on every round', async () => {
+    const { seen, spy } = twoRounds();
+    await request(app).post('/api/assistant/ask').set(...auth(MANAGEMENT)).send({ question: 'who owes us' });
+    spy.mockRestore();
+    expect(seen.map((r) => r.effort)).toEqual(['low', 'low']);
+  });
+
+  it('thinks harder at medium, on every round, when asked to', async () => {
+    const { seen, spy } = twoRounds();
+    await request(app).post('/api/assistant/ask').set(...auth(MANAGEMENT)).send({ question: 'who owes us', harder: true });
+    spy.mockRestore();
+    expect(seen.map((r) => r.effort)).toEqual(['medium', 'medium']);
+  });
+
+  it('thinks harder on the streamed route too', async () => {
+    const seen: AiRequest[] = [];
+    const stream = vi.spyOn(anthropic, 'stream').mockImplementation((r) => {
+      seen.push(structuredClone(r));
+      return (async function* () {
+        yield { text: 'Da One.' };
+        return { text: 'Da One.', calls: [], stop: 'end' } as AiReply;
+      })();
+    });
+    await request(app).post('/api/assistant/stream').set(...auth(MANAGEMENT)).send({ question: 'who owes us', harder: true });
+    await request(app).post('/api/assistant/stream').set(...auth(MANAGEMENT)).send({ question: 'who owes us' });
+    stream.mockRestore();
+    expect(seen.map((r) => r.effort)).toEqual(['medium', 'low']);
+  });
+
+  it('leaves the first answer out when the same question is asked again, harder', async () => {
+    const history = [
+      { from: 'you', text: 'what is due this week' },
+      { from: 'assistant', text: 'Three invoices.' },
+      { from: 'you', text: 'who owes us' },
+      { from: 'assistant', text: 'Nobody.' },
+    ];
+    const { seen, spy } = twoRounds();
+    await request(app).post('/api/assistant/ask').set(...auth(MANAGEMENT)).send({ question: 'who owes us', harder: true, history });
+    spy.mockRestore();
+    const said = seen[0].turns.filter((t) => t.role !== 'tool').map((t) => ('text' in t ? t.text : ''));
+    // The earlier exchange stays; the answer being redone does not.
+    expect(said).toEqual(['what is due this week', 'Three invoices.', 'who owes us']);
+
+    // Asked normally, the whole conversation goes.
+    const again = twoRounds();
+    await request(app).post('/api/assistant/ask').set(...auth(MANAGEMENT)).send({ question: 'who owes us', history });
+    again.spy.mockRestore();
+    expect(again.seen[0].turns.filter((t) => t.role === 'user')).toHaveLength(3);
+  });
+
+  it('keeps how long the answer took with the question it answered', async () => {
+    const { spy } = twoRounds();
+    await request(app).post('/api/assistant/ask').set(...auth(MANAGEMENT)).send({ question: 'who owes us' });
+    spy.mockRestore();
+    const asked = (prisma.activity.create as any).mock.calls.map((c: any) => c[0].data).find((d: any) => d.verb === 'assistant_asked');
+    expect(asked.payload.timing).toMatchObject({
+      effort: 'low',
+      rounds: 2,
+      input: 30,
+      output: 13,
+      cacheRead: 3000,
+    });
+    expect(asked.payload.timing.totalMs).toBeGreaterThanOrEqual(0);
+    expect(asked.payload.timing.firstTextMs).not.toBeNull();
+  });
 });
 
 /**

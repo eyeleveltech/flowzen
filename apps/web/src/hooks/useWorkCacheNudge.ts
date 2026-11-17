@@ -5,10 +5,11 @@
  *
  * ─── The gap this closes ────────────────────────────────────────────────────
  *
- * The app is built two ways at once. The list screens — live-work, money,
- * my-work, companies — read through React Query. The detail screens —
- * `retainers/[id]`, `projects/[id]`, `companies/[id]` — predate that and fetch
- * into `useState`, holding no `queryClient` at all between them.
+ * The list screens — live-work, money, my-work, companies — and the detail
+ * screens — `retainers/[id]`, `projects/[id]`, `companies/[id]` — keep
+ * different caches. The detail screens read through React Query too since
+ * Perf Plan 3, under their own singular keys (`['retainer', id]`,
+ * `['project', id]`, `['company', id]`), and re-ask on every visit.
  *
  * That works fine for themselves: each reloads its own data after a write. But
  * completing a task on a retainer moves a figure on /live-work, and closing a

@@ -34,7 +34,9 @@
  */
 
 import { localToday } from '@/lib/utils';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import dynamic from 'next/dynamic';
+import { useQuery } from '@tanstack/react-query';
 import { useWorkCacheNudge } from '@/hooks/useWorkCacheNudge';
 import { usePageHeader } from '@/hooks/usePageHeader';
 import { Breadcrumbs } from '@/components/ui/breadcrumbs';
@@ -45,8 +47,8 @@ import { useConfirmStore } from '@/stores/confirm';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { ChevronLeft, ChevronRight, CircleSlash, LockOpen, Pencil, Plus, Printer, ReceiptText, RotateCcw, Trash2 } from 'lucide-react';
-import { api, ApiError, formatMoney, formatDate, type OrgConfig } from '@/lib/api-v2';
-import { useTeamMembers } from '@/hooks/queries';
+import { api, ApiError, formatMoney, formatDate } from '@/lib/api-v2';
+import { useConfig, useTeamMembers } from '@/hooks/queries';
 import toast from 'react-hot-toast';
 import { Button } from '@/components/ui/button';
 import { Badge, type Tone } from '@/components/ui/badge';
@@ -60,21 +62,56 @@ import { NotFoundPanel } from '@/components/ui/not-found-panel';
 import { PageSkeleton } from '@/components/ui/skeleton-loaders';
 import { StatTile } from '@/components/ui/stat-tile';
 import { Tabs, useTabState, type TabDef } from '@/components/ui/tabs';
-import { TaskDrawer, type DrawerTask } from '@/components/work/TaskDrawer';
-import { NewWorkTaskModal } from '@/components/work/NewWorkTaskModal';
-import { RetainerProjectModal } from '@/components/work/RetainerProjectModal';
-import { EditRetainerModal } from '@/components/work/EditRetainerModal';
 import type { RetainerBilling, RetainerProject } from '@/lib/api-v2';
 import { moneyDate, paymentModeLabel } from '@/lib/money';
-import { NewWorkCostModal } from '@/components/work/NewWorkCostModal';
-import { EditCostModal } from '@/components/work/EditCostModal';
 import { RecordPaymentModal } from '@/components/work/RecordPaymentModal';
 import { RetainerBillingStrip, type BillingSubject } from '@/components/work/RetainerBilling';
-import { RetainerBillingHistory } from '@/components/work/RetainerBillingBoard';
 import { billingStepFor } from '@/lib/retainerBilling';
 import { invoicedAndDue } from '@/lib/invoiceDates';
 import { useZenForm } from '@/lib/zenForms';
 import { getPriorityDot, getPriorityLabel } from '@/lib/priority';
+
+/*
+ * Fetched the first time they are wanted, not with the page (Perf Plan 3).
+ *
+ * Each of these is a form behind a button, or the Billing tab's board — none
+ * is on the screen when the page first draws, so none of their code has to
+ * arrive with it. `RecordPaymentModal` stays a plain import: the billing strip
+ * above the tabs brings it in anyway, so splitting it off here would save
+ * nothing and only add a wait to the first Record payment.
+ */
+const NewWorkTaskModal = dynamic(
+  () => import('@/components/work/NewWorkTaskModal').then((m) => m.NewWorkTaskModal),
+  { ssr: false },
+);
+const NewWorkCostModal = dynamic(
+  () => import('@/components/work/NewWorkCostModal').then((m) => m.NewWorkCostModal),
+  { ssr: false },
+);
+const EditCostModal = dynamic(
+  () => import('@/components/work/EditCostModal').then((m) => m.EditCostModal),
+  { ssr: false },
+);
+const RetainerProjectModal = dynamic(
+  () => import('@/components/work/RetainerProjectModal').then((m) => m.RetainerProjectModal),
+  { ssr: false },
+);
+const EditRetainerModal = dynamic(
+  () => import('@/components/work/EditRetainerModal').then((m) => m.EditRetainerModal),
+  { ssr: false },
+);
+const RetainerBillingHistory = dynamic(
+  () => import('@/components/work/RetainerBillingBoard').then((m) => m.RetainerBillingHistory),
+  { ssr: false },
+);
+
+/**
+ * A 4xx is the server's answer — not here, not yours — and asking again cannot
+ * change it, so it shows at once instead of after a retry. Anything else (a
+ * dropped connection, a 500) gets the app's usual one more try.
+ */
+const retryUnlessClientError = (failureCount: number, error: unknown) =>
+  !(error instanceof ApiError && error.status >= 400 && error.status < 500) && failureCount < 1;
 
 type RStatus = 'ACTIVE' | 'STOPPED';
 type TStatus = 'TODO' | 'IN_PROGRESS' | 'ON_HOLD' | 'DONE' | 'CANCELLED';
@@ -245,15 +282,89 @@ export default function RetainerMonthCardPage() {
   const confirm = useConfirmStore((st) => st.confirm);
   const [resuming, setResuming] = useState(false);
 
-  const [retainer, setRetainer] = useState<Retainer | null>(null);
-  const [monthCard, setMonthCard] = useState<MonthCard | null>(null);
-  const [config, setConfig] = useState<OrgConfig | null>(null);
+  /*
+   * The retainer, its month card and the org settings, through React Query
+   * (Perf Plan 3).
+   *
+   * They used to be fetched into state on every visit, so coming back to a
+   * retainer — or stepping back to a month just looked at — drew the skeleton
+   * and waited for the same answers again. Cached, the screen draws at once
+   * and asks again behind it. `staleTime: 0` is what makes it always ask: a
+   * task finished on one of this retainer's project pages moves the figures
+   * here, and nothing over there knows these keys to say so.
+   *
+   * All three start together. The month is the address's, or this one — never
+   * something the retainer's answer has to supply — so the month card waits
+   * for nothing.
+   *
+   * `['retainer', …]`, singular, on purpose: `['retainers']` is the list
+   * screen's, invalidated by useWorkCacheNudge and the list's own writes, and
+   * its rows are a different shape.
+   */
+  const configQuery = useConfig();
+  const config = configQuery.data ?? null;
+  const retainerQuery = useQuery({
+    queryKey: ['retainer', id],
+    queryFn: async () => ((await api.retainers.get(id)).retainer ?? null) as Retainer | null,
+    staleTime: 0,
+    retry: retryUnlessClientError,
+  });
+  const monthCardQuery = useQuery({
+    queryKey: ['retainer', id, 'month', month],
+    queryFn: async () => {
+      try {
+        const res = await api.retainers.getMonthCard(id, month);
+        // Every write on this page ends here. A task closed or a month
+        // reopened moves a figure on /live-work and /money too, and this page
+        // holds none of their caches -- see useWorkCacheNudge for why this is
+        // free.
+        nudgeWorkCaches();
+        return (res.monthCard ?? null) as MonthCard | null;
+      } catch (e) {
+        // A month with no card — before the retainer started, or one the roll
+        // has not reached — is an answer, not a failure. Kept as one, so a
+        // write that removes this month's card (stopping the retainer) shows
+        // the empty month rather than the card it used to have.
+        if (e instanceof ApiError && e.status === 404) return null;
+        throw e;
+      }
+    },
+    staleTime: 0,
+    retry: retryUnlessClientError,
+  });
+  const retainer = retainerQuery.data ?? null;
+  // Any other failure reads as "no card here" too, as it always has — unless a
+  // card is already on screen, which a failed refresh behind it leaves alone.
+  const monthCard = monthCardQuery.data ?? null;
   const team = useTeamMembers();
-  const [loadingRetainer, setLoadingRetainer] = useState(true);
+  // The skeleton is the first load's only. A retainer that failed is not kept
+  // waiting on the settings before it says so.
+  const loadingRetainer = retainerQuery.isPending || (configQuery.isPending && !retainerQuery.isError);
   /** Why the retainer did not load — a 404 is "isn't here", anything else "couldn't load". */
-  const [loadFailure, setLoadFailure] = useState<unknown>(null);
-  const [loadingMonth, setLoadingMonth] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const loadFailure: unknown = retainerQuery.error ?? configQuery.error;
+  const loadingMonth = monthCardQuery.isPending;
+  /** A refresh that failed with the retainer already on screen — shown until dismissed, or the next one works. */
+  const [dismissedError, setDismissedError] = useState<unknown>(null);
+  const error =
+    retainerQuery.error && retainerQuery.error !== dismissedError
+      ? retainerQuery.error instanceof Error
+        ? retainerQuery.error.message
+        : 'Could not load this retainer'
+      : null;
+  /*
+   * After a write: the same requests again, awaited where the old reloads
+   * were, so the screen shows what was saved. What is on screen stays there
+   * while they run, rather than going back to the skeleton.
+   */
+  const reloadRetainer = () => retainerQuery.refetch();
+  const reloadMonthCard = () => monthCardQuery.refetch();
+  /*
+   * The new-task form's starting place, one object for as long as the card is
+   * the same one. The form resets itself whenever this changes, and a cached
+   * screen can re-render under an open form when the refresh behind it lands —
+   * a fresh literal each render would wipe what was being typed.
+   */
+  const taskTarget = useMemo(() => ({ kind: 'MONTH_CARD' as const, monthCardId: monthCard?.id ?? '' }), [monthCard?.id]);
   /*
    * The tabs, defined once — the row that draws them and the hook that decides
    * which is open read the same list, so a tab cannot be shown and not
@@ -307,6 +418,14 @@ export default function RetainerMonthCardPage() {
   const [zenForm, zenFormOpened] = useZenForm();
   const [addingTask, setAddingTask] = useState(false);
   const [addingCost, setAddingCost] = useState(false);
+  /*
+   * Whether each of those two forms has been opened yet. Their code is fetched
+   * on the first open, and after that they stay mounted: they close with an
+   * exit animation, which a form taken out of the page cannot play. The same
+   * latch as the command palette's.
+   */
+  const [taskFormLoaded, setTaskFormLoaded] = useState(false);
+  const [costFormLoaded, setCostFormLoaded] = useState(false);
   /** The cost row being corrected, if any. */
   const [editingCost, setEditingCost] = useState<Cost | null>(null);
   const [stopping, setStopping] = useState(false);
@@ -388,47 +507,11 @@ export default function RetainerMonthCardPage() {
     try {
       await api.costs.remove(c.id);
       toast.success('Cost removed');
-      await loadMonthCard();
+      await reloadMonthCard();
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Could not remove that cost');
     }
   };
-
-  const loadRetainer = useCallback(async () => {
-    setLoadingRetainer(true);
-    try {
-      const [rRes, cfg] = await Promise.all([api.retainers.get(id), api.config.get()]);
-      setRetainer(rRes.retainer as Retainer);
-      setConfig(cfg);
-      setError(null);
-      setLoadFailure(null);
-    } catch (e) {
-      setLoadFailure(e);
-      setError(e instanceof Error ? e.message : 'Could not load this retainer');
-    } finally {
-      setLoadingRetainer(false);
-    }
-  }, [id]);
-
-  const loadMonthCard = useCallback(async () => {
-    setLoadingMonth(true);
-    try {
-      const res = await api.retainers.getMonthCard(id, month);
-      setMonthCard(res.monthCard as MonthCard);
-      // Every write on this page ends here. A task closed or a month reopened
-      // moves a figure on /live-work and /money too, and this page holds none
-      // of their caches -- see useWorkCacheNudge for why this is free.
-      nudgeWorkCaches();
-    } catch {
-      setMonthCard(null);
-    } finally {
-      setLoadingMonth(false);
-    }
-  }, [id, month, nudgeWorkCaches]);
-
-  useEffect(() => {
-    void loadRetainer();
-  }, [loadRetainer]);
 
   const resume = async () => {
     if (!retainer) return;
@@ -447,18 +530,13 @@ export default function RetainerMonthCardPage() {
           ? 'Retainer resumed. This month was closed when it stopped — an admin can reopen it.'
           : 'Retainer resumed',
       );
-      await loadRetainer();
-      await loadMonthCard();
+      await Promise.all([reloadRetainer(), reloadMonthCard()]);
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Could not resume this retainer');
     } finally {
       setResuming(false);
     }
   };
-
-  useEffect(() => {
-    void loadMonthCard();
-  }, [loadMonthCard]);
 
   const goToMonth = (next: string) => {
     // Carry the open tab across. Rebuilding the query string from scratch put
@@ -478,13 +556,15 @@ export default function RetainerMonthCardPage() {
 
   if (loadingRetainer) return <PageSkeleton />;
 
-  if (!retainer) {
+  // No settings is the same failure it always was: they were one request with
+  // the retainer, and the screen cannot say who may do what without them.
+  if (!retainer || !config) {
     return (
       <NotFoundPanel
         thing="retainer"
         error={loadFailure}
         back={{ href: '/live-work?tab=retainers', label: 'Back to Retainers' }}
-        onRetry={loadRetainer}
+        onRetry={() => Promise.all([retainerQuery.refetch(), configQuery.refetch()])}
       />
     );
   }
@@ -678,7 +758,7 @@ export default function RetainerMonthCardPage() {
     try {
       await api.retainers.reopenMonth(id, month, why.trim());
       toast.success(`${monthLabel(month)} is open again`);
-      await loadMonthCard();
+      await reloadMonthCard();
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Could not reopen that month');
     }
@@ -887,7 +967,10 @@ export default function RetainerMonthCardPage() {
               size="sm"
               variant="secondary"
               icon={Plus}
-              onClick={() => setAddingTask(true)}
+              onClick={() => {
+                setTaskFormLoaded(true);
+                setAddingTask(true);
+              }}
               // A closed month still takes tasks — work runs past the 1st.
               // Only costs are locked, because only costs move its profit.
               disabled={!monthCard}
@@ -899,7 +982,10 @@ export default function RetainerMonthCardPage() {
               size="sm"
               variant="secondary"
               icon={Plus}
-              onClick={() => setAddingCost(true)}
+              onClick={() => {
+                setCostFormLoaded(true);
+                setAddingCost(true);
+              }}
               disabled={!monthCard || monthClosed}
               title={monthClosed ? `${monthLabel(month)} is closed` : undefined}
             >
@@ -975,7 +1061,7 @@ export default function RetainerMonthCardPage() {
         </div>
       </div>
 
-      {error && <ErrorNote onDismiss={() => setError(null)}>{error}</ErrorNote>}
+      {error && <ErrorNote onDismiss={() => setDismissedError(retainerQuery.error)}>{error}</ErrorNote>}
 
       {/*
         The month figures, when there is a month. Above the tabs because
@@ -1104,7 +1190,7 @@ export default function RetainerMonthCardPage() {
           {billingSubject && (
             <RetainerBillingStrip
               subject={billingSubject}
-              onChanged={() => void loadMonthCard()}
+              onChanged={() => void reloadMonthCard()}
               openForm={
                 zenForm &&
                 (zenForm.name === 'monthProforma' || zenForm.name === 'monthInvoice') &&
@@ -1143,7 +1229,7 @@ export default function RetainerMonthCardPage() {
       {tab === 'projects' && ProjectsPanel()}
 
       {tab === 'billing' && (
-        <RetainerBillingHistory retainerId={retainer.id} onChanged={() => void loadMonthCard()} />
+        <RetainerBillingHistory retainerId={retainer.id} onChanged={() => void reloadMonthCard()} />
       )}
 
       {/*
@@ -1403,21 +1489,23 @@ export default function RetainerMonthCardPage() {
           </>
         ))}
 
-      <NewWorkTaskModal
-        open={addingTask}
-        team={team}
-        companyId={retainer.companyId}
-        defaultTarget={{ kind: 'MONTH_CARD', monthCardId: monthCard?.id ?? '' }}
-        retainerProjects={retainer.projects ?? []}
-        // Opened from inside a project, the task belongs to it — asking again
-        // on the form would be asking a question the screen already answered.
-        onClose={() => setAddingTask(false)}
-        onCreated={() => {
-          setAddingTask(false);
-          void loadMonthCard();
-          void loadRetainer();
-        }}
-      />
+      {taskFormLoaded && (
+        <NewWorkTaskModal
+          open={addingTask}
+          team={team}
+          companyId={retainer.companyId}
+          defaultTarget={taskTarget}
+          retainerProjects={retainer.projects ?? []}
+          // Opened from inside a project, the task belongs to it — asking again
+          // on the form would be asking a question the screen already answered.
+          onClose={() => setAddingTask(false)}
+          onCreated={() => {
+            setAddingTask(false);
+            void reloadMonthCard();
+            void reloadRetainer();
+          }}
+        />
+      )}
 
       {editingCost && (
         <EditCostModal
@@ -1425,7 +1513,7 @@ export default function RetainerMonthCardPage() {
           onClose={() => setEditingCost(null)}
           onSaved={() => {
             setEditingCost(null);
-            void loadMonthCard();
+            void reloadMonthCard();
           }}
         />
       )}
@@ -1437,8 +1525,8 @@ export default function RetainerMonthCardPage() {
           onClose={() => setProjectForm(null)}
           onSaved={() => {
             setProjectForm(null);
-            void loadRetainer();
-            void loadMonthCard();
+            void reloadRetainer();
+            void reloadMonthCard();
           }}
         />
       )}
@@ -1458,8 +1546,8 @@ export default function RetainerMonthCardPage() {
           onClose={() => setEditing(false)}
           onSaved={() => {
             setEditing(false);
-            void loadRetainer();
-            void loadMonthCard();
+            void reloadRetainer();
+            void reloadMonthCard();
           }}
         />
       )}
@@ -1470,20 +1558,22 @@ export default function RetainerMonthCardPage() {
         onClose={() => setStopping(false)}
         onStopped={() => {
           setStopping(false);
-          void loadRetainer();
-          void loadMonthCard();
+          void reloadRetainer();
+          void reloadMonthCard();
         }}
       />
 
-      <NewWorkCostModal
-        open={addingCost}
-        target={{ kind: 'MONTH_CARD', monthCardId: monthCard?.id ?? '' }}
-        onClose={() => setAddingCost(false)}
-        onCreated={() => {
-          setAddingCost(false);
-          void loadMonthCard();
-        }}
-      />
+      {costFormLoaded && (
+        <NewWorkCostModal
+          open={addingCost}
+          target={{ kind: 'MONTH_CARD', monthCardId: monthCard?.id ?? '' }}
+          onClose={() => setAddingCost(false)}
+          onCreated={() => {
+            setAddingCost(false);
+            void reloadMonthCard();
+          }}
+        />
+      )}
 
       {/*
         Everything about the task that will not fit in a row a person scans.
@@ -1504,7 +1594,7 @@ export default function RetainerMonthCardPage() {
           onClose={() => setRecordingPayment(false)}
           onRecorded={() => {
             setRecordingPayment(false);
-            void loadMonthCard();
+            void reloadMonthCard();
           }}
         />
       )}

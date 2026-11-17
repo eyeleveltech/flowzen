@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma.js';
 import { emitToOrganization } from '../sse.js';
+import { forgetAlertClauses } from '../services/alertClauseCache.js';
 import { EXTERNAL_RULES } from '../services/alertRules.js';
 import { FOLLOW_UP_TASK_TYPE, proposalFollowUpKey } from '../services/followUpTask.js';
 import { AlertSeverity, TaskWorkType, TaskStatus } from '@prisma/client';
@@ -890,6 +891,51 @@ async function restorePastWithOpenDeals(organizationId: string): Promise<void> {
   }
 }
 
+type OpenAlert = { id: string; rule: string; entityType: string; entityId: string; severity: AlertSeverity; message: string };
+
+/**
+ * What one scan writes, worked out against the alerts already open
+ * (Perf Plan 2, decision 8): one read of the open alerts per organisation,
+ * where each evaluated alert used to ask the database on its own.
+ *
+ * Exactly what the one-at-a-time loop did: an alert still true and changed
+ * is updated; one not open yet is created; the same alert evaluated twice in
+ * one scan is created once and ends with the last evaluation's words.
+ */
+export function planAlertWrites(evaluated: EvaluatedRuleAlert[], open: OpenAlert[]) {
+  const keyOf = (a: { rule: string; entityType: string; entityId: string }) => `${a.rule}:${a.entityType}:${a.entityId}`;
+  // The first open alert per key, as findFirst found one; held as it will
+  // stand after this scan's writes.
+  const existing = new Map<string, { id: string; severity: AlertSeverity; message: string }>();
+  for (const a of open) if (!existing.has(keyOf(a))) existing.set(keyOf(a), { id: a.id, severity: a.severity, message: a.message });
+  const updates = new Map<string, { severity: AlertSeverity; message: string }>();
+  const creates = new Map<string, EvaluatedRuleAlert>();
+  for (const item of evaluated) {
+    const key = keyOf(item);
+    const held = existing.get(key);
+    if (held) {
+      /*
+       * Still true, and it may have got worse. Only new alerts were
+       * written, so one raised at MED never escalated and its words froze:
+       * "due back 0 days ago" a week later, "renewing in 45 days" for six
+       * weeks. The bell, the digest and the brief sort on this severity.
+       */
+      if (held.severity !== item.severity || held.message !== item.message) {
+        held.severity = item.severity;
+        held.message = item.message;
+        updates.set(held.id, { severity: item.severity, message: item.message });
+      }
+    } else {
+      // Evaluated twice in one scan: created once, with the last evaluation's words.
+      creates.set(key, { ...item });
+    }
+  }
+  return {
+    updates: [...updates].map(([id, data]) => ({ id, ...data })),
+    creates: [...creates.values()],
+  };
+}
+
 /**
  * Runs the health scanner across all organizations and updates the Alert table.
  *
@@ -912,45 +958,33 @@ export async function runAgencyHealthScanner(): Promise<number> {
       const evaluated = await evaluateAgencyHealthRules(org.id);
       const stillOpenKeys = new Set(evaluated.map((item) => `${item.rule}:${item.entityType}:${item.entityId}`));
 
-      for (const item of evaluated) {
-        const existing = await prisma.alert.findFirst({
-          where: {
+      // The alerts already open for the rules just evaluated, in one read.
+      const evaluatedRules = [...new Set(evaluated.map((item) => item.rule))];
+      const alreadyOpen =
+        evaluatedRules.length === 0
+          ? []
+          : await prisma.alert.findMany({
+              where: { organizationId: org.id, resolvedAt: null, rule: { in: evaluatedRules } },
+              select: { id: true, rule: true, entityType: true, entityId: true, severity: true, message: true },
+            });
+      const plan = planAlertWrites(evaluated, alreadyOpen);
+      for (const u of plan.updates) {
+        await prisma.alert.update({ where: { id: u.id }, data: { severity: u.severity, message: u.message } });
+      }
+      for (const item of plan.creates) {
+        const created = await prisma.alert.create({
+          data: {
             organizationId: org.id,
             rule: item.rule,
+            severity: item.severity,
             entityType: item.entityType,
             entityId: item.entityId,
-            resolvedAt: null,
+            message: item.message,
           },
         });
-
-        if (existing) {
-          /*
-           * Still true, and it may have got worse. Only new alerts were
-           * written, so one raised at MED never escalated and its words froze:
-           * "due back 0 days ago" a week later, "renewing in 45 days" for six
-           * weeks. The bell, the digest and the brief sort on this severity.
-           */
-          if (existing.severity !== item.severity || existing.message !== item.message) {
-            await prisma.alert.update({
-              where: { id: existing.id },
-              data: { severity: item.severity, message: item.message },
-            });
-          }
-        } else {
-          const created = await prisma.alert.create({
-            data: {
-              organizationId: org.id,
-              rule: item.rule,
-              severity: item.severity,
-              entityType: item.entityType,
-              entityId: item.entityId,
-              message: item.message,
-            },
-          });
-          newAlertIds.push(created.id);
-          totalAlertsProcessed++;
-          createdForOrg++;
-        }
+        newAlertIds.push(created.id);
+        totalAlertsProcessed++;
+        createdForOrg++;
       }
 
       // Everything open that this scan evaluates — not the rules other workers
@@ -976,7 +1010,11 @@ export async function runAgencyHealthScanner(): Promise<number> {
        * alert itself on the wire would hand every connected browser rows the
        * route exists to withhold.
        */
-      if (createdForOrg > 0) emitToOrganization(org.id, 'notification:new', null);
+      if (createdForOrg > 0) {
+        // The bells' held audiences may not reach the new alerts (services/alertClauseCache.ts).
+        forgetAlertClauses(org.id);
+        emitToOrganization(org.id, 'notification:new', null);
+      }
       await pushNewAlerts(org.id, newAlertIds);
     } catch (err) {
       logger.error(`Agency health scanner error for org ${org.id}: ${err}`);
@@ -986,15 +1024,38 @@ export async function runAgencyHealthScanner(): Promise<number> {
   return totalAlertsProcessed;
 }
 
+/*
+ * One scan at a time (Perf Plan 2, decision 8). A scan that runs past the
+ * hour — a slow database, a big studio — used to have the next one start on
+ * top of it, both reading the same open alerts and both creating the same
+ * new ones.
+ */
+let scanning = false;
+
+/** One tick: a scan, unless the last one is still going. Says which. */
+export async function runScannerTick(label = 'Periodic'): Promise<'ran' | 'skipped'> {
+  if (scanning) {
+    logger.warn(`${label} scanner tick skipped: the last scan is still running.`);
+    return 'skipped';
+  }
+  scanning = true;
+  try {
+    await runAgencyHealthScanner();
+  } catch (e) {
+    logger.error(`${label} scanner error: ${e}`);
+  } finally {
+    scanning = false;
+  }
+  return 'ran';
+}
+
 /**
  * Background runner starting the health scanner on an interval.
  */
 export function startAgencyHealthScanner(intervalMs = 3600000) {
   // Run once immediately on start (in non-test environments)
   if (process.env.NODE_ENV !== 'test') {
-    runAgencyHealthScanner().catch((e) => logger.error(`Initial scanner error: ${e}`));
-    setInterval(() => {
-      runAgencyHealthScanner().catch((e) => logger.error(`Periodic scanner error: ${e}`));
-    }, intervalMs);
+    void runScannerTick('Initial');
+    setInterval(() => void runScannerTick(), intervalMs);
   }
 }

@@ -1407,6 +1407,8 @@ export const api = {
          * it something the person was not allowed to read.
          */
         page?: Record<string, string | undefined>;
+        /** "Think harder": the same question again, one effort level up. */
+        harder?: boolean;
         /** The thread this landed in, sent before the first token. */
         onThread?: (conversationId: string) => void;
         /** The stored message id, once the exchange is saved. */
@@ -1442,6 +1444,7 @@ export const api = {
           ...(opts.month ? { month: opts.month } : {}),
           ...(opts.conversationId ? { conversationId: opts.conversationId } : {}),
           ...(opts.page ? { page: opts.page } : {}),
+          ...(opts.harder ? { harder: true } : {}),
         }),
       });
       if (!res.ok || !res.body) {
@@ -1913,7 +1916,13 @@ export const api = {
         tasks: { today: any[]; overdue: any[]; thisWeek: any[]; later: any[]; completed: any[] };
         /** One working day in minutes — what "a day" of elapsed time means. */
         dayMinutes?: number;
+        /** How many days of finished work `completed` holds (14), and whether there is older. */
+        doneDays?: number;
+        hasOlderDone?: boolean;
       }>('/tasks/my'),
+    /** "Show older" under My Work's Done group: finished work before the last 14 days, 50 at a time. */
+    myDoneOlder: (skip: number) =>
+      get<{ success: boolean; tasks: any[]; hasMore: boolean; nextSkip: number }>(`/tasks/my/done?skip=${skip}`),
     list: (params: Record<string, string> = {}) =>
       get<{ success: boolean; tasks: any[] }>(`/tasks?${new URLSearchParams(params)}`),
     /** One task, in a My Work row's shape — what a /my-work?task=… link opens when it is not on your list. */

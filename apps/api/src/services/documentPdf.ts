@@ -18,6 +18,7 @@ import { logger } from '../utils/logger.js';
 import { escapeHtml } from '../utils/html.js';
 import path from 'node:path';
 import puppeteer from 'puppeteer';
+import { createPdfBrowserPool } from './pdfBrowser.js';
 import { SupplyType } from '@prisma/client';
 import { gstStateName } from '@flowzen/shared';
 import { taxByRate, type RateTax } from '../utils/documentTotals.js';
@@ -470,6 +471,31 @@ export async function htmlToPdf(
     preferCSSPageSize?: boolean;
   },
 ): Promise<Buffer> {
+  return pdfBrowsers.withPage(async (page) => {
+    await page.setContent(html, { waitUntil: 'load' });
+    const pdfBuffer = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      displayHeaderFooter: Boolean(options.footerTemplate),
+      ...(options.footerTemplate ? { headerTemplate: options.headerTemplate ?? '<span></span>', footerTemplate: options.footerTemplate } : {}),
+      margin: options.margin,
+      ...(options.preferCSSPageSize ? { preferCSSPageSize: true } : {}),
+    });
+    return Buffer.from(pdfBuffer);
+  });
+}
+
+/**
+ * Chromium, started one way for every PDF, with the flags the server needs.
+ *
+ * If it will not start, say so in those words. A PDF download that fails on
+ * the server and works on a laptop is always one of three things — the binary
+ * is not in the image, the image is older than the Dockerfile that installs
+ * it, or /dev/shm is the default 64MB — and all three surfaced as a 500 with a
+ * stack trace about a socket hangup. The message names the executable it
+ * tried, which is the one fact that separates them.
+ */
+async function launchChromium() {
   /*
    * `--disable-dev-shm-usage`, or this works on a laptop and fails on the server.
    *
@@ -482,20 +508,9 @@ export async function htmlToPdf(
    * compose also asks for a larger /dev/shm, so the flag is the belt and that
    * is the braces — each alone fixes it, and neither costs anything.
    */
-  /*
-   * If Chromium will not start, say so in those words.
-   *
-   * A PDF download that fails on the server and works on a laptop is always
-   * one of three things — the binary is not in the image, the image is older
-   * than the Dockerfile that installs it, or /dev/shm is the default 64MB —
-   * and all three surfaced as a 500 with a stack trace about a socket hangup.
-   * The message names the executable it tried, which is the one fact that
-   * separates them.
-   */
   const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
-  let browser;
   try {
-    browser = await puppeteer.launch({
+    return await puppeteer.launch({
       headless: true,
       ...(executablePath ? { executablePath } : {}),
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
@@ -510,19 +525,11 @@ export async function htmlToPdf(
         `Check that Chromium is installed in the running image and that /dev/shm is not the 64MB default.`,
     );
   }
-  try {
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'load' });
-    const pdfBuffer = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      displayHeaderFooter: Boolean(options.footerTemplate),
-      ...(options.footerTemplate ? { headerTemplate: options.headerTemplate ?? '<span></span>', footerTemplate: options.footerTemplate } : {}),
-      margin: options.margin,
-      ...(options.preferCSSPageSize ? { preferCSSPageSize: true } : {}),
-    });
-    return Buffer.from(pdfBuffer);
-  } finally {
-    await browser.close();
-  }
 }
+
+/*
+ * One browser kept alive for every PDF (Perf Plan 3): a tab per PDF, two at
+ * a time, restarted after a crash, closed after ten idle minutes. See
+ * services/pdfBrowser.ts.
+ */
+const pdfBrowsers = createPdfBrowserPool({ launch: launchChromium, concurrency: 2, idleMs: 10 * 60_000 });

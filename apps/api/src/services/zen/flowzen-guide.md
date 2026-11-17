@@ -67,12 +67,12 @@ Everybody's own list: every task they are on, as lead or helper. Cancelled and d
 
 - **Follow-ups** (only for someone with any): their own open deals and active leads whose next step is due today, overdue (red), or tomorrow — the next step, the client, the date, and "Log touch". There is no bell for an overdue next step; this is where the owner sees it.
 
-- **Tiles:** "Due Today" (with how many are on hold), "Overdue" (with how long the oldest has been open), "Rest of the week" (the next 7 days, today excluded), "Your average close".
+- **Tiles:** "Due Today" (with how many are on hold), "Overdue" (with how long the oldest has been open), "Rest of the week" (the next 7 days, today excluded), "Your average close" (over the last 14 days' finished tasks).
 - **Groups, in order:**
   1. **Overdue:** due before today, not Done.
   2. **Due today**.
-  3. **Later this week:** includes anything due later.
-  4. **Done this week**.
+  3. **Coming up:** the rest of the week and anything due later.
+  4. **Done in the last 14 days:** newest first. **"Show older"** at the bottom loads 50 more finished tasks at a time.
 - **Arranging:** a person can drag tasks into their own order within the first three groups. New tasks land at the top.
 - **Group by:** "When" (the groups above, the default) or "Project or retainer" (the work still to do, under the retainer, project or internal project it belongs to, with "Internal — no project" for one-off studio jobs). Groups fold open and shut and show a count. The choice is remembered in that browser. Dragging works in "When" only.
 - **On each row:** change the due date (click the date) and the status (To do, In progress, On hold, Done, Cancelled). Clicking the task opens its drawer: details, Edit and Delete.
@@ -754,6 +754,8 @@ Management only. Zen can look up:
 - this week's Monday brief.
 
 It can draft a task for the person to create — or several at once from one message (up to 25 on one card, each with Add or Leave out, then one button adds them) — and remember how they like things done. It cannot change anything, and it never sees salaries: salary costs are one summed line, and profit it works out leaves people cost out. Anything it cannot look up — meetings and shoots, the time split itself, usage — it should say so and give the screen's link.
+
+Zen answers quickly by default. **"Think harder"** under an answer asks the same question again and Zen takes more care over it (the first answer is not sent back with it); the new answer appears below, under "Asked again, thinking harder".
 
 ## The API
 Flowzen can be reached by other tools, two ways:

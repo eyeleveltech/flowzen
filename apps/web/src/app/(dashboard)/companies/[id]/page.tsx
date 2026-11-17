@@ -1,7 +1,8 @@
 'use client';
 
 import { localToday } from '@/lib/utils';
-import { useState, useEffect, useCallback, use } from 'react';
+import { useState, useEffect, use } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { InvoiceStatusBadge } from '@/components/work/InvoiceStatusBadge';
 import { moneyDate } from '@/lib/money';
 import { useWorkCacheNudge } from '@/hooks/useWorkCacheNudge';
@@ -11,6 +12,7 @@ import { plural } from '@/lib/utils';
 import { useZenForm } from '@/lib/zenForms';
 import { activityText, activityScope, activityDetail, viaText } from '@/lib/activity';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { 
   Building2, 
@@ -54,7 +56,7 @@ import {
   wordFor,
 } from '@/lib/statusWords';
 import { NextStepLine, isNextStepMissing, useStudioToday } from '@/components/sales/NextStep';
-import { LastContactModal, LogTouchModal, NextStepModal, VerbalYesModal, type SalesTarget } from '@/components/sales/SalesDialogs';
+import type { SalesTarget } from '@/components/sales/SalesDialogs';
 import toast from 'react-hot-toast';
 import { api, ApiError, formatMoney, formatDate } from '@/lib/api-v2';
 import { Button } from '@/components/ui/button';
@@ -63,26 +65,57 @@ import { useAuthStore } from '@/stores';
 import { useConfig } from '@/hooks/queries';
 import { ClientDetailSkeleton } from '@/components/ui/skeleton-loaders';
 import { useConfirmStore } from '@/stores/confirm';
-import { EditCompanyModal } from '@/components/clients/EditCompanyModal';
 import { LoginsCard } from '@/components/logins/LoginsCard';
-import { EditProformaModal } from '@/components/clients/EditProformaModal';
-import { SendDocumentModal } from '@/components/documents/SendDocumentModal';
-import { NewProposalModal } from '@/components/clients/NewProposalModal';
-import { EditProposalModal } from '@/components/clients/EditProposalModal';
-import { AddVersionModal } from '@/components/clients/AddVersionModal';
 import { RowMenu } from '@/components/ui/row-menu';
-import { LoseProposalModal } from '@/components/clients/LoseProposalModal';
-import { NewProformaModal } from '@/components/clients/NewProformaModal';
-import { NewProjectModal, type ProjectInitial } from '@/components/clients/NewProjectModal';
-import { RemoveCompanyModal } from '@/components/clients/RemoveCompanyModal';
-import { EditContactModal } from '@/components/clients/EditContactModal';
-import { NewRetainerModal, type RetainerInitial } from '@/components/clients/NewRetainerModal';
-import { ScheduleFollowUpModal } from '@/components/clients/ScheduleFollowUpModal';
-import { TaskDrawer, type DrawerTask } from '@/components/work/TaskDrawer';
+import type { ProjectInitial } from '@/components/clients/NewProjectModal';
+import type { RetainerInitial } from '@/components/clients/NewRetainerModal';
+import type { DrawerTask } from '@/components/work/TaskDrawer';
 import { withDueTime } from '@/lib/due-time';
 import { RepeatMark } from '@/components/work/RepeatMark';
 import { NotFoundPanel } from '@/components/ui/not-found-panel';
 import { changeTaskStatus } from '@/lib/task-status';
+
+/*
+ * Every dialog on this page, and the task drawer, fetched when first opened
+ * (Perf Plan).
+ *
+ * None of them has anything to show until somebody presses the button that
+ * opens it, and together they are over four thousand lines — more than twice
+ * the page — that every visit downloaded and parsed to show a company. No
+ * SSR: a closed dialog adds nothing to the first paint.
+ */
+const EditCompanyModal = dynamic(() => import('@/components/clients/EditCompanyModal').then((m) => m.EditCompanyModal), { ssr: false });
+const EditProformaModal = dynamic(() => import('@/components/clients/EditProformaModal').then((m) => m.EditProformaModal), { ssr: false });
+const SendDocumentModal = dynamic(() => import('@/components/documents/SendDocumentModal').then((m) => m.SendDocumentModal), { ssr: false });
+const NewProposalModal = dynamic(() => import('@/components/clients/NewProposalModal').then((m) => m.NewProposalModal), { ssr: false });
+const EditProposalModal = dynamic(() => import('@/components/clients/EditProposalModal').then((m) => m.EditProposalModal), { ssr: false });
+const AddVersionModal = dynamic(() => import('@/components/clients/AddVersionModal').then((m) => m.AddVersionModal), { ssr: false });
+const LoseProposalModal = dynamic(() => import('@/components/clients/LoseProposalModal').then((m) => m.LoseProposalModal), { ssr: false });
+const NewProformaModal = dynamic(() => import('@/components/clients/NewProformaModal').then((m) => m.NewProformaModal), { ssr: false });
+const NewProjectModal = dynamic(() => import('@/components/clients/NewProjectModal').then((m) => m.NewProjectModal), { ssr: false });
+const RemoveCompanyModal = dynamic(() => import('@/components/clients/RemoveCompanyModal').then((m) => m.RemoveCompanyModal), { ssr: false });
+const EditContactModal = dynamic(() => import('@/components/clients/EditContactModal').then((m) => m.EditContactModal), { ssr: false });
+const NewRetainerModal = dynamic(() => import('@/components/clients/NewRetainerModal').then((m) => m.NewRetainerModal), { ssr: false });
+const ScheduleFollowUpModal = dynamic(() => import('@/components/clients/ScheduleFollowUpModal').then((m) => m.ScheduleFollowUpModal), { ssr: false });
+const TaskDrawer = dynamic(() => import('@/components/work/TaskDrawer').then((m) => m.TaskDrawer), { ssr: false });
+const LogTouchModal = dynamic(() => import('@/components/sales/SalesDialogs').then((m) => m.LogTouchModal), { ssr: false });
+const NextStepModal = dynamic(() => import('@/components/sales/SalesDialogs').then((m) => m.NextStepModal), { ssr: false });
+const VerbalYesModal = dynamic(() => import('@/components/sales/SalesDialogs').then((m) => m.VerbalYesModal), { ssr: false });
+const LastContactModal = dynamic(() => import('@/components/sales/SalesDialogs').then((m) => m.LastContactModal), { ssr: false });
+
+/**
+ * True from the first time `open` is, and from then on.
+ *
+ * For a lazy dialog the page keeps mounted and opens by a prop: nothing is
+ * fetched until it is first wanted, and once mounted it stays mounted, so it
+ * can still animate its close — the same reason command-palette-mount keeps
+ * the palette once it has been opened.
+ */
+function useOpenedOnce(open: boolean): boolean {
+  const [opened, setOpened] = useState(open);
+  if (open && !opened) setOpened(true);
+  return opened || open;
+}
 
 export default function CompanyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
@@ -93,10 +126,42 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
   const initialTab = (searchParams.get('tab') || 'OVERVIEW').toUpperCase();
   const nudgeWorkCaches = useWorkCacheNudge();
 
-  const [company, setCompany] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  /** Why the company did not load — a 404 is "isn't here", anything else "couldn't load". */
-  const [loadFailure, setLoadFailure] = useState<unknown>(null);
+  /*
+   * The company, through the query cache (Perf Plan): coming back to it
+   * paints what was here last time at once, and re-asks behind it.
+   *
+   * One request carries every tab — people, work, proposals, money and the
+   * audit trail all arrive in GET /companies/:id — so there is nothing to
+   * hold back until a tab is opened.
+   *
+   * - Re-asked on every visit, not only after the app-wide two minutes. Work
+   *   added on a project or retainer screen changes this page and nothing
+   *   there tells this key; a project made from here lands on its own page,
+   *   and Back has to show it.
+   * - One attempt, and made even offline, as the old load was: a 404 says
+   *   "isn't here" at once, and no connection says "couldn't load" rather
+   *   than waiting quietly for one.
+   * - Every load tells the list screens, as the old reload did — it is what
+   *   runs after each write below.
+   */
+  const {
+    data: company = null,
+    /** Why the company did not load — a 404 is "isn't here", anything else "couldn't load". */
+    error: loadFailure,
+    isPending,
+    isFetching,
+    refetch,
+  } = useQuery<any>({
+    queryKey: ['company', id],
+    queryFn: async () => {
+      const res = await api.companies.get(id);
+      nudgeWorkCaches();
+      return (res && (res as any).company) || res || null;
+    },
+    refetchOnMount: 'always',
+    retry: false,
+    networkMode: 'always',
+  });
   const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'WORK' | 'PROPOSALS' | 'MONEY' | 'AUDIT'>(
     ['OVERVIEW', 'WORK', 'PROPOSALS', 'MONEY', 'AUDIT'].includes(initialTab) ? (initialTab as any) : 'OVERVIEW',
   );
@@ -198,6 +263,15 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
    */
   const [openFollowUp, setOpenFollowUp] = useState<any>(null);
   const [followUpBusyId, setFollowUpBusyId] = useState<string | null>(null);
+  /*
+   * The four the page keeps mounted and opens by a prop — the project,
+   * sample and retainer forms, and the follow-up drawer. Each is mounted the
+   * first time it opens (see useOpenedOnce) rather than on every visit.
+   */
+  const projectFormMounted = useOpenedOnce(Boolean(creatingProjectFor));
+  const sampleFormMounted = useOpenedOnce(Boolean(creatingSampleFor));
+  const retainerFormMounted = useOpenedOnce(Boolean(creatingRetainerFor));
+  const followUpDrawerMounted = useOpenedOnce(Boolean(openFollowUp));
   const { confirm } = useConfirmStore();
   const { data: pageConfig } = useConfig();
 
@@ -248,23 +322,12 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
   const [personLinkedin, setPersonLinkedin] = useState('');
   const [addingPerson, setAddingPerson] = useState(false);
 
-  const fetchDetail = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await api.companies.get(id);
-      if (res && (res as any).company) {
-        setCompany((res as any).company);
-      } else {
-        setCompany(res);
-      }
-      setLoadFailure(null);
-      nudgeWorkCaches();
-    } catch (err) {
-      setLoadFailure(err);
-    } finally {
-      setLoading(false);
-    }
-  }, [id, nudgeWorkCaches]);
+  /*
+   * After a write: ask again, and wait for it, so the screen shows what was
+   * saved before the toast or the close. Never throws — a failure lands in
+   * `loadFailure`, as before. The page stays up while it asks.
+   */
+  const fetchDetail = () => refetch();
 
   const reactivate = async () => {
     if (!company) return;
@@ -279,10 +342,6 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
       setReactivating(false);
     }
   };
-
-  useEffect(() => {
-    fetchDetail();
-  }, [fetchDetail]);
 
   /** Typed something, and it is not an address. Blank stays blank — email is optional. */
   const emailLooksWrong = personEmail.trim().length > 0 && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(personEmail.trim());
@@ -410,7 +469,18 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
     }
   };
 
-  if (loading) {
+  /*
+   * The server answered no — gone, or not theirs to see. That stands even
+   * over a copy in the cache, so going Back to a company deleted meanwhile
+   * says "isn't here", as a fresh visit always did. Anything else failing
+   * behind a cached copy (offline, a server error) keeps the copy up, as a
+   * failed reload after a write always has.
+   */
+  const refused = loadFailure instanceof ApiError && loadFailure.status >= 400 && loadFailure.status < 500;
+
+  // Nothing to show yet: the first visit, or Try again after a failure. A
+  // visit with this company cached, and a reload after a write, keep the page.
+  if (isPending || (isFetching && (!company || refused))) {
     return (
       <div className="page-shell">
         <ClientDetailSkeleton />
@@ -418,7 +488,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
     );
   }
 
-  if (!company) {
+  if (!company || refused) {
     return (
       <NotFoundPanel
         thing="company"
@@ -1835,70 +1905,76 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
         />
       )}
 
-      <NewProjectModal
-        deals={unfulfilledDeals('PROJECT')}
-        open={Boolean(creatingProjectFor)}
-        onClose={() => {
-          setCreatingProjectFor(null);
-          setProjectInitial(undefined);
-        }}
-        prefill={creatingProjectFor ?? undefined}
-        initial={projectInitial}
-        onCreated={(id) => {
-          setCreatingProjectFor(null);
-          setProjectInitial(undefined);
-          toast.success('Project created');
-          router.push(`/projects/${id}?from=company`);
-        }}
-      />
+      {projectFormMounted && (
+        <NewProjectModal
+          deals={unfulfilledDeals('PROJECT')}
+          open={Boolean(creatingProjectFor)}
+          onClose={() => {
+            setCreatingProjectFor(null);
+            setProjectInitial(undefined);
+          }}
+          prefill={creatingProjectFor ?? undefined}
+          initial={projectInitial}
+          onCreated={(id) => {
+            setCreatingProjectFor(null);
+            setProjectInitial(undefined);
+            toast.success('Project created');
+            router.push(`/projects/${id}?from=company`);
+          }}
+        />
+      )}
 
       {/* Same form, opened with the question already answered — see
           `forceSample` on the modal. */}
-      <NewProjectModal
-        forceSample
-        open={Boolean(creatingSampleFor)}
-        onClose={() => setCreatingSampleFor(null)}
-        prefill={creatingSampleFor ?? undefined}
-        onCreated={(id) => {
-          setCreatingSampleFor(null);
-          toast.success('Sample work added');
-          router.push(`/projects/${id}?from=company`);
-        }}
-      />
+      {sampleFormMounted && (
+        <NewProjectModal
+          forceSample
+          open={Boolean(creatingSampleFor)}
+          onClose={() => setCreatingSampleFor(null)}
+          prefill={creatingSampleFor ?? undefined}
+          onCreated={(id) => {
+            setCreatingSampleFor(null);
+            toast.success('Sample work added');
+            router.push(`/projects/${id}?from=company`);
+          }}
+        />
+      )}
 
       {/* The same drawer every other task list opens. */}
-      <TaskDrawer
-        // The follow-up as the company has it now, so an edit shows in the
-        // open drawer once the company refetches.
-        task={
-          (openFollowUp
-            ? ((company.tasks ?? []).find((t: any) => t.id === openFollowUp.id) ?? openFollowUp)
-            : null) as DrawerTask | null
-        }
-        statusOptions={[
-          { value: 'TODO', label: 'To do' },
-          { value: 'IN_PROGRESS', label: 'In progress' },
-          { value: 'ON_HOLD', label: 'On hold' },
-          { value: 'DONE', label: 'Done' },
-          { value: 'CANCELLED', label: 'Cancelled' },
-        ]}
-        busy={followUpBusyId === openFollowUp?.id}
-        onClose={() => setOpenFollowUp(null)}
-        onStatusChange={async (t, next) => {
-          setFollowUpBusyId(t.id);
-          try {
-            // A follow-up is about this company, so it has a client to wait on.
-            if (!(await changeTaskStatus({ ...t, hasClient: true }, next))) return;
-            await fetchDetail();
-            setOpenFollowUp(null);
-          } catch (e) {
-            toast.error(e instanceof ApiError ? e.message : 'Could not change that');
-          } finally {
-            setFollowUpBusyId(null);
+      {followUpDrawerMounted && (
+        <TaskDrawer
+          // The follow-up as the company has it now, so an edit shows in the
+          // open drawer once the company refetches.
+          task={
+            (openFollowUp
+              ? ((company.tasks ?? []).find((t: any) => t.id === openFollowUp.id) ?? openFollowUp)
+              : null) as DrawerTask | null
           }
-        }}
-        onChanged={() => void fetchDetail()}
-      />
+          statusOptions={[
+            { value: 'TODO', label: 'To do' },
+            { value: 'IN_PROGRESS', label: 'In progress' },
+            { value: 'ON_HOLD', label: 'On hold' },
+            { value: 'DONE', label: 'Done' },
+            { value: 'CANCELLED', label: 'Cancelled' },
+          ]}
+          busy={followUpBusyId === openFollowUp?.id}
+          onClose={() => setOpenFollowUp(null)}
+          onStatusChange={async (t, next) => {
+            setFollowUpBusyId(t.id);
+            try {
+              // A follow-up is about this company, so it has a client to wait on.
+              if (!(await changeTaskStatus({ ...t, hasClient: true }, next))) return;
+              await fetchDetail();
+              setOpenFollowUp(null);
+            } catch (e) {
+              toast.error(e instanceof ApiError ? e.message : 'Could not change that');
+            } finally {
+              setFollowUpBusyId(null);
+            }
+          }}
+          onChanged={() => void fetchDetail()}
+        />
+      )}
 
       {schedulingFollowUp && (
         <ScheduleFollowUpModal
@@ -1911,22 +1987,24 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
         />
       )}
 
-      <NewRetainerModal
-        deals={unfulfilledDeals('RETAINER')}
-        open={Boolean(creatingRetainerFor)}
-        onClose={() => {
-          setCreatingRetainerFor(null);
-          setRetainerInitial(undefined);
-        }}
-        prefill={creatingRetainerFor ?? undefined}
-        initial={retainerInitial}
-        onCreated={(id) => {
-          setCreatingRetainerFor(null);
-          setRetainerInitial(undefined);
-          toast.success('Retainer created');
-          router.push(`/retainers/${id}?from=company`);
-        }}
-      />
+      {retainerFormMounted && (
+        <NewRetainerModal
+          deals={unfulfilledDeals('RETAINER')}
+          open={Boolean(creatingRetainerFor)}
+          onClose={() => {
+            setCreatingRetainerFor(null);
+            setRetainerInitial(undefined);
+          }}
+          prefill={creatingRetainerFor ?? undefined}
+          initial={retainerInitial}
+          onCreated={(id) => {
+            setCreatingRetainerFor(null);
+            setRetainerInitial(undefined);
+            toast.success('Retainer created');
+            router.push(`/retainers/${id}?from=company`);
+          }}
+        />
+      )}
     </div>
   );
 }

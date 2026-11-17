@@ -17,7 +17,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { motion } from 'framer-motion';
+import { m } from 'framer-motion';
 import { ShieldCheck } from 'lucide-react';
 import { api, ApiError, type OAuthAuthorizeInfo, type OAuthAuthorizeParams } from '@/lib/api-v2';
 import { usePageTitle } from '@/hooks/usePageTitle';
@@ -94,9 +94,9 @@ export default function OAuthAuthorizePage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-subtle px-4 py-10">
-      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="w-full max-w-md">
+      <m.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="w-full max-w-md">
         <div className="mb-6 flex justify-center">
-          <img src="/logo_flowzen.png" alt="Flowzen" width={160} height={44} className="h-10 w-auto object-contain" />
+          <img src="/brand/logo-flowzen-240.webp" alt="Flowzen" width={263} height={240} className="h-10 w-auto object-contain" />
         </div>
 
         <div className="rounded-2xl border border-line bg-white p-6">
@@ -178,7 +178,7 @@ export default function OAuthAuthorizePage() {
             </>
           )}
         </div>
-      </motion.div>
+      </m.div>
     </div>
   );
 }

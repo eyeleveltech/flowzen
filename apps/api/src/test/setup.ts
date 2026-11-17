@@ -13,6 +13,7 @@ import { vi, beforeEach } from 'vitest';
 import { mockDeep, mockReset } from 'vitest-mock-extended';
 import { PrismaClient } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
+import { forgetAllCaches } from '../utils/ttlCache.js';
 
 // Mock the Prisma Client instance
 vi.mock('../lib/prisma.js', () => ({
@@ -22,6 +23,8 @@ vi.mock('../lib/prisma.js', () => ({
 beforeEach(() => {
   // Reset the mock before every test to ensure isolated state
   mockReset(prisma);
+  // And the in-memory caches (Perf Plan 2), so one test's answer never reaches the next.
+  forgetAllCaches();
   /*
    * Nobody is on any calendar event unless a test says so. Every bell and
    * digest asks this (the event alerts' audience is the event's people), and

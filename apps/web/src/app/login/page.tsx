@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { motion } from 'framer-motion';
+import { m } from 'framer-motion';
 import { api, ApiError } from '@/lib/api-v2';
 import { useAuthStore } from '@/stores';
 import { usePageTitle } from '@/hooks/usePageTitle';
@@ -57,14 +57,14 @@ export default function LoginPage() {
     <div className="flex min-h-screen">
       {/* Left - Form */}
       <div className="flex flex-1 items-center justify-center px-8">
-        <motion.div
+        <m.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
           className="w-full max-w-sm"
         >
           <div className="flex items-center mb-10">
-            <img src="/logo_flowzen.png" alt="Flowzen" width={180} height={48} className="h-12 w-auto object-contain" />
+            <img src="/brand/logo-flowzen-240.webp" alt="Flowzen" width={263} height={240} className="h-12 w-auto object-contain" />
           </div>
 
           <h1 className="text-2xl font-semibold text-primary mb-1">Welcome back</h1>
@@ -72,13 +72,13 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <motion.div
+              <m.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 className="rounded-xl bg-danger-tint border border-danger/20 px-4 py-3 text-sm text-danger"
               >
                 {error}
-              </motion.div>
+              </m.div>
             )}
 
             <div>
@@ -150,7 +150,7 @@ export default function LoginPage() {
           <p className="mt-6 text-center text-sm text-secondary">
             No account yet? Ask your admin to invite you.
           </p>
-        </motion.div>
+        </m.div>
       </div>
 
       {/* Right - Branding */}
@@ -160,19 +160,19 @@ export default function LoginPage() {
           <div className="absolute bottom-1/4 right-1/4 h-80 w-80 rounded-full bg-white/3 blur-3xl" />
         </div>
         <div className="relative text-center px-12">
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.2 }}
           >
             <div className="flex items-center justify-center mx-auto mb-8">
-              <img src="/logo_flowzen.png" alt="Flowzen" width={300} height={80} className="h-20 w-auto object-contain brightness-0 invert opacity-90" />
+              <img src="/brand/logo-flowzen-240.webp" alt="Flowzen" width={263} height={240} className="h-20 w-auto object-contain brightness-0 invert opacity-90" />
             </div>
             <h2 className="text-3xl font-semibold text-white mb-3">Manage with precision</h2>
             <p className="text-base text-white/60 max-w-sm mx-auto leading-relaxed">
               The premium project management platform built for agencies that demand excellence.
             </p>
-          </motion.div>
+          </m.div>
         </div>
       </div>
     </div>

@@ -15,7 +15,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { m, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useUIStore, useAuthStore } from '@/stores';
 import { cn, getInitials, getAvatarColor } from '@/lib/utils';
 import {
@@ -71,7 +71,7 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
           />
           <AnimatePresence>
             {!collapsed && (
-              <motion.span
+              <m.span
                 initial={{ opacity: 0, width: 0 }}
                 animate={{ opacity: 1, width: 'auto' }}
                 exit={{ opacity: 0, width: 0 }}
@@ -79,11 +79,11 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
                 className="whitespace-nowrap overflow-hidden"
               >
                 {item.label}
-              </motion.span>
+              </m.span>
             )}
           </AnimatePresence>
           {active && (
-            <motion.div
+            <m.div
               layoutId="sidebar-indicator"
               className="absolute inset-0 rounded-xl bg-white/12 -z-10"
               transition={shouldReduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 500, damping: 35 }}
@@ -95,7 +95,7 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
   };
 
   return (
-    <motion.aside
+    <m.aside
       initial={false}
       animate={
         isMobile
@@ -113,10 +113,10 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
           enough to sit directly on the dark rail without a chip behind it. */}
       <div className={cn('flex h-16 items-center px-5 border-b border-white/10', collapsed ? 'justify-center px-0' : 'justify-start')}>
         <img
-          src="/eyelevel-logo-green.png"
+          src="/brand/eyelevel-logo-green-108.webp"
           alt="Flowzen"
-          width={180}
-          height={48}
+          width={168}
+          height={108}
           className={cn('w-auto object-contain', collapsed ? 'h-8' : 'h-9')}
         />
       </div>
@@ -170,9 +170,9 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
                 <item.icon className="h-4.5 w-4.5 shrink-0 text-white/60 group-hover:text-white" />
                 <AnimatePresence>
                   {!collapsed && (
-                    <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="whitespace-nowrap">
+                    <m.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="whitespace-nowrap">
                       {item.label}
-                    </motion.span>
+                    </m.span>
                   )}
                 </AnimatePresence>
               </div>
@@ -188,14 +188,14 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
             aria-label={collapsed ? 'Expand' : 'Collapse'}
             className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-white/60 hover:bg-white/10 hover:text-white transition-colors duration-150 motion-reduce:transition-none"
           >
-            <motion.div animate={{ rotate: collapsed ? 180 : 0 }} transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.2 }}>
+            <m.div animate={{ rotate: collapsed ? 180 : 0 }} transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.2 }}>
               <ChevronLeft className="h-4.5 w-4.5 text-white/60" />
-            </motion.div>
+            </m.div>
             <AnimatePresence>
               {!collapsed && (
-                <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="whitespace-nowrap">
+                <m.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="whitespace-nowrap">
                   Collapse
-                </motion.span>
+                </m.span>
               )}
             </AnimatePresence>
           </button>
@@ -214,10 +214,10 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
           </div>
           <AnimatePresence>
             {!collapsed && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 min-w-0">
+              <m.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 min-w-0">
                 <p className="text-xs font-[650] text-white truncate">{user?.name}</p>
                 <p className="text-micro text-white/60 truncate">{user?.email}</p>
-              </motion.div>
+              </m.div>
             )}
           </AnimatePresence>
           <button
@@ -233,6 +233,6 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
           </button>
         </div>
       </div>
-    </motion.aside>
+    </m.aside>
   );
 }

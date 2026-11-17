@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma.js';
 import { loadWorkCalendar, workingMinutesOn } from './workCalendar.js';
+import { ttlCache } from './ttlCache.js';
 
 /**
  * Brief §8: "Task type average — median elapsed for tasks sharing the same
@@ -50,4 +51,18 @@ export async function computeTaskTypeMedians(organizationId: string): Promise<Ma
     medianByGroup.set(key, median(values));
   }
   return medianByGroup;
+}
+
+/*
+ * The same medians, held per organisation for ten minutes (Perf Plan 2,
+ * decision 1). My Work showed them on every load, and every load read every
+ * task the studio ever finished to work them out — the one query on that
+ * screen that grows for ever. A median over months of history does not move
+ * in ten minutes. The hourly scanner keeps computing its own, fresh.
+ */
+const MEDIANS_KEEP_MS = 10 * 60_000;
+const mediansCache = ttlCache<Map<string, number>>(MEDIANS_KEEP_MS);
+
+export function cachedTaskTypeMedians(organizationId: string): Promise<Map<string, number>> {
+  return mediansCache.get(organizationId, () => computeTaskTypeMedians(organizationId));
 }

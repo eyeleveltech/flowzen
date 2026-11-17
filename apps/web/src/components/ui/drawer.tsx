@@ -1,7 +1,7 @@
 'use client';
 
 import React, { ReactNode, useCallback, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { m, AnimatePresence } from 'framer-motion';
 import { useIsMobile } from '@/hooks/use-breakpoint';
 import { X } from 'lucide-react';
 import { createPortal } from 'react-dom';
@@ -185,7 +185,7 @@ export function Drawer({
       {isOpen && (
         <>
           {/* Backdrop */}
-          <motion.div
+          <m.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -203,7 +203,7 @@ export function Drawer({
               the same motion element, keeping the slideover's starting x of
               100%. The sheet sat one screen-width off to the right.
             */
-            <motion.div
+            <m.div
               key="sheet"
               ref={panelRef}
               onKeyDown={handleKeyDown}
@@ -231,10 +231,10 @@ export function Drawer({
                 )}
               </div>
               <div className="flex-1 overflow-y-auto px-6 pb-8 pt-4">{watched}</div>
-            </motion.div>
+            </m.div>
           ) : variant === 'slideover' ? (
             /* DESKTOP: Slideover Panel */
-            <motion.div
+            <m.div
               key="slideover"
               ref={panelRef}
               onKeyDown={handleKeyDown}
@@ -294,11 +294,11 @@ export function Drawer({
                 because then the column exactly fills this box.
               */}
               <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">{watched}</div>
-            </motion.div>
+            </m.div>
           ) : (
             /* DESKTOP: Centered Modal */
             <div key="modal" className="fixed inset-0 z-201 flex items-center justify-center p-4 pointer-events-none">
-              <motion.div
+              <m.div
                 ref={panelRef}
                 onKeyDown={handleKeyDown}
                 initial={{ opacity: 0, scale: 0.95 }}
@@ -322,7 +322,7 @@ export function Drawer({
                   </div>
                 )}
                 <div className={title ? "" : "p-6"}>{watched}</div>
-              </motion.div>
+              </m.div>
             </div>
           )}
         </>

@@ -195,39 +195,56 @@ app.use('/api/files', filesRouter);
 // Logins: Management only, its own log, never in search or the public API.
 app.use('/api/credentials', credentialsRouter);
 
+/*
+ * The background workers, staggered (Perf Plan 2, decision 8).
+ *
+ * Every one of them ran its first tick the moment the server came up — a
+ * dozen jobs reading the whole database in the same second, while the first
+ * people of the morning were opening My Work after a deploy. Each now starts
+ * at its own fixed offset, 20 to 90 seconds in, and keeps its interval from
+ * there. Under test nothing waits (each worker already does nothing there).
+ */
+const afterBoot = (seconds: number, start: () => void) => {
+  if (process.env.NODE_ENV === 'test') {
+    start();
+    return;
+  }
+  setTimeout(start, seconds * 1000);
+};
+
 // Start background health rules scanner
-startAgencyHealthScanner();
+afterBoot(20, startAgencyHealthScanner);
 
 // Keep MonthCards rolling on their own — the 1st of the month should not
 // depend on an admin remembering to press "Trigger Month Roll".
-startMonthCardScheduler();
+afterBoot(30, startMonthCardScheduler);
 
 // Compute proposed PeopleAllocation percentages from completed task counts
 // from the 25th onward, so heads have something real to confirm against.
-startAllocationScheduler();
+afterBoot(40, startAllocationScheduler);
 
 // Roll recurring costs (rent, internet, software, salaries) forward into a
 // new draft row each month, instead of leaving `recurring` a flag nothing reads.
-startRecurringCostScheduler();
+afterBoot(50, startRecurringCostScheduler);
 
 // Mail the Monday brief to everyone with reports.read — the brief itself
 // was already real, just never scheduled or sent anywhere.
-startMondayBriefScheduler();
+afterBoot(60, startMondayBriefScheduler);
 
 // §16: "In app first. Email digest for alerts." The in-app half existed; an
-// alert only reached somebody who happened to open the app.
-startAlertDigestScheduler();
+// alert only reached somebody who happened to open the app. After the scanner.
+afterBoot(70, startAlertDigestScheduler);
 
 // Repeating tasks: the next copy of each, hourly.
-startTaskRepeatScheduler();
-startEventReminders();
-startGoogleCalendarWorker();
-startUsageCleanup();
-startPushWorker();
+afterBoot(80, startTaskRepeatScheduler);
+afterBoot(35, startEventReminders);
+afterBoot(45, startGoogleCalendarWorker);
+afterBoot(85, startUsageCleanup);
+afterBoot(25, startPushWorker);
 // API call logs (30 days) and Idempotency-Keys (a day), trimmed daily.
-startApiCleanup();
+afterBoot(90, startApiCleanup);
 // Logins in Recently deleted for 30 days, then gone for good.
-startCredentialPurge();
+afterBoot(55, startCredentialPurge);
 
 app.use((_req, res) => {
   res.status(404).json({ success: false, error: 'Not found' });

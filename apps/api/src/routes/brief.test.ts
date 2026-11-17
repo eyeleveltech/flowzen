@@ -373,6 +373,46 @@ describe('GET /api/brief/monday', () => {
     // A link is only given where the reader can follow it: /money needs money.figures.
     expect(head.body.needsAction[0].items[0].link).toBeNull();
   });
+
+  /*
+   * Held a minute per organisation, week and audience (Perf Plan 2, decision 2).
+   * `alert.findMany` is one of the brief's own reads, so it counts composes.
+   */
+  const composes = () => (prisma.alert.findMany as any).mock.calls.length;
+
+  it('is composed once a minute for readers who would be shown the same thing', async () => {
+    const reader = as(RolePreset.HEAD, ['work.own', 'reports.read']);
+    const first = await request(app).get('/api/brief/monday').set(...reader);
+    const before = composes();
+    const second = await request(app).get('/api/brief/monday').set(...reader);
+    expect(composes()).toBe(before);
+    expect(second.body.needsAction).toEqual(first.body.needsAction);
+    expect(second.body.scoreboard).toEqual(first.body.scoreboard);
+  });
+
+  it('keeps apart readers whose links differ', async () => {
+    const plain = await request(app).get('/api/brief/monday').set(...as(RolePreset.HEAD, ['work.own', 'reports.read']));
+    const before = composes();
+    const figures = await request(app)
+      .get('/api/brief/monday')
+      .set(...as(RolePreset.HEAD, ['work.own', 'reports.read', 'money.figures']));
+    expect(composes()).toBe(before + 1);
+    expect(plain.body.needsAction[0].items[0].link).toBeNull();
+    expect(figures.body.needsAction[0].items[0].link).toBe('/money');
+  });
+
+  it('composes afresh once the summary is written again', async () => {
+    ORG.aiApiKey = 'key';
+    const complete = vi.spyOn(gemini, 'complete').mockResolvedValue({ text: 'A quiet week.', calls: [], stop: 'end' });
+    const boss = as(RolePreset.MANAGEMENT, [...ROLE_PRESET_PERMISSIONS.MANAGEMENT]);
+    await request(app).get('/api/brief/monday').set(...boss);
+    const written = await request(app).post('/api/brief/monday/summary').set(...boss);
+    complete.mockRestore();
+    expect(written.status).toBe(200);
+    const before = composes();
+    await request(app).get('/api/brief/monday').set(...boss);
+    expect(composes()).toBe(before + 1);
+  });
 });
 
 describe('the Monday mail', () => {

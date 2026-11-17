@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { qk } from '@/hooks/queries';
-import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { m, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useUIStore } from '@/stores';
 import { api } from '@/lib/api-v2';
 import {
@@ -503,14 +503,14 @@ export function CommandPalette() {
     <AnimatePresence>
       {commandPaletteOpen && (
         <>
-          <motion.div
+          <m.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm"
             onClick={() => setCommandPaletteOpen(false)}
           />
-          <motion.div
+          <m.div
             /*
               A handle for the browser checks.
               
@@ -608,7 +608,7 @@ export function CommandPalette() {
               <span>↵ Open</span>
               <span>ESC Close</span>
             </div>
-          </motion.div>
+          </m.div>
         </>
       )}
     </AnimatePresence>

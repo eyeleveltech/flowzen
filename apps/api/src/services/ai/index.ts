@@ -6,6 +6,7 @@ import { AI_PROVIDER_IDS, type AiProvider, type AiProviderId } from './types.js'
 export { AssistantFailed, AssistantNotConfigured } from './errors.js';
 export { AI_PROVIDER_IDS } from './types.js';
 export type {
+  AiEffort,
   AiProvider,
   AiProviderId,
   AiReply,

@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { logger } from '../../utils/logger.js';
 import { AssistantFailed, httpFailure, unreachable } from './errors.js';
-import type { AiProvider, AiReply, AiRequest, AiStop, AiStream, AiTurn, AiUsage } from './types.js';
+import type { AiEffort, AiProvider, AiReply, AiRequest, AiStop, AiStream, AiTurn, AiUsage } from './types.js';
 
 /**
  * Anthropic's Messages API, through the official SDK.
@@ -65,8 +65,8 @@ const clientFor = (apiKey: string, baseUrl?: string) =>
 
 /* ─── What the model takes ─────────────────────────────────────────────── */
 
-type Capabilities = { adaptiveThinking: boolean; mediumEffort: boolean };
-const NOTHING: Capabilities = { adaptiveThinking: false, mediumEffort: false };
+type Capabilities = { adaptiveThinking: boolean; effort: Record<AiEffort, boolean> };
+const NOTHING: Capabilities = { adaptiveThinking: false, effort: { low: false, medium: false, high: false } };
 const KEEP_MS = 24 * 60 * 60 * 1000;
 /** A failed lookup is remembered this long, so one that keeps failing is not paid every round. */
 const RETRY_FAILED_AFTER_MS = 5 * 60 * 1000;
@@ -76,8 +76,9 @@ const known = new Map<string, { at: number; keepMs: number; caps: Capabilities }
 export const forgetCapabilities = () => known.clear();
 
 /**
- * Whether this model takes adaptive thinking and a medium effort, from the
- * Models API, held for a day.
+ * Whether this model takes adaptive thinking, and which effort levels — each
+ * asked separately, since Zen now asks for `low` and a model may take one
+ * level and not another — from the Models API, held for a day.
  *
  * Asked rather than listed: a list of model names goes stale every release,
  * and the model is whatever the person picked in Settings. If the lookup fails
@@ -92,7 +93,11 @@ async function capabilitiesFor(client: Anthropic, model: string, baseUrl?: strin
     const info = await client.models.retrieve(model, null, { timeout: 15_000, maxRetries: 1 });
     const caps: Capabilities = {
       adaptiveThinking: Boolean(info.capabilities?.thinking?.types?.adaptive?.supported),
-      mediumEffort: Boolean(info.capabilities?.effort?.medium?.supported),
+      effort: {
+        low: Boolean(info.capabilities?.effort?.low?.supported),
+        medium: Boolean(info.capabilities?.effort?.medium?.supported),
+        high: Boolean(info.capabilities?.effort?.high?.supported),
+      },
     };
     known.set(key, { at: Date.now(), keepMs: KEEP_MS, caps });
     return caps;
@@ -182,6 +187,8 @@ const toolsFrom = (req: AiRequest): Anthropic.Beta.BetaTool[] =>
 async function paramsFor(client: Anthropic, req: AiRequest) {
   const caps = await capabilitiesFor(client, req.model, req.baseUrl);
   const tools = toolsFrom(req);
+  // Medium unless asked otherwise — what every caller got before Zen asked for less.
+  const effort: AiEffort = req.effort ?? 'medium';
   return {
     model: req.model,
     // A ceiling, not a target: thinking counts against it.
@@ -197,8 +204,9 @@ async function paramsFor(client: Anthropic, req: AiRequest) {
     ...(tools.length ? { tools, tool_choice: { type: req.toolChoice ?? ('auto' as const) } } : {}),
     // Only what this model takes. Never `temperature`.
     ...(caps.adaptiveThinking ? { thinking: { type: 'adaptive' as const } } : {}),
-    // Fixed at medium: changing it between requests throws the cache away.
-    ...(caps.mediumEffort ? { output_config: { effort: 'medium' as const } } : {}),
+    // Only a level this model takes; left out otherwise, and the model uses its own default.
+    // One level for a whole question: changing it between rounds throws the cache away.
+    ...(caps.effort[effort] ? { output_config: { effort } } : {}),
     ...(fallsBack(req) ? { betas: [FALLBACK_BETA], fallbacks: 'default' as const } : {}),
   };
 }

@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useId } from 'react';
 import { createPortal } from 'react-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { m, AnimatePresence } from 'framer-motion';
 import { ChevronDown, Search } from 'lucide-react';
 import { useMediaQuery } from '@/hooks/use-media-query';
 import { useIsMobile } from '@/hooks/use-breakpoint';
@@ -262,7 +262,7 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
           {typeof document !== 'undefined' && createPortal(
             <AnimatePresence>
               {isOpen && (
-                <motion.div
+                <m.div
                   ref={dropdownRef}
                   role="listbox"
                   initial={{ opacity: 0, y: 4 }}
@@ -384,7 +384,7 @@ export function Select({ id, value, onChange, options, placeholder = 'Select...'
                       </span>
                     </button>
                   ))}
-                </motion.div>
+                </m.div>
               )}
             </AnimatePresence>,
             document.body

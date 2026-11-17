@@ -13,7 +13,7 @@
  */
 
 import { Fragment, useState, useEffect, useCallback, useMemo } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DragDropContext, Droppable, Draggable, type BeforeCapture, type DropResult } from '@hello-pangea/dnd';
 import { plural } from '@/lib/utils';
 import { api, ApiError } from '@/lib/api-v2';
@@ -185,7 +185,29 @@ export default function MyWorkPage() {
     queryFn: () => api.tasks.my(),
   });
 
-  const buckets: Buckets = data?.success ? { ...EMPTY_BUCKETS, ...(data.tasks as Partial<Buckets>) } : EMPTY_BUCKETS;
+  /*
+   * "Show older" under Done (Perf Plan 2): the list carries the last 14 days
+   * of finished work, and older comes 50 at a time, only when asked for.
+   */
+  const [showOlder, setShowOlder] = useState(false);
+  const older = useInfiniteQuery({
+    queryKey: ['tasks', 'myDoneOlder'],
+    queryFn: ({ pageParam }) => api.tasks.myDoneOlder(pageParam),
+    initialPageParam: 0,
+    getNextPageParam: (last) => (last.hasMore ? last.nextSkip : undefined),
+    enabled: showOlder,
+  });
+  const olderDone = useMemo(() => (older.data?.pages ?? []).flatMap((p) => p.tasks as TaskItem[]), [older.data]);
+
+  const buckets: Buckets = useMemo(() => {
+    const base: Buckets = data?.success ? { ...EMPTY_BUCKETS, ...(data.tasks as Partial<Buckets>) } : EMPTY_BUCKETS;
+    if (olderDone.length === 0) return base;
+    // Once, under Done: a task reopened since it was loaded is back in its own group.
+    const onList = new Set([...base.overdue, ...base.today, ...base.thisWeek, ...base.later, ...base.completed].map((t) => t.id));
+    return { ...base, completed: [...base.completed, ...olderDone.filter((t) => !onList.has(t.id))] };
+  }, [data, olderDone]);
+  /** The last 14 days' finished work, without anything "Show older" added. */
+  const recentDone: TaskItem[] = data?.success ? ((data.tasks.completed as TaskItem[]) ?? []) : [];
   const queryClient = useQueryClient();
 
   /*
@@ -201,7 +223,7 @@ export default function MyWorkPage() {
    * nothing here makes. Each group is its own drop zone for that reason.
    *
    * "Later this week" is two server buckets shown as one, so it is arranged as
-   * one. "Done this week" is history, not a plan, and is not arrangeable.
+   * one. Done is history, not a plan, and is not arrangeable.
    */
   /*
    * A lifted row keeps its columns.
@@ -405,14 +427,16 @@ export default function MyWorkPage() {
     return oldest.workingHoursText;
   }, [buckets]);
 
+  // Over the last 14 days, as the tile says — not whatever "Show older" has added.
   const avgClose = useMemo(() => {
-    if (buckets.completed.length === 0) return '0h';
-    const totalMins = buckets.completed.reduce((acc, t) => acc + t.workingMinutes, 0);
-    const avgMins = Math.floor(totalMins / buckets.completed.length);
+    if (recentDone.length === 0) return '0h';
+    const totalMins = recentDone.reduce((acc, t) => acc + t.workingMinutes, 0);
+    const avgMins = Math.floor(totalMins / recentDone.length);
     const days = Math.floor(avgMins / 540);
     const hours = Math.floor((avgMins % 540) / 60);
     return days > 0 && hours > 0 ? `${days}d ${hours}h` : days > 0 ? `${days}d` : hours > 0 ? `${hours}h` : '<1h';
-  }, [buckets]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
 
   /** What the mutation handlers call after they change something. */
   const load = useCallback(async () => {
@@ -670,6 +694,35 @@ export default function MyWorkPage() {
     );
   };
 
+  /*
+   * Done: the last 14 days, then "Show older" — 50 more each press, newest
+   * first, until there are none. History, not a plan, so never arrangeable.
+   */
+  const doneGroup = () => {
+    const more = Boolean(data?.success && (showOlder ? older.hasNextPage : data.hasOlderDone));
+    if (shown.completed.length === 0 && !more) return null;
+    return (
+      <tbody key="done" className="divide-y divide-border">
+        {heading(olderDone.length > 0 ? 'Done' : `Done in the last ${data?.doneDays ?? 14} days`)}
+        {shown.completed.map(row)}
+        {more && (
+          <tr>
+            <td colSpan={8} className="px-5 py-3">
+              <Button
+                variant="ghost"
+                size="sm"
+                loading={older.isFetching}
+                onClick={() => (showOlder ? void older.fetchNextPage() : setShowOlder(true))}
+              >
+                Show older
+              </Button>
+            </td>
+          </tr>
+        )}
+      </tbody>
+    );
+  };
+
   return (
     <div className="page-shell">
       <StatRow className="mb-8">
@@ -890,7 +943,7 @@ export default function MyWorkPage() {
                       </tbody>
                     );
                   })}
-                  {section('Done this week', shown.completed)}
+                  {doneGroup()}
                 </>
               ) : (
                 <DragDropContext onBeforeCapture={onBeforeCapture} onDragEnd={(r) => void onDragEnd(r)}>
@@ -899,7 +952,7 @@ export default function MyWorkPage() {
                   {/* This week and beyond, arranged as one: "Later this week" was
                       wrong for a task due next month. */}
                   {section('Coming up', [...shown.thisWeek, ...shown.later], 'week')}
-                  {section('Done this week', shown.completed)}
+                  {doneGroup()}
                 </DragDropContext>
               )}
             </table>

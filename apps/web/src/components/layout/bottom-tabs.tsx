@@ -12,7 +12,7 @@
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { m, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useAuthStore } from '@/stores';
 import { NAV_ITEMS, BOTTOM_NAV_ITEMS, NavItem, offered } from '@/config/navigation';
 import { MoreHorizontal, LogOut, X } from 'lucide-react';
@@ -45,7 +45,7 @@ export function BottomTabs() {
       <AnimatePresence>
         {showMore && (
           <>
-            <motion.div
+            <m.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -53,7 +53,7 @@ export function BottomTabs() {
               className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm"
               onClick={() => setShowMore(false)}
             />
-            <motion.div
+            <m.div
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
@@ -111,7 +111,7 @@ export function BottomTabs() {
 
               {/* Safe area spacer for notched phones */}
               <div className="h-2" />
-            </motion.div>
+            </m.div>
           </>
         )}
       </AnimatePresence>
@@ -128,7 +128,7 @@ export function BottomTabs() {
                 className="flex flex-1 flex-col items-center gap-0.5 py-1 relative"
               >
                 {isActive && (
-                  <motion.div
+                  <m.div
                     layoutId="bottom-tab-indicator"
                     className="absolute -top-1.5 left-1/2 -translate-x-1/2 h-0.5 w-6 rounded-full bg-primary"
                     transition={shouldReduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 500, damping: 35 }}
@@ -152,7 +152,7 @@ export function BottomTabs() {
             className="flex flex-1 flex-col items-center gap-0.5 py-1 relative"
           >
             {isMoreActive && (
-              <motion.div
+              <m.div
                 layoutId="bottom-tab-indicator"
                 className="absolute -top-1.5 left-1/2 -translate-x-1/2 h-0.5 w-6 rounded-full bg-primary"
                 transition={shouldReduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 500, damping: 35 }}

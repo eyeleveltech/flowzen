@@ -6,6 +6,7 @@ import type { PermissionKey } from '@flowzen/shared';
 import { EVENT_RULES } from '../services/alertRules.js';
 import { linkForUser } from '../utils/recordLink.js';
 import { teamScope } from '../services/teamScope.js';
+import { alertClauseCache, alertClauseKey } from '../services/alertClauseCache.js';
 
 /**
  * The bell.
@@ -262,7 +263,14 @@ export async function alertClausesFor(user: UserSession): Promise<Prisma.AlertWh
     missingTaskRules.length > 0
       ? (
           await prisma.task.findMany({
-            where: { organizationId: orgId, deletedAt: null, assignees: { some: { userId } } },
+            where: {
+              organizationId: orgId,
+              deletedAt: null,
+              assignees: { some: { userId } },
+              // Open work only (Perf Plan 2): these rules are about tasks still
+              // owed, and every task a person ever finished made the list longer.
+              status: { notIn: ['DONE', 'CANCELLED'] },
+            },
             select: { id: true },
           })
         ).map((t) => t.id)
@@ -278,6 +286,14 @@ export async function alertClausesFor(user: UserSession): Promise<Prisma.AlertWh
 
   return [...(openRules.length > 0 ? [{ rule: { in: openRules } }] : []), ...scoped, ...mine, ...people, ...aboutOthers];
 }
+
+/**
+ * The same clause set, held a minute per person for the bell's own routes
+ * (services/alertClauseCache.ts) and cleared when new alerts are announced.
+ * Push and the digest call `alertClausesFor` itself, fresh, as they send.
+ */
+export const bellClausesFor = (user: UserSession): Promise<Prisma.AlertWhereInput[]> =>
+  alertClauseCache.get(alertClauseKey(user), () => alertClausesFor(user));
 
 /**
  * What corner of the business a notification is about.
@@ -347,7 +363,7 @@ notificationsRouter.get('/', async (req: AuthRequest, res: Response, next: NextF
     const orgId = req.user!.organizationId;
     const userId = req.user!.userId;
 
-    const clauses = await alertClausesFor(req.user!);
+    const clauses = await bellClausesFor(req.user!);
     if (clauses.length === 0) {
       res.json({ success: true, notifications: [], unreadCount: 0, total: 0 });
       return;
@@ -355,19 +371,26 @@ notificationsRouter.get('/', async (req: AuthRequest, res: Response, next: NextF
 
     const where: Prisma.AlertWhereInput = { organizationId: orgId, resolvedAt: null, OR: clauses };
 
-    const [alerts, total, myReads] = await Promise.all([
+    /*
+     * Two reads at once (Perf Plan 2, decision 4): the page, with whether I
+     * have read each of the alerts on it — not every read I ever made — and
+     * the two counts together, from one pass over what I may see.
+     */
+    const [alerts, everything] = await Promise.all([
       prisma.alert.findMany({
         where,
         // Worst first, then newest. A bell that orders purely by time buries
         // an overdue invoice under six task reminders raised a minute later.
         orderBy: [{ severity: 'asc' }, { createdAt: 'desc' }],
         take: FEED_LIMIT,
+        include: { reads: { where: { userId }, select: { id: true } } },
       }),
-      prisma.alert.count({ where }),
-      prisma.alertRead.findMany({ where: { userId }, select: { alertId: true } }),
+      prisma.alert.findMany({
+        where,
+        select: { _count: { select: { reads: { where: { userId } } } } },
+      }),
     ]);
-
-    const readIds = new Set(myReads.map((r) => r.alertId));
+    const total = everything.length;
 
     const notifications = alerts.map((a) => ({
       id: a.id,
@@ -382,16 +405,14 @@ notificationsRouter.get('/', async (req: AuthRequest, res: Response, next: NextF
         a.entityType === 'CalendarEvent' && a.message.startsWith('Cancelled:')
           ? '/calendar'
           : linkFor(a.entityType, a.entityId, req.user, a.rule),
-      read: readIds.has(a.id),
+      read: a.reads.length > 0,
       createdAt: a.createdAt,
     }));
 
     // Counted across everything this person may see, not across the page just
     // fetched — a badge computed from a slice under-reports the moment there
     // are more unread alerts than the slice holds.
-    const unreadCount = await prisma.alert.count({
-      where: { ...where, reads: { none: { userId } } },
-    });
+    const unreadCount = everything.filter((a) => a._count.reads === 0).length;
 
     res.json({ success: true, notifications, unreadCount, total });
   } catch (e) {
@@ -411,7 +432,7 @@ notificationsRouter.patch('/read-all', async (req: AuthRequest, res: Response, n
 
     // Only what this person can see. Marking an alert read that they were
     // never shown would be a strange thing for a button to do.
-    const clauses = await alertClausesFor(req.user!);
+    const clauses = await bellClausesFor(req.user!);
 
     const unread =
       clauses.length === 0
@@ -455,7 +476,7 @@ notificationsRouter.patch('/:id/read', async (req: AuthRequest, res: Response, n
     // Theirs when it would reach them — the same clauses the bell used. Only
     // the clauses that name this rule can match it; a clause that is the rule
     // and nothing else matches outright, the rest are asked of the database.
-    const clauses = (await alertClausesFor(req.user!)).filter((c) => {
+    const clauses = (await bellClausesFor(req.user!)).filter((c) => {
       const rule = c.rule as string | { in: string[] };
       return typeof rule === 'string' ? rule === alert.rule : rule.in.includes(alert.rule);
     });

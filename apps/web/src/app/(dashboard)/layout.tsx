@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
-import { motion } from 'framer-motion';
+import { m } from 'framer-motion';
 import { api } from '@/lib/api-v2';
 import { useAuthStore, useUIStore } from '@/stores';
 import { permissionForPath, canSee, headsOnlyAccess, managementOnlyAccess } from '@/config/navigation';
@@ -140,7 +140,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Desktop Sidebar only — hidden on mobile */}
       {!isMobile && <Sidebar isMobile={false} />}
 
-      <motion.main
+      <m.main
         animate={{ marginLeft: isMobile ? 0 : (sidebarCollapsed ? 72 : 260), marginRight: zenWidth }}
         transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
         className="flex-1 flex flex-col min-w-0 bg-surface w-full"
@@ -149,7 +149,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className={`px-4 sm:px-6 lg:px-8 py-8 w-full max-w-400 mx-auto ${isMobile ? 'pb-24' : ''}`}>
           {refused ? <NoAccess pathname={pathname} /> : waiting ? null : children}
         </div>
-      </motion.main>
+      </m.main>
 
       {/* Bottom Tabs — mobile only */}
       {isMobile && <BottomTabs />}
@@ -161,7 +161,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Real-time Toast Notification — positioned above bottom tabs on mobile */}
       {activeToast && (
-        <motion.div
+        <m.div
           initial={{ opacity: 0, y: 50, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 20, scale: 0.95 }}
@@ -181,7 +181,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           >
             <Icon as={X} size="md" />
           </button>
-        </motion.div>
+        </m.div>
       )}
     </div>
   );

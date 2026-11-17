@@ -16,7 +16,9 @@
  */
 
 import { localToday } from '@/lib/utils';
-import { use, useCallback, useEffect, useState } from 'react';
+import { use, useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { InvoiceStatusBadge } from '@/components/work/InvoiceStatusBadge';
 import { moneyDate } from '@/lib/money';
 import { useWorkCacheNudge } from '@/hooks/useWorkCacheNudge';
@@ -24,7 +26,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Plus, Printer, Settings2, Trash2 } from 'lucide-react';
 import { api, ApiError, formatMoney, formatDate, type OrgConfig, type Company } from '@/lib/api-v2';
-import { useTeamMembers } from '@/hooks/queries';
+import { useConfig, useTeamMembers } from '@/hooks/queries';
 import toast from 'react-hot-toast';
 import { useConfirmStore } from '@/stores/confirm';
 import { Button } from '@/components/ui/button';
@@ -43,13 +45,9 @@ import { Tabs, useTabState, type TabDef } from '@/components/ui/tabs';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { useAuthStore } from '@/stores';
 import { TASK_FILTER_OPTIONS, matchesStatusFilter, isTaskLate } from '@/components/retainers/task-shared';
-import { NewProformaModal } from '@/components/clients/NewProformaModal';
-import { NewWorkTaskModal } from '@/components/work/NewWorkTaskModal';
-import { TaskDrawer, type DrawerTask } from '@/components/work/TaskDrawer';
-import { NewWorkCostModal } from '@/components/work/NewWorkCostModal';
-import { EditCostModal } from '@/components/work/EditCostModal';
+import type { DrawerTask } from '@/components/work/TaskDrawer';
 import { GstAmountFields } from '@/components/work/GstAmountFields';
-import { MilestoneInvoiceModal, type MilestoneForBilling } from '@/components/work/MilestoneInvoiceModal';
+import type { MilestoneForBilling } from '@/components/work/MilestoneInvoiceModal';
 import { PRIORITY_CONFIG, getPriorityDot, getPriorityBadge, getPriorityLabel } from '@/lib/priority';
 import { personOptions } from '@/lib/people';
 import { withDueTime } from '@/lib/due-time';
@@ -60,6 +58,60 @@ import { usePageHeader } from '@/hooks/usePageHeader';
 import { Breadcrumbs } from '@/components/ui/breadcrumbs';
 import { changeTaskStatus as changeStatusAsking, waitingWords } from '@/lib/task-status';
 import { viaText } from '@/lib/activity';
+
+/*
+ * The dialogs and the task drawer, fetched when first opened rather than with
+ * the page (Perf Plan 3) — about two thousand lines between them, plus what
+ * they import, for forms many visits never open. The two types taken from them
+ * above are `import type`, which is erased, so nothing pulls them back in.
+ */
+const TaskDrawer = dynamic(() => import('@/components/work/TaskDrawer').then((m) => m.TaskDrawer), { ssr: false });
+const NewWorkTaskModal = dynamic(
+  () => import('@/components/work/NewWorkTaskModal').then((m) => m.NewWorkTaskModal),
+  { ssr: false },
+);
+const NewWorkCostModal = dynamic(
+  () => import('@/components/work/NewWorkCostModal').then((m) => m.NewWorkCostModal),
+  { ssr: false },
+);
+const EditCostModal = dynamic(() => import('@/components/work/EditCostModal').then((m) => m.EditCostModal), { ssr: false });
+const MilestoneInvoiceModal = dynamic(
+  () => import('@/components/work/MilestoneInvoiceModal').then((m) => m.MilestoneInvoiceModal),
+  { ssr: false },
+);
+const NewProformaModal = dynamic(
+  () => import('@/components/clients/NewProformaModal').then((m) => m.NewProformaModal),
+  { ssr: false },
+);
+
+/*
+ * This page's cache. `project`, singular, on purpose: `['projects']` is the
+ * list screen's, in another shape, and the prefixes `useWorkCacheNudge` clears
+ * after every read here must not include this page's own keys, or each read
+ * would set off the next.
+ */
+const projectKey = (id: string) => ['project', id] as const;
+const projectTasksKey = (id: string) => ['project', id, 'tasks'] as const;
+const projectActivityKey = (id: string) => ['project', id, 'activity'] as const;
+
+/*
+ * How the project and its tasks are read.
+ *
+ * - Every visit asks again, painting the last visit's copy meanwhile. Writes
+ *   made elsewhere — a task on My Work, an invoice on Money — do not clear
+ *   these keys, so trusting a two-minute-old copy would show the project as it
+ *   was, where every visit used to ask.
+ * - A 4xx is an answer, not a blip, so a missing or forbidden project says so
+ *   at once. Anything else is tried once more, the app's default.
+ * - Asked even when the browser believes it is offline, so "Couldn't load"
+ *   still appears instead of a skeleton waiting for a connection.
+ */
+const PAGE_READ = {
+  refetchOnMount: 'always',
+  retry: (failures: number, err: unknown) =>
+    !(err instanceof ApiError && err.status >= 400 && err.status < 500) && failures < 1,
+  networkMode: 'always',
+} as const;
 
 const PRIORITY_OPTIONS = Object.entries(PRIORITY_CONFIG).map(([value, cfg]) => ({ value, label: cfg.label }));
 
@@ -111,6 +163,7 @@ type Task = {
   assignee: { id: string; name: string; dept: string; designation?: string | null } | null;
   assignees?: { id: string; name: string; designation?: string | null }[];
 };
+const NO_TASKS: Task[] = [];
 type Cost = { id: string; category: string; vendor: string; paidBy?: string | null; amount: string | number | null; incurredAt: string; enteredBy: { id: string; name: string } | null };
 type Invoice = {
   id: string;
@@ -215,15 +268,63 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const router = useRouter();
   const confirm = useConfirmStore((st) => st.confirm);
   const nudgeWorkCaches = useWorkCacheNudge();
+  const queryClient = useQueryClient();
 
-  const [project, setProject] = useState<ProjectDetail | null>(null);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [config, setConfig] = useState<OrgConfig | null>(null);
+  /*
+   * Read through React Query (Perf Plan 3), so a project opened again paints at
+   * once from what was here last time while it re-asks, instead of showing the
+   * skeleton on every visit. The three reads start together, as they did in
+   * one Promise.all; the settings come from the shared `useConfig`, which is
+   * usually cached before anybody opens a project.
+   */
+  const projectQ = useQuery({
+    queryKey: projectKey(id),
+    queryFn: async () => {
+      const res = await api.projects.get(id);
+      // Every fresh read tells the list screens, as load() did — see useWorkCacheNudge.
+      nudgeWorkCaches();
+      return res.project as ProjectDetail;
+    },
+    ...PAGE_READ,
+  });
+  const tasksQ = useQuery({
+    queryKey: projectTasksKey(id),
+    queryFn: async () => ((await api.tasks.list({ projectId: id })).tasks ?? []) as Task[],
+    ...PAGE_READ,
+  });
+  const configQ = useConfig();
+  const project = projectQ.data ?? null;
+  const tasks = tasksQ.data ?? NO_TASKS;
+  const config: OrgConfig | null = configQ.data ?? null;
   const team = useTeamMembers();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  /*
+   * A failure counts once it is this visit's own answer. One left in the cache
+   * by an earlier visit is being asked again already, so a revisit shows the
+   * skeleton while it is — as every visit used to — not last time's error.
+   */
+  const projectFailure = projectQ.isFetchedAfterMount ? projectQ.error : null;
+  const tasksFailure = tasksQ.isFetchedAfterMount ? tasksQ.error : null;
+  const configFailure = configQ.isFetchedAfterMount ? configQ.error : null;
+  /** Not there, or not this person's to see: the panel, even over a copy kept from an earlier visit. */
+  const refused =
+    projectFailure instanceof ApiError && (projectFailure.status === 404 || projectFailure.status === 403);
   /** Why the project did not load — a 404 is "isn't here", anything else "couldn't load". */
-  const [loadFailure, setLoadFailure] = useState<unknown>(null);
+  const loadFailure = refused
+    ? projectFailure
+    : (!project && projectFailure) || (!tasksQ.data && tasksFailure) || (!config && configFailure) || null;
+  /*
+   * A read that failed with a page still to show — the refresh after a write,
+   * or the re-ask on a revisit. The page stays as it was with this note above
+   * it, until a later read succeeds or somebody dismisses it.
+   */
+  const refreshFailure = projectFailure ?? tasksFailure ?? configFailure;
+  const [dismissedFailure, setDismissedFailure] = useState<unknown>(null);
+  const error =
+    refreshFailure && refreshFailure !== dismissedFailure
+      ? refreshFailure instanceof Error
+        ? refreshFailure.message
+        : 'Could not load this project'
+      : null;
   /*
    * One list, read by both the row that draws the tabs and the hook that
    * decides which is open, so a tab cannot be shown without being selectable.
@@ -250,7 +351,30 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     { key: 'activity', label: 'Activity' },
   ];
   const [tab, setTab] = useTabState(tabs);
-  const [activity, setActivity] = useState<FeedItem[] | null>(null);
+  /*
+   * The feed is asked for when its tab is opened, not with the page. A failure
+   * shows an empty feed, as it always has.
+   */
+  const { data: activity } = useQuery({
+    queryKey: projectActivityKey(id),
+    queryFn: async (): Promise<FeedItem[]> => {
+      try {
+        const res = await api.activities.list({ entityType: 'Project', entityId: id });
+        return (res ?? []).map((a: any) => ({
+          key: a.id,
+          at: a.at,
+          text: humanizeVerb(a.verb, a.payload),
+          body: null,
+          // "Harish (via API: n8n)" for a change made through an API key.
+          userName: a.actor?.name && viaText(a.payload) ? `${a.actor.name} (${viaText(a.payload)})` : a.actor?.name,
+        }));
+      } catch {
+        return [];
+      }
+    },
+    enabled: tab === 'activity',
+    networkMode: 'always',
+  });
   const [editing, setEditing] = useState(false);
   const [addingTask, setAddingTask] = useState(false);
   const [addingCost, setAddingCost] = useState(false);
@@ -286,73 +410,41 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
   const [raisingProformaForMilestone, setRaisingProformaForMilestone] = useState<Milestone | null>(null);
   const [addingMilestone, setAddingMilestone] = useState(false);
   const [editingMilestone, setEditingMilestone] = useState<Milestone | null>(null);
+  // Fetched the first time each is opened, then kept mounted to animate its close.
+  const taskModalWanted = useOnceWanted(addingTask);
+  const costModalWanted = useOnceWanted(addingCost);
 
-  const load = useCallback(async () => {
-    try {
-      const [pRes, tRes, cfg] = await Promise.all([
-        api.projects.get(id),
-        api.tasks.list({ projectId: id }),
-        api.config.get(),
-      ]);
-      setProject(pRes.project as ProjectDetail);
-      setTasks((tRes.tasks ?? []) as Task[]);
-      setConfig(cfg);
-      setError(null);
-      setLoadFailure(null);
-      nudgeWorkCaches();
-    } catch (e) {
-      setLoadFailure(e);
-      setError(e instanceof Error ? e.message : 'Could not load this project');
-    } finally {
-      setLoading(false);
-    }
-  }, [id, nudgeWorkCaches]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  const loadActivity = useCallback(async () => {
-    try {
-      const res = await api.activities.list({ entityType: 'Project', entityId: id });
-      setActivity(
-        (res ?? []).map((a: any) => ({
-          key: a.id,
-          at: a.at,
-          text: humanizeVerb(a.verb, a.payload),
-          body: null,
-          // "Harish (via API: n8n)" for a change made through an API key.
-          userName: a.actor?.name && viaText(a.payload) ? `${a.actor.name} (${viaText(a.payload)})` : a.actor?.name,
-        })),
-      );
-    } catch {
-      setActivity([]);
-    }
-  }, [id]);
-
-  useEffect(() => {
-    if (tab === 'activity' && activity === null) void loadActivity();
-  }, [tab, activity, loadActivity]);
+  /*
+   * After a write: the project and its tasks again, awaited, so the screen
+   * shows what was saved before the toast or the close — what load() did. The
+   * settings are not asked again: nothing here changes them. The feed is only
+   * marked out of date, so it is fresh the next time its tab is opened and does
+   * not move under somebody reading it.
+   */
+  const reload = async () => {
+    void queryClient.invalidateQueries({ queryKey: projectActivityKey(id), refetchType: 'none' });
+    await Promise.all([projectQ.refetch(), tasksQ.refetch()]);
+  };
 
   // The tab and the bar name the project (QA19 fixes plan, small wins).
   usePageHeader(project?.name ?? 'Project', project?.company?.name ?? null);
 
-  if (loading) {
+  // Nothing to show yet: the skeleton while the first answers are out, or why they failed.
+  if (!project || !tasksQ.data || !config || refused) {
+    if (loadFailure) {
+      return (
+        <NotFoundPanel
+          thing="project"
+          error={loadFailure}
+          back={{ href: '/live-work?tab=projects', label: 'Back to Projects' }}
+          onRetry={() => Promise.all([projectQ.refetch(), tasksQ.refetch(), configQ.refetch()])}
+        />
+      );
+    }
     return (
       <div className="page-shell">
         <ProjectDetailSkeleton />
       </div>
-    );
-  }
-
-  if (!project) {
-    return (
-      <NotFoundPanel
-        thing="project"
-        error={loadFailure}
-        back={{ href: '/live-work?tab=projects', label: 'Back to Projects' }}
-        onRetry={load}
-      />
     );
   }
 
@@ -462,7 +554,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     setBusyId(m.id);
     try {
       await api.projects.updateMilestone(project.id, m.id, back);
-      await load();
+      await reload();
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Could not move that milestone back');
     } finally {
@@ -482,7 +574,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     try {
       await api.projects.deleteMilestone(project.id, m.id);
       toast.success('Milestone deleted.');
-      await load();
+      await reload();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not delete that milestone');
     } finally {
@@ -497,7 +589,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
       // The shared way: On hold asks what it is waiting on, and leaving it
       // closes the wait (on the server, in the same request). A client project's task always has a client to wait on.
       if (!(await changeStatusAsking({ ...t, hasClient: true }, next))) return;
-      await load();
+      await reload();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not update that task');
     } finally {
@@ -517,7 +609,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     try {
       await api.costs.delete(c.id);
       toast.success('Cost deleted.');
-      await load();
+      await reload();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not delete that cost');
     } finally {
@@ -613,7 +705,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         </div>
       </div>
 
-      {error && <ErrorNote onDismiss={() => setError(null)}>{error}</ErrorNote>}
+      {error && <ErrorNote onDismiss={() => setDismissedFailure(refreshFailure)}>{error}</ErrorNote>}
 
       {/*
         The four figures a project exists to produce, in the same treatment the
@@ -1202,7 +1294,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
       {tab === 'activity' && (
         <Card>
-          {activity === null ? (
+          {!activity ? (
             <p className="text-sm text-secondary">Loading…</p>
           ) : (
             <ActivityFeed items={activity} />
@@ -1210,44 +1302,49 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         </Card>
       )}
 
-      <TaskDrawer
-        task={
-          (() => {
-            const t = tasks.find((x) => x.id === openTaskId);
-            return t
-              ? ({
-                  ...t,
-                  // Context this page has and the task record does not, so the
-                  // drawer names the client and the project rather than "Work".
-                  hasClient: true,
-                  companyId: project.company.id,
-                  clientName: project.company.name,
-                  clientHref: `/companies/${project.company.id}`,
-                  projectName: project.name,
-                  projectHref: `/projects/${id}`,
-                } as unknown as DrawerTask)
-              : null;
-          })()
-        }
-        statusOptions={TASK_STATUS_OPTIONS}
-        team={team}
-        busy={busyId === openTaskId}
-        onClose={() => setOpenTaskId(null)}
-        onStatusChange={(t, next) => void changeTaskStatus(t as unknown as Task, next as TStatus)}
-        onChanged={() => void load()}
-      />
+      {/* Drawn only while a task is open (it draws nothing otherwise), so its code is fetched on the first click. */}
+      {openTaskId !== null && (
+        <TaskDrawer
+          task={
+            (() => {
+              const t = tasks.find((x) => x.id === openTaskId);
+              return t
+                ? ({
+                    ...t,
+                    // Context this page has and the task record does not, so the
+                    // drawer names the client and the project rather than "Work".
+                    hasClient: true,
+                    companyId: project.company.id,
+                    clientName: project.company.name,
+                    clientHref: `/companies/${project.company.id}`,
+                    projectName: project.name,
+                    projectHref: `/projects/${id}`,
+                  } as unknown as DrawerTask)
+                : null;
+            })()
+          }
+          statusOptions={TASK_STATUS_OPTIONS}
+          team={team}
+          busy={busyId === openTaskId}
+          onClose={() => setOpenTaskId(null)}
+          onStatusChange={(t, next) => void changeTaskStatus(t as unknown as Task, next as TStatus)}
+          onChanged={() => void reload()}
+        />
+      )}
 
-      <NewWorkTaskModal
-        open={addingTask}
-        team={team}
-        companyId={project.companyId}
-        defaultTarget={{ kind: 'PROJECT', projectId: id }}
-        onClose={() => setAddingTask(false)}
-        onCreated={() => {
-          setAddingTask(false);
-          void load();
-        }}
-      />
+      {taskModalWanted && (
+        <NewWorkTaskModal
+          open={addingTask}
+          team={team}
+          companyId={project.companyId}
+          defaultTarget={{ kind: 'PROJECT', projectId: id }}
+          onClose={() => setAddingTask(false)}
+          onCreated={() => {
+            setAddingTask(false);
+            void reload();
+          }}
+        />
+      )}
 
       {billing && project?.company?.id && (
         <MilestoneInvoiceModal
@@ -1258,7 +1355,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           onClose={() => setBilling(null)}
           onDone={() => {
             setBilling(null);
-            void load();
+            void reload();
           }}
         />
       )}
@@ -1269,20 +1366,22 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           onClose={() => setEditingCost(null)}
           onSaved={() => {
             setEditingCost(null);
-            void load();
+            void reload();
           }}
         />
       )}
 
-      <NewWorkCostModal
-        open={addingCost}
-        target={{ kind: 'PROJECT', projectId: id }}
-        onClose={() => setAddingCost(false)}
-        onCreated={() => {
-          setAddingCost(false);
-          void load();
-        }}
-      />
+      {costModalWanted && (
+        <NewWorkCostModal
+          open={addingCost}
+          target={{ kind: 'PROJECT', projectId: id }}
+          onClose={() => setAddingCost(false)}
+          onCreated={() => {
+            setAddingCost(false);
+            void reload();
+          }}
+        />
+      )}
 
       <EditProjectModal
         project={editing ? project : null}
@@ -1290,7 +1389,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
         onClose={() => setEditing(false)}
         onSaved={() => {
           setEditing(false);
-          void load();
+          void reload();
         }}
       />
 
@@ -1304,7 +1403,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           onCancel={() => setRaisingProformaForMilestone(null)}
           onConfirm={() => {
             setRaisingProformaForMilestone(null);
-            void load();
+            void reload();
           }}
         />
       )}
@@ -1327,7 +1426,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
           }
           setAddingMilestone(false);
           setEditingMilestone(null);
-          await load();
+          await reload();
         }}
       />
     </>
@@ -1364,6 +1463,20 @@ function humanizeVerb(verb: string, payload: Record<string, unknown> | null | un
     default:
       return verb.replace(/_/g, ' ');
   }
+}
+
+/**
+ * True from the first time `wanted` is, and from then on.
+ *
+ * For a dialog loaded on demand: nothing is fetched until it is first opened,
+ * and after that it stays mounted, so it can still animate its own close — the
+ * command palette's rule (components/layout/command-palette-mount.tsx).
+ */
+function useOnceWanted(wanted: boolean): boolean {
+  const [seen, setSeen] = useState(wanted);
+  // Adjusting state while rendering — React's pattern for state that follows a prop.
+  if (wanted && !seen) setSeen(true);
+  return seen || wanted;
 }
 
 function EditProjectModal({

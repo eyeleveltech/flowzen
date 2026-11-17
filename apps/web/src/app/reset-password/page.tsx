@@ -48,7 +48,7 @@ function ResetPassword() {
   return (
     <div className="flex min-h-screen items-center justify-center px-8">
       <div className="w-full max-w-sm">
-        <img src="/logo_flowzen.png" alt="Flowzen" width={180} height={48} className="mb-10 h-12 w-auto object-contain" />
+        <img src="/brand/logo-flowzen-240.webp" alt="Flowzen" width={263} height={240} className="mb-10 h-12 w-auto object-contain" />
 
         {!token ? (
           <>

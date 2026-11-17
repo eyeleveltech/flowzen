@@ -22,7 +22,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { motion, useReducedMotion } from 'framer-motion';
+import { m, useReducedMotion } from 'framer-motion';
 import {
   AlertTriangle,
   Building2,
@@ -232,7 +232,7 @@ export default function MondayBriefPage() {
     <div className="page-shell">
       <div className={cn('mx-auto w-full max-w-240 space-y-9 transition-opacity', isFetching && 'opacity-70')}>
         {/* ─── Header ─────────────────────────────────────────────────── */}
-        <motion.header key={`${week.shown}-head`} {...enter(0)} className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+        <m.header key={`${week.shown}-head`} {...enter(0)} className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
           <div className="min-w-0">
             <p className="text-sm text-secondary">
               {greeting(brief.timezone)}
@@ -279,10 +279,10 @@ export default function MondayBriefPage() {
               )}
             </p>
           </div>
-        </motion.header>
+        </m.header>
 
         {/* ─── The summary ────────────────────────────────────────────── */}
-        <motion.section
+        <m.section
           key={`${week.shown}-summary`}
           {...enter(1)}
           aria-label="Summary"
@@ -329,10 +329,10 @@ export default function MondayBriefPage() {
               </Link>
             </p>
           )}
-        </motion.section>
+        </m.section>
 
         {/* ─── Last week ──────────────────────────────────────────────── */}
-        <motion.section key={`${week.shown}-numbers`} {...enter(2)} aria-labelledby="numbers">
+        <m.section key={`${week.shown}-numbers`} {...enter(2)} aria-labelledby="numbers">
           <Heading>
             <span id="numbers">{current ? 'Last week' : 'That week'}</span>
           </Heading>
@@ -400,16 +400,16 @@ export default function MondayBriefPage() {
               openLabel="Tasks done: see by department"
             />
           </div>
-        </motion.section>
+        </m.section>
 
         {!current ? (
-          <motion.p key={`${week.shown}-past`} {...enter(3)} className="border-t border-border pt-6 text-sm text-secondary">
+          <m.p key={`${week.shown}-past`} {...enter(3)} className="border-t border-border pt-6 text-sm text-secondary">
             Actions, the week ahead, risks and team are shown for the current week only.
-          </motion.p>
+          </m.p>
         ) : (
           <>
             {/* ─── Needs your action ─────────────────────────────────── */}
-            <motion.section key={`${week.shown}-action`} {...enter(3)} aria-labelledby="action">
+            <m.section key={`${week.shown}-action`} {...enter(3)} aria-labelledby="action">
               <Heading aside={<LiveMark />}>
                 <span id="action">Needs your action</span>
               </Heading>
@@ -433,11 +433,11 @@ export default function MondayBriefPage() {
                   Nothing waiting on you.
                 </p>
               )}
-            </motion.section>
+            </m.section>
 
             {/* ─── This week ─────────────────────────────────────────── */}
             {brief.comingUp && brief.weeks.days && brief.weeks.today && (
-              <motion.section key={`${week.shown}-week`} {...enter(4)} aria-labelledby="this-week">
+              <m.section key={`${week.shown}-week`} {...enter(4)} aria-labelledby="this-week">
                 <Heading aside={<LiveMark />}>
                   <span id="this-week">This week</span>
                 </Heading>
@@ -448,11 +448,11 @@ export default function MondayBriefPage() {
                   timezone={brief.timezone}
                   currency={cur}
                 />
-              </motion.section>
+              </m.section>
             )}
 
             {/* ─── Risks ─────────────────────────────────────────────── */}
-            <motion.section key={`${week.shown}-risks`} {...enter(5)} aria-labelledby="risks">
+            <m.section key={`${week.shown}-risks`} {...enter(5)} aria-labelledby="risks">
               <Heading aside={<LiveMark />}>
                 <span id="risks">Risks</span>
               </Heading>
@@ -465,19 +465,19 @@ export default function MondayBriefPage() {
               ) : (
                 <p className="text-sm text-secondary">No risks flagged.</p>
               )}
-            </motion.section>
+            </m.section>
 
             {/* ─── Team, by department — never by name ───────────────── */}
-            <motion.section key={`${week.shown}-team`} {...enter(6)} aria-labelledby="team">
+            <m.section key={`${week.shown}-team`} {...enter(6)} aria-labelledby="team">
               <Heading aside={<span className="text-xs text-secondary">Counts only — nobody is named here.</span>}>
                 <span id="team">Team by department</span>
               </Heading>
               {team.length > 0 ? <TeamBars rows={team} /> : <p className="text-sm text-secondary">No open work.</p>}
-            </motion.section>
+            </m.section>
 
             {/* ─── Management only: who hasn't opened Flowzen ────────── */}
             {brief.notUsingFlowzen && (
-              <motion.section key={`${week.shown}-usage`} {...enter(7)} aria-labelledby="usage">
+              <m.section key={`${week.shown}-usage`} {...enter(7)} aria-labelledby="usage">
                 <Heading
                   aside={<span className="text-xs text-secondary">{weekLabel(brief.notUsingFlowzen.from, brief.notUsingFlowzen.to)}</span>}
                 >
@@ -501,7 +501,7 @@ export default function MondayBriefPage() {
                 ) : (
                   <p className="text-sm text-secondary">{brief.notUsingFlowzen.line}</p>
                 )}
-              </motion.section>
+              </m.section>
             )}
           </>
         )}

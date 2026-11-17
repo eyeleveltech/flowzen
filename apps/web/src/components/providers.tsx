@@ -1,7 +1,7 @@
 'use client';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MotionConfig } from 'framer-motion';
+import { LazyMotion, MotionConfig } from 'framer-motion';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/stores';
@@ -13,6 +13,14 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { WaitingOnDialog } from '@/components/work/WaitingOnDialog';
 import { GlobalEvents } from '@/components/global-events';
 import { NumberWheelGuard } from '@/components/number-wheel-guard';
+
+/*
+ * framer-motion's features arrive after the page, not in the bundle every page
+ * loads first (Perf Plan 3): every animated element is an `m.*` component,
+ * and `strict` makes a stray `motion.*` fail loudly in development rather than
+ * quietly pull the whole library back in. See lib/motion-features.ts.
+ */
+const loadMotionFeatures = () => import('@/lib/motion-features').then((mod) => mod.default);
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -49,28 +57,30 @@ export function Providers({ children }: { children: ReactNode }) {
           prefers-reduced-motion block in globals.css cannot reach it — without this, 54 files
           worth of transitions would keep moving for someone who asked the system to stop.
           Set once here rather than per-component, which is the only way it stays true. */}
-      <MotionConfig reducedMotion="user">
-        <SocketProvider>
-          {children}
-          <GlobalEvents />
-          <NumberWheelGuard />
-          <ConfirmDialog />
-          <WaitingOnDialog />
-          <Toaster
-            position={isMobile ? 'bottom-center' : 'top-right'}
-            containerStyle={
-              isMobile
-                ? { bottom: 80, left: 16, right: 16 }
-                : { top: 72, right: 16 }
-            }
-            toastOptions={{
-              duration: 3500,
-              error: { duration: 8000 },
-              className: 'rounded-2xl border border-border bg-white text-sm text-primary shadow-overlay',
-            }}
-          />
-        </SocketProvider>
-      </MotionConfig>
+      <LazyMotion features={loadMotionFeatures} strict>
+        <MotionConfig reducedMotion="user">
+          <SocketProvider>
+            {children}
+            <GlobalEvents />
+            <NumberWheelGuard />
+            <ConfirmDialog />
+            <WaitingOnDialog />
+            <Toaster
+              position={isMobile ? 'bottom-center' : 'top-right'}
+              containerStyle={
+                isMobile
+                  ? { bottom: 80, left: 16, right: 16 }
+                  : { top: 72, right: 16 }
+              }
+              toastOptions={{
+                duration: 3500,
+                error: { duration: 8000 },
+                className: 'rounded-2xl border border-border bg-white text-sm text-primary shadow-overlay',
+              }}
+            />
+          </SocketProvider>
+        </MotionConfig>
+      </LazyMotion>
     </QueryClientProvider>
   );
 }

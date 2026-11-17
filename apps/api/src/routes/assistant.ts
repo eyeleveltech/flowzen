@@ -61,6 +61,12 @@ const askSchema = z.object({
    */
   conversationId: z.string().min(1).optional(),
   /**
+   * "Think harder": the same question again, one effort level up (Perf Plan
+   * 3). Its own route in effect — every round of the answer runs at that
+   * level, so each level's prompt cache stays warm.
+   */
+  harder: z.boolean().optional(),
+  /**
    * The screen they asked from.
    *
    * Ids and a route, never the page's data. Zen resolves them with its own
@@ -123,6 +129,7 @@ assistantRouter.post('/ask', requireManagement(), async (req: AuthRequest, res: 
       month,
       history: thread.turns.length > 0 ? thread.turns : parsed.data.history,
       page: parsed.data.page,
+      harder: parsed.data.harder,
     });
 
     // Written after the answer is known, so a question that failed does not
@@ -446,6 +453,7 @@ assistantRouter.post('/stream', requireManagement(), async (req: AuthRequest, re
       month,
       history: thread.turns.length > 0 ? thread.turns : parsed.data.history,
       page: parsed.data.page,
+      harder: parsed.data.harder,
     })) {
       // `tool` says what Zen went to look at. Sent through so a pause of a few
       // seconds has a reason on screen rather than looking like nothing is

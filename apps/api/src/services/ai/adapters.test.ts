@@ -367,6 +367,11 @@ describe('Anthropic', () => {
     'claude-opus-5-5': capabilities(true, true),
     'claude-sonnet-5-5': capabilities(true, true),
     'claude-haiku-4-5': capabilities(false, false),
+    // Takes medium and high but not low — so a request for low sends no effort at all.
+    'claude-mid-only': {
+      ...capabilities(true, true),
+      effort: { supported: true, low: { supported: false }, medium: { supported: true }, high: { supported: true }, max: { supported: false }, xhigh: { supported: false } },
+    },
   };
 
   /** A finished message, as `finalMessage()` and `create()` return one. */
@@ -447,6 +452,37 @@ describe('Anthropic', () => {
     await anthropic.complete(req({ model: 'claude-haiku-4-5' }));
     expect(created(1)).not.toHaveProperty('thinking');
     expect(created(1)).not.toHaveProperty('output_config');
+  });
+
+  /*
+   * Zen's effort routes (Perf Plan 3): low by default, medium on "Think
+   * harder", each only where the model takes that level. A caller that asks
+   * for none still gets medium, as before.
+   */
+  it('sends the effort asked for, when the model takes it', async () => {
+    await anthropic.complete(req({ model: 'claude-opus-5-5', effort: 'low' }));
+    expect(created(0).output_config).toEqual({ effort: 'low' });
+    await anthropic.complete(req({ model: 'claude-opus-5-5', effort: 'medium' }));
+    expect(created(1).output_config).toEqual({ effort: 'medium' });
+    const turn = anthropic.stream(req({ model: 'claude-opus-5-5', effort: 'high' }));
+    await drain(turn);
+    expect(streamed(0).output_config).toEqual({ effort: 'high' });
+  });
+
+  it('sends no effort at all for a level the model does not take', async () => {
+    await anthropic.complete(req({ model: 'claude-mid-only', effort: 'low' }));
+    expect(created(0)).not.toHaveProperty('output_config');
+    // The level it does take still goes.
+    await anthropic.complete(req({ model: 'claude-mid-only', effort: 'medium' }));
+    expect(created(1).output_config).toEqual({ effort: 'medium' });
+    // And a model with no effort dial gets none, whatever was asked.
+    await anthropic.complete(req({ model: 'claude-haiku-4-5', effort: 'low' }));
+    expect(created(2)).not.toHaveProperty('output_config');
+  });
+
+  it('keeps medium for a caller that asks for no level', async () => {
+    await anthropic.complete(req({ model: 'claude-mid-only' }));
+    expect(created(0).output_config).toEqual({ effort: 'medium' });
   });
 
   it('asks the Models API once a day per model, not once a request', async () => {

@@ -107,6 +107,21 @@ export const linkForUser = (
 };
 
 /**
+ * Which of the linked screens this person can open, as one short string: the
+ * part of "who is reading" that changes where a row links. Two readers with
+ * the same value are given the same links, so a cached answer can be shared
+ * between them (Perf Plan 2, the Monday brief).
+ */
+export const linkAudience = (user: AuthRequest['user']): string => {
+  if (!user) return 'anyone';
+  const screens = [...new Set(Object.values(SCREEN_PERMISSION).filter((p): p is PermissionKey => p != null))];
+  return screens
+    .filter((p) => hasPermission(user, p))
+    .sort()
+    .join(',');
+};
+
+/**
  * One task, opened: its drawer on My Work, or — when it is not on the person's
  * own desk — the read-only view drawn from its history. My Work decides which.
  */

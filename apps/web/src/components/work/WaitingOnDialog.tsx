@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'framer-motion';
 import { Building2, CirclePause, UserRound, X } from 'lucide-react';
 import { Icon } from '@/components/ui/icon';
 import { useWaitingOnStore, type WaitChoice } from '@/stores/waitingOn';
@@ -45,14 +45,14 @@ export function WaitingOnDialog() {
           aria-labelledby="waiting-on-title"
           className="fixed inset-0 z-999 flex items-center justify-center p-4"
         >
-          <motion.div
+          <m.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={cancel}
             className="absolute inset-0 bg-black/30 backdrop-blur-xs"
           />
-          <motion.div
+          <m.div
             initial={{ opacity: 0, scale: 0.95, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -92,7 +92,7 @@ export function WaitingOnDialog() {
             {!hasClient && (
               <p className="mt-3 text-micro text-secondary">This task has no client, so there is no client to wait on.</p>
             )}
-          </motion.div>
+          </m.div>
         </div>
       )}
     </AnimatePresence>

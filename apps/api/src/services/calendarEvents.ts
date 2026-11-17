@@ -8,6 +8,7 @@ import { dayStartUtc, hoursLabel, localDayAndTime, whenLabel, zonedToUtc } from 
 import { googleConfigured } from './googleCalendar.js';
 import { pushCalendarChange } from './push.js';
 import { emitToOrganization } from '../liveStream.js';
+import { forgetAlertClauses } from './alertClauseCache.js';
 
 /**
  * Meetings, shoots and the gear they reserve — the parts the route, the
@@ -325,7 +326,9 @@ async function replaceUpdateAlert(
   if (readers.length) {
     await prisma.alertRead.createMany({ data: readers.map((userId) => ({ alertId: alert.id, userId })), skipDuplicates: true });
   }
-  // The bells open right now hear of it, as they do of the scanner's alerts.
+  // The bells open right now hear of it, as they do of the scanner's alerts —
+  // and work out afresh who it reaches (services/alertClauseCache.ts).
+  forgetAlertClauses(organizationId);
   emitToOrganization(organizationId, 'notification:new', null);
 }
 
@@ -502,6 +505,7 @@ export async function syncTodayAlert(
   await prisma.alert.create({
     data: { organizationId, rule: 'EVENT_TODAY', severity: AlertSeverity.MED, entityType: 'CalendarEvent', entityId: ev.id, message, raisedAt: now },
   });
+  forgetAlertClauses(organizationId);
   emitToOrganization(organizationId, 'notification:new', null);
   return 'created';
 }

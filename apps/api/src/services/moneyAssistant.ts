@@ -7,6 +7,7 @@ import {
   AssistantFailed,
   AssistantNotConfigured,
   providerFor,
+  type AiEffort,
   type AiProvider,
   type AiReply,
   type AiTurn,
@@ -112,6 +113,20 @@ const TEMPERATURE = 0.2;
  */
 const MAX_OUTPUT_TOKENS = 16_000;
 
+/**
+ * How hard Zen thinks (Perf Plan 3, decision 5).
+ *
+ * A lighter effort starts answering sooner, and most questions here are a
+ * lookup and a sentence. "Think harder" under an answer asks the same
+ * question again one level up. Each is fixed for its whole question — every
+ * round of one answer at the same level — because changing it mid-chain
+ * throws the prompt cache away; each level keeps its own cache warm.
+ *
+ * Sent only where the model takes that level (services/ai/anthropic.ts asks
+ * the Models API); elsewhere it is left out and the model uses its own.
+ */
+export const ZEN_EFFORT: { usual: AiEffort; harder: AiEffort } = { usual: 'low', harder: 'medium' };
+
 /** Shown under an answer that hit the ceiling, muted, after what did come back. */
 const CUT_SHORT = '(Answer cut short.)';
 /** In place of the answer when the model declines the question. */
@@ -134,6 +149,52 @@ function logUsage(organizationId: string, round: number, model: string, usage?: 
     `Zen usage org ${organizationId} round ${round + 1} ${model}: input ${usage.input}, output ${usage.output}, ` +
       `cache read ${usage.cacheRead}, cache write ${usage.cacheCreation}`,
   );
+}
+
+/**
+ * How long one question took, measured on the server (Perf Plan 3, decision 4):
+ * when the first word of the answer was ready, how many requests to the model
+ * it took, and the whole time. Logged, and kept with the question's record so
+ * a before-and-after can be read back from the database.
+ */
+export type ZenTiming = {
+  effort: AiEffort;
+  /** Milliseconds from the question arriving to the first word of the answer; null if none came. */
+  firstTextMs: number | null;
+  /** Requests to the model: one, plus one per round of lookups. */
+  rounds: number;
+  totalMs: number;
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheCreation: number;
+};
+
+function startTiming(effort: AiEffort) {
+  const started = Date.now();
+  const t: ZenTiming = { effort, firstTextMs: null, rounds: 0, totalMs: 0, input: 0, output: 0, cacheRead: 0, cacheCreation: 0 };
+  return {
+    timing: t,
+    firstText() {
+      if (t.firstTextMs === null) t.firstTextMs = Date.now() - started;
+    },
+    request(usage?: AiUsage) {
+      t.rounds += 1;
+      if (!usage) return;
+      t.input += usage.input;
+      t.output += usage.output;
+      t.cacheRead += usage.cacheRead;
+      t.cacheCreation += usage.cacheCreation;
+    },
+    done(organizationId: string, model: string) {
+      t.totalMs = Date.now() - started;
+      logger.info(
+        `Zen question org ${organizationId} ${model} effort ${t.effort}: first text ${t.firstTextMs ?? '-'} ms, ` +
+          `${t.rounds} request${t.rounds === 1 ? '' : 's'}, total ${t.totalMs} ms, cache read ${t.cacheRead} of ${t.input + t.cacheRead + t.cacheCreation} input`,
+      );
+      return t;
+    },
+  };
 }
 
 /**
@@ -330,6 +391,7 @@ const FIXED_RULES = [
   'If they tell you how they like something done — who work usually goes to, how they want dates given, what they call something — call rememberThis with one short sentence. Do not remember figures, client details or anything a tool can look up.',
   '',
   'You can look things up. Call a function when the answer is not already below — for anything about a particular client, a task, an invoice, an asset, or a month other than the current one.',
+  'Ask for every lookup you need at once, in the same turn: they run at the same time, and each extra turn makes the person wait. Only look something up in a later turn when it depends on what an earlier lookup returned.',
   '',
   'Things about this data you must not get wrong:',
   '- Retainer money and one-off project money are never added together. They are separate lines of business.',
@@ -440,8 +502,8 @@ function contextFor(
  * Tool calls and their results get appended to this as the loop runs, which is
  * how the model remembers what it already looked up.
  */
-const openingTurns = (history: PriorTurn[] | undefined, question: string): AiTurn[] => [
-  ...(history ?? []).slice(-MAX_TURNS).map(
+const openingTurns = (history: PriorTurn[] | undefined, question: string, harder = false): AiTurn[] => [
+  ...withoutTheAnswerBeingRedone(history ?? [], question, harder).slice(-MAX_TURNS).map(
     (t): AiTurn =>
       t.from === 'you'
         ? { role: 'user', text: t.text.slice(0, MAX_TURN_CHARS) }
@@ -449,6 +511,18 @@ const openingTurns = (history: PriorTurn[] | undefined, question: string): AiTur
   ),
   { role: 'user', text: question },
 ];
+
+/**
+ * "Think harder" asks the last question again. Its first answer is left out of
+ * what goes back, so the second is a fresh look rather than a defence of the
+ * first. Anything earlier in the conversation stays.
+ */
+function withoutTheAnswerBeingRedone(history: PriorTurn[], question: string, harder: boolean): PriorTurn[] {
+  if (!harder || history.length < 2) return history;
+  const [asked, answered] = history.slice(-2);
+  const same = asked.from === 'you' && answered.from === 'assistant' && asked.text.trim() === question.trim();
+  return same ? history.slice(0, -2) : history;
+}
 
 /** A question asked, and what answering it took. */
 const record = (opts: {
@@ -459,6 +533,7 @@ const record = (opts: {
   provider: string;
   model: string;
   used: string[];
+  timing?: ZenTiming;
 }) =>
   prisma.activity.create({
     data: {
@@ -474,6 +549,8 @@ const record = (opts: {
         provider: opts.provider,
         model: opts.model,
         used: opts.used,
+        // How long it took (Perf Plan 3): first word, requests, total, cache.
+        ...(opts.timing ? { timing: opts.timing } : {}),
       },
     },
   });
@@ -497,6 +574,8 @@ export async function* streamMoneyAssistant(opts: {
   history?: PriorTurn[];
   /** The screen they asked from — see `describeWhereTheyAre`. */
   page?: PageContext;
+  /** "Think harder": the same question, one effort level up. */
+  harder?: boolean;
 }): AsyncGenerator<
   | { kind: 'text'; text: string }
   | { kind: 'tool'; name: string }
@@ -518,11 +597,13 @@ export async function* streamMoneyAssistant(opts: {
     recall(opts.userId),
   ]);
 
-  const turns = openingTurns(opts.history, opts.question);
+  const turns = openingTurns(opts.history, opts.question, opts.harder);
   const context = contextFor(orient, asker?.name ?? 'somebody', where, memories);
   const used: string[] = [];
   /** Whether anything has been said yet, so a later round starts a new paragraph rather than mid-word. */
   let saidSomething = false;
+  const effort = opts.harder ? ZEN_EFFORT.harder : ZEN_EFFORT.usual;
+  const clock = startTiming(effort);
 
   for (let round = 0; round <= MAX_TOOL_ROUNDS; round += 1) {
     const last = round === MAX_TOOL_ROUNDS;
@@ -546,6 +627,7 @@ export async function* streamMoneyAssistant(opts: {
       toolChoice: last ? 'none' : 'auto',
       temperature: TEMPERATURE,
       maxOutputTokens: MAX_OUTPUT_TOKENS,
+      effort,
     });
 
     let reply: AiReply;
@@ -561,9 +643,11 @@ export async function* streamMoneyAssistant(opts: {
       if (saidSomething && !saidThisRound) yield { kind: 'text', text: String.fromCharCode(10, 10) };
       saidThisRound = true;
       saidSomething = true;
+      clock.firstText();
       yield { kind: 'text', text: step.value.text };
     }
     logUsage(opts.organizationId, round, model, reply.usage);
+    clock.request(reply.usage);
 
     // Why it stopped comes before what it said.
     if (reply.stop === 'refusal') {
@@ -608,7 +692,7 @@ export async function* streamMoneyAssistant(opts: {
     });
   }
 
-  await record({ ...opts, provider: provider.id, model, used });
+  await record({ ...opts, provider: provider.id, model, used, timing: clock.done(opts.organizationId, model) });
 }
 
 export async function askMoneyAssistant(opts: {
@@ -619,6 +703,8 @@ export async function askMoneyAssistant(opts: {
   history?: PriorTurn[];
   /** The screen they asked from — see `describeWhereTheyAre`. */
   page?: PageContext;
+  /** "Think harder": the same question, one effort level up. */
+  harder?: boolean;
 }): Promise<{
   answer: string;
   model: string;
@@ -638,9 +724,11 @@ export async function askMoneyAssistant(opts: {
     recall(opts.userId),
   ]);
 
-  const turns = openingTurns(opts.history, opts.question);
+  const turns = openingTurns(opts.history, opts.question, opts.harder);
   const context = contextFor(orient, asker?.name ?? 'somebody', where, memories);
   const used: string[] = [];
+  const effort = opts.harder ? ZEN_EFFORT.harder : ZEN_EFFORT.usual;
+  const clock = startTiming(effort);
 
   /*
    * Ask, run whatever it asked for, ask again.
@@ -668,8 +756,12 @@ export async function askMoneyAssistant(opts: {
       toolChoice: last ? 'none' : 'auto',
       temperature: TEMPERATURE,
       maxOutputTokens: MAX_OUTPUT_TOKENS,
+      effort,
     });
     logUsage(opts.organizationId, round, model, reply.usage);
+    clock.request(reply.usage);
+    // Not streamed: the first word is ready when the whole of this turn is.
+    if (reply.text) clock.firstText();
 
     // Why it stopped comes before what it said.
     if (reply.stop === 'refusal') {
@@ -723,7 +815,7 @@ export async function askMoneyAssistant(opts: {
    * from the same fixed snapshot. Now that Zen chooses what to look at, what
    * it looked at is the more useful half of the record.
    */
-  await record({ ...opts, provider: provider.id, model, used });
+  await record({ ...opts, provider: provider.id, model, used, timing: clock.done(opts.organizationId, model) });
 
   return { answer, model, provider: provider.id, used, draft, cards, ...(note ? { note } : {}) };
 }

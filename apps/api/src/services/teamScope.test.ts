@@ -191,7 +191,11 @@ beforeEach(() => {
   p.task.findMany.mockImplementation(async ({ where }: any) => TASKS.filter((t) => matches(t, where)));
   p.task.findFirst.mockImplementation(async ({ where }: any) => TASKS.find((t) => matches(t, where)) ?? null);
   p.task.count.mockImplementation(async ({ where }: any) => TASKS.filter((t) => matches(t, where)).length);
-  p.alert.findMany.mockImplementation(async ({ where }: any) => ALERTS.filter((a) => matches(a, where)));
+  // The bell reads the page with my reads on each row, and the counts as one pass (Perf Plan 2).
+  p.alert.findMany.mockImplementation(async ({ where, select }: any) => {
+    const found = ALERTS.filter((a) => matches(a, where));
+    return select?._count ? found.map(() => ({ _count: { reads: 0 } })) : found.map((a) => ({ ...a, reads: [] }));
+  });
   p.alert.count.mockImplementation(async ({ where }: any) => ALERTS.filter((a) => matches(a, where)).length);
   p.alertRead.findMany.mockResolvedValue([]);
   p.taskApprover.findMany.mockResolvedValue([]);

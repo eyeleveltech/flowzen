@@ -113,7 +113,18 @@ export type AiRequest = {
   /** Anthropic never sends it — current Claude models refuse it. */
   temperature: number;
   maxOutputTokens: number;
+  /**
+   * How hard the model thinks before it answers, where the provider has the
+   * dial (Anthropic's `effort`). Left out, `medium` — what every caller got
+   * before Zen asked for less. Sent only if the model takes that level.
+   * Fixed for one question's whole chain of requests: changing it between
+   * rounds would throw the cache away.
+   */
+  effort?: AiEffort;
 };
+
+/** The effort levels Flowzen asks for. */
+export type AiEffort = 'low' | 'medium' | 'high';
 
 /** Why a turn ended. Undefined from an adapter that does not say, which reads as `'end'`. */
 export type AiStop = 'end' | 'max_tokens' | 'refusal';

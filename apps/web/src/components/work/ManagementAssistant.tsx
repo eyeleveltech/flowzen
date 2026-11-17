@@ -70,6 +70,8 @@ type Message = {
   failed?: boolean;
   /** A muted line under the answer: "(Answer cut short.)" */
   note?: string;
+  /** Asked, or answered, with "Think harder" — one effort level up (Perf Plan 3). */
+  harder?: boolean;
   /**
    * A task Zen has filled in, shown under the answer as a card to check.
    *
@@ -428,10 +430,10 @@ export function ManagementAssistant({
     setMessages((m) => [...m, { id: nextId.current++, from, text, at: new Date(), failed }]);
 
   const ask = useCallback(
-    async (text: string) => {
+    async (text: string, harder = false) => {
       const q = text.trim();
       if (!q || busy) return;
-      setDraft('');
+      if (!harder) setDraft('');
 
       /*
        * The thread as it stood BEFORE this question.
@@ -444,12 +446,13 @@ export function ManagementAssistant({
        */
       const priorTurns = messages.map((m) => ({ from: m.from, text: m.text }));
 
-      say('you', q);
+      if (harder) setMessages((m) => [...m, { id: nextId.current++, from: 'you', text: q, at: new Date(), harder: true }]);
+      else say('you', q);
       setBusy(true);
 
       // The answer's own bubble, filled in as the text arrives.
       const answerId = nextId.current++;
-      setMessages((m) => [...m, { id: answerId, from: 'assistant', text: '', at: new Date() }]);
+      setMessages((m) => [...m, { id: answerId, from: 'assistant', text: '', at: new Date(), ...(harder ? { harder: true } : {}) }]);
 
       try {
         await api.assistant.askStreaming(q, {
@@ -458,6 +461,7 @@ export function ManagementAssistant({
           // and sends its id back when there is not.
           ...(conversationId ? { conversationId } : {}),
           page,
+          ...(harder ? { harder: true } : {}),
           onThread: (id) => setConversationId(id),
           onSaved: (storedId) =>
             setMessages((m) => m.map((msg) => (msg.id === answerId ? { ...msg, storedId } : msg))),
@@ -590,7 +594,15 @@ export function ManagementAssistant({
    * runs. Nothing once it is writing — the words arriving say that.
    */
   const activity =
-    busy && last?.from === 'assistant' ? (lookingAt ?? (last.text === '' ? 'Thinking…' : null)) : null;
+    busy && last?.from === 'assistant'
+      ? (lookingAt ?? (last.text === '' ? (last.harder ? 'Thinking harder…' : 'Thinking…') : null))
+      : null;
+
+  /** The question an answer was given to: the nearest of the person's own messages above it. */
+  const questionFor = (answerAt: number) => {
+    for (let i = answerAt - 1; i >= 0; i -= 1) if (messages[i].from === 'you') return messages[i].text;
+    return null;
+  };
 
   const threadList =
     threads.length === 0 ? (
@@ -660,8 +672,15 @@ export function ManagementAssistant({
             </div>
           )}
 
-          {messages.map((m) => {
+          {messages.map((m, at) => {
             const writing = busy && m === last && m.from === 'assistant';
+            /*
+             * "Think harder" under a finished answer: the same question again,
+             * one effort level up. Not under one that already was — there is
+             * no level above it on this route.
+             */
+            const reAsk =
+              m.from === 'assistant' && !writing && !m.failed && !m.harder && m.text !== '' ? questionFor(at) : null;
             return (
               <div
                 key={m.id}
@@ -693,6 +712,18 @@ export function ManagementAssistant({
                   </div>
                 )}
                 {m.note && <p className="px-1 text-micro text-secondary">{m.note}</p>}
+                {m.from === 'you' && m.harder && <p className="px-1 text-micro text-secondary">Asked again, thinking harder</p>}
+                {reAsk && (
+                  <button
+                    type="button"
+                    data-think-harder
+                    disabled={busy}
+                    onClick={() => void ask(reAsk, true)}
+                    className="rounded-lg px-1.5 py-0.5 text-micro text-secondary hover:bg-subtle hover:text-primary disabled:opacity-50"
+                  >
+                    Think harder
+                  </button>
+                )}
                 {/*
                   * What Zen filled in, before it is anything.
                   *

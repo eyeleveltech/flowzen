@@ -209,7 +209,32 @@ calendarRouter.get('/', requirePermission('work.own'), async (req: AuthRequest, 
       status: { not: TaskStatus.CANCELLED },
     } satisfies Prisma.TaskWhereInput;
 
-    const [mine, team] = await Promise.all([
+    /*
+     * Every layer is read at once (Perf Plan 2, decision 3): they are
+     * independent, and one after another they were about nine round trips
+     * before the first item could be drawn. Each is still only read when the
+     * layer is on and this person may see it; the items are put together
+     * below, layer by layer, in the order they always were.
+     */
+    const seesInvoices = hasPermission(user, 'money.status');
+    const seesProformas = hasPermission(user, 'pipeline.read') || figures;
+    const momentsFrom = dayStartUtc(from, timezone);
+    const momentsTo = dayStartUtc(addDays(to, 1), timezone);
+    const [
+      mine,
+      team,
+      events,
+      edits,
+      blocks,
+      invoices,
+      proformas,
+      leads,
+      projects,
+      retainers,
+      retainerProjects,
+      out,
+      googleConnection,
+    ] = await Promise.all([
       layers.has('mine')
         ? prisma.task.findMany({
             where: { ...taskBase, assignees: { some: { userId: me } } },
@@ -217,56 +242,142 @@ calendarRouter.get('/', requirePermission('work.own'), async (req: AuthRequest, 
           })
         : [],
       layers.has('team')
-        ? prisma.task.findMany({
+        ? taskInScope(user, {
+            ...taskBase,
+            AND: [
+              ...(person ? [{ assignees: { some: { userId: person } } }] : []),
+              ...(departmentId ? [{ assignees: { some: { user: { departmentId } } } }] : []),
+              // Shown once: with My tasks on, your own are already there.
+              ...(layers.has('mine') ? [{ NOT: { assignees: { some: { userId: me } } } }] : []),
+            ],
             // A Head's team is the departments they lead.
-            where: await taskInScope(user, {
-              ...taskBase,
-              AND: [
-                ...(person ? [{ assignees: { some: { userId: person } } }] : []),
-                ...(departmentId ? [{ assignees: { some: { user: { departmentId } } } }] : []),
-                // Shown once: with My tasks on, your own are already there.
-                ...(layers.has('mine') ? [{ NOT: { assignees: { some: { userId: me } } } }] : []),
-              ],
-            }),
-            select: taskSelect,
+          }).then((where) => prisma.task.findMany({ where, select: taskSelect }))
+        : [],
+      // Meetings and shoots. Events are moments: the window is the studio's midnight to midnight.
+      layers.has('events')
+        ? prisma.calendarEvent.findMany({
+            where: {
+              organizationId: orgId,
+              deletedAt: null,
+              startsAt: { lt: momentsTo },
+              endsAt: { gt: momentsFrom },
+              // One person's schedule, for anybody: events are seen by everyone,
+              // so picking a person to find them a free slot shows nothing new.
+              // Or one department's people, for My Department.
+              ...(person
+                ? { attendees: { some: { userId: person } } }
+                : onlyDepartment
+                  ? { attendees: { some: { user: { departmentId: onlyDepartment, active: true } } } }
+                  : {}),
+            },
+            select: {
+              id: true,
+              kind: true,
+              title: true,
+              startsAt: true,
+              endsAt: true,
+              allDay: true,
+              location: true,
+              createdById: true,
+              createdBy: { select: { name: true } },
+              attendees: { select: { userId: true } },
+            },
           })
         : [],
+      layers.has('events') ? eventEditRule(user) : null,
+      // Google busy time.
+      layers.has('google')
+        ? prisma.externalBusyBlock.findMany({
+            where: {
+              organizationId: orgId,
+              startsAt: { lt: momentsTo },
+              endsAt: { gt: momentsFrom },
+              ...(person ? { userId: person } : onlyDepartment ? { user: { departmentId: onlyDepartment, active: true } } : {}),
+            },
+            select: { id: true, userId: true, title: true, startsAt: true, endsAt: true, allDay: true, user: { select: { name: true } } },
+          })
+        : [],
+      // Money.
+      layers.has('money') && seesInvoices
+        ? prisma.invoice.findMany({
+            where: {
+              organizationId: orgId,
+              status: { in: [InvoiceStatus.RAISED, InvoiceStatus.OVERDUE] },
+              dueAt: range,
+            },
+            select: { id: true, number: true, amount: true, dueAt: true, status: true, company: { select: { name: true } } },
+          })
+        : [],
+      layers.has('money') && seesProformas
+        ? prisma.proforma.findMany({
+            where: { organizationId: orgId, status: ProformaStatus.UNPAID, validTill: range },
+            select: { id: true, number: true, amount: true, validTill: true, sourceType: true, company: { select: { name: true } } },
+          })
+        : [],
+      // Sales.
+      layers.has('sales')
+        ? prisma.outreachEntry.findMany({
+            where: {
+              organizationId: orgId,
+              nextActionDate: range,
+              status: { not: OutreachStatus.DEAD },
+              // Promoted, it is a company now; its follow-ups live there.
+              promotedCompanyId: null,
+            },
+            select: { id: true, name: true, nextActionDate: true },
+          })
+        : [],
+      // Work.
+      layers.has('work')
+        ? prisma.project.findMany({
+            where: {
+              organizationId: orgId,
+              status: { not: ProjectStatus.CANCELLED },
+              OR: [{ startDate: range }, { endDate: range }],
+            },
+            select: { id: true, name: true, startDate: true, endDate: true, status: true, company: { select: { name: true } } },
+          })
+        : [],
+      layers.has('work')
+        ? prisma.retainer.findMany({
+            where: { organizationId: orgId, status: RetainerStatus.ACTIVE, renewalDate: range },
+            select: { id: true, renewalDate: true, company: { select: { name: true } } },
+          })
+        : [],
+      layers.has('work')
+        ? prisma.retainerProject.findMany({
+            where: { retainer: { organizationId: orgId }, OR: [{ startDate: range }, { endDate: range }] },
+            select: {
+              id: true,
+              retainerId: true,
+              name: true,
+              startDate: true,
+              endDate: true,
+              status: true,
+              retainer: { select: { company: { select: { name: true } } } },
+            },
+          })
+        : [],
+      // Equipment. `dueAt` is a moment, not a day: read a day either side and
+      // keep what falls inside the window on the organisation's own clock.
+      layers.has('equipment')
+        ? prisma.assetMovement.findMany({
+            where: {
+              returnedAt: null,
+              dueAt: { gte: asDate(addDays(from, -1)), lt: asDate(addDays(to, 2)) },
+              asset: { organizationId: orgId, deletedAt: null },
+            },
+            select: { id: true, assetId: true, dueAt: true, asset: { select: { tag: true, name: true } }, user: { select: { name: true } } },
+          })
+        : [],
+      // Only ever about the caller: their own Google connection has stopped working.
+      googleOn ? prisma.googleCalendarConnection.findUnique({ where: { userId: me }, select: { status: true } }) : null,
     ]);
     for (const t of mine) items.push(taskItem(t, 'mine', t.title));
     for (const t of team) items.push(taskItem(t, 'team', `${t.title} · ${names(t.assignees)}`));
 
     // ── Meetings and shoots ──────────────────────────────────────────────────
     if (layers.has('events')) {
-      // Events are moments: the window is the studio's midnight to midnight.
-      const events = await prisma.calendarEvent.findMany({
-        where: {
-          organizationId: orgId,
-          deletedAt: null,
-          startsAt: { lt: dayStartUtc(addDays(to, 1), timezone) },
-          endsAt: { gt: dayStartUtc(from, timezone) },
-          // One person's schedule, for anybody: events are seen by everyone,
-          // so picking a person to find them a free slot shows nothing new.
-          // Or one department's people, for My Department.
-          ...(person
-            ? { attendees: { some: { userId: person } } }
-            : onlyDepartment
-              ? { attendees: { some: { user: { departmentId: onlyDepartment, active: true } } } }
-              : {}),
-        },
-        select: {
-          id: true,
-          kind: true,
-          title: true,
-          startsAt: true,
-          endsAt: true,
-          allDay: true,
-          location: true,
-          createdById: true,
-          createdBy: { select: { name: true } },
-          attendees: { select: { userId: true } },
-        },
-      });
-      const edits = await eventEditRule(user);
       for (const ev of events) {
         const s = localDayAndTime(ev.startsAt, timezone);
         const e = localDayAndTime(ev.endsAt, timezone);
@@ -282,7 +393,7 @@ calendarRouter.get('/', requirePermission('work.own'), async (req: AuthRequest, 
           endDate: e.date,
           allDay: ev.allDay,
           link: eventLink(ev.id),
-          draggable: edits({ createdById: ev.createdById, attendeeIds: ev.attendees.map((a) => a.userId) }),
+          draggable: edits!({ createdById: ev.createdById, attendeeIds: ev.attendees.map((a) => a.userId) }),
           done: ev.endsAt <= now,
           eventId: ev.id,
           eventKind: ev.kind,
@@ -306,15 +417,6 @@ calendarRouter.get('/', requirePermission('work.own'), async (req: AuthRequest, 
 
     // ── Google busy time ─────────────────────────────────────────────────────
     if (layers.has('google')) {
-      const blocks = await prisma.externalBusyBlock.findMany({
-        where: {
-          organizationId: orgId,
-          startsAt: { lt: dayStartUtc(addDays(to, 1), timezone) },
-          endsAt: { gt: dayStartUtc(from, timezone) },
-          ...(person ? { userId: person } : onlyDepartment ? { user: { departmentId: onlyDepartment, active: true } } : {}),
-        },
-        select: { id: true, userId: true, title: true, startsAt: true, endsAt: true, allDay: true, user: { select: { name: true } } },
-      });
       for (const b of blocks) {
         const own = b.userId === me;
         const s = localDayAndTime(b.startsAt, timezone);
@@ -341,26 +443,6 @@ calendarRouter.get('/', requirePermission('work.own'), async (req: AuthRequest, 
 
     // ── Money ────────────────────────────────────────────────────────────────
     if (layers.has('money')) {
-      const seesInvoices = hasPermission(user, 'money.status');
-      const seesProformas = hasPermission(user, 'pipeline.read') || figures;
-      const [invoices, proformas] = await Promise.all([
-        seesInvoices
-          ? prisma.invoice.findMany({
-              where: {
-                organizationId: orgId,
-                status: { in: [InvoiceStatus.RAISED, InvoiceStatus.OVERDUE] },
-                dueAt: range,
-              },
-              select: { id: true, number: true, amount: true, dueAt: true, status: true, company: { select: { name: true } } },
-            })
-          : [],
-        seesProformas
-          ? prisma.proforma.findMany({
-              where: { organizationId: orgId, status: ProformaStatus.UNPAID, validTill: range },
-              select: { id: true, number: true, amount: true, validTill: true, sourceType: true, company: { select: { name: true } } },
-            })
-          : [],
-      ]);
       for (const inv of invoices) {
         const date = dayOf(inv.dueAt);
         items.push({
@@ -398,16 +480,6 @@ calendarRouter.get('/', requirePermission('work.own'), async (req: AuthRequest, 
 
     // ── Sales ────────────────────────────────────────────────────────────────
     if (layers.has('sales')) {
-      const leads = await prisma.outreachEntry.findMany({
-        where: {
-          organizationId: orgId,
-          nextActionDate: range,
-          status: { not: OutreachStatus.DEAD },
-          // Promoted, it is a company now; its follow-ups live there.
-          promotedCompanyId: null,
-        },
-        select: { id: true, name: true, nextActionDate: true },
-      });
       for (const l of leads) {
         const date = dayOf(l.nextActionDate!);
         items.push({
@@ -426,32 +498,6 @@ calendarRouter.get('/', requirePermission('work.own'), async (req: AuthRequest, 
 
     // ── Work ─────────────────────────────────────────────────────────────────
     if (layers.has('work')) {
-      const [projects, retainers, retainerProjects] = await Promise.all([
-        prisma.project.findMany({
-          where: {
-            organizationId: orgId,
-            status: { not: ProjectStatus.CANCELLED },
-            OR: [{ startDate: range }, { endDate: range }],
-          },
-          select: { id: true, name: true, startDate: true, endDate: true, status: true, company: { select: { name: true } } },
-        }),
-        prisma.retainer.findMany({
-          where: { organizationId: orgId, status: RetainerStatus.ACTIVE, renewalDate: range },
-          select: { id: true, renewalDate: true, company: { select: { name: true } } },
-        }),
-        prisma.retainerProject.findMany({
-          where: { retainer: { organizationId: orgId }, OR: [{ startDate: range }, { endDate: range }] },
-          select: {
-            id: true,
-            retainerId: true,
-            name: true,
-            startDate: true,
-            endDate: true,
-            status: true,
-            retainer: { select: { company: { select: { name: true } } } },
-          },
-        }),
-      ]);
       for (const p of projects) {
         const done = p.status === ProjectStatus.DELIVERED;
         const link = linkForUser('Project', p.id, user);
@@ -492,16 +538,6 @@ calendarRouter.get('/', requirePermission('work.own'), async (req: AuthRequest, 
 
     // ── Equipment ────────────────────────────────────────────────────────────
     if (layers.has('equipment')) {
-      // `dueAt` is a moment, not a day: read a day either side and keep what
-      // falls inside the window on the organisation's own clock.
-      const out = await prisma.assetMovement.findMany({
-        where: {
-          returnedAt: null,
-          dueAt: { gte: asDate(addDays(from, -1)), lt: asDate(addDays(to, 2)) },
-          asset: { organizationId: orgId, deletedAt: null },
-        },
-        select: { id: true, assetId: true, dueAt: true, asset: { select: { tag: true, name: true } }, user: { select: { name: true } } },
-      });
       for (const m of out) {
         const { date } = localDayAndTime(m.dueAt!, timezone);
         if (!inWindow(date)) continue;
@@ -545,9 +581,7 @@ calendarRouter.get('/', requirePermission('work.own'), async (req: AuthRequest, 
       timezone,
       today,
       // Only ever about the caller: their own Google connection has stopped working.
-      googleNeedsReconnect: googleOn
-        ? (await prisma.googleCalendarConnection.findUnique({ where: { userId: me }, select: { status: true } }))?.status === 'NEEDS_RECONNECT'
-        : false,
+      googleNeedsReconnect: googleConnection?.status === 'NEEDS_RECONNECT',
     });
   } catch (err) {
     next(err);

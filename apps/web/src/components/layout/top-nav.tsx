@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { m, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useUIStore, useAuthStore } from '@/stores';
 import { useShortcut } from '@/lib/shortcut';
 import { api } from '@/lib/api-v2';
@@ -329,7 +329,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
           ) : (
             <AnimatePresence>
               {showQuickCreate && (
-                <motion.div
+                <m.div
                   initial={{ opacity: 0, y: 8, scale: 0.96 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 8, scale: 0.96 }}
@@ -346,7 +346,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                       {item.label}
                     </button>
                   ))}
-                </motion.div>
+                </m.div>
               )}
             </AnimatePresence>
           )}
@@ -362,13 +362,13 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
           >
             <Bell className="h-4 w-4" />
             {unreadCount > 0 && (
-              <motion.span
+              <m.span
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
                 className="absolute -right-1 -top-1 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-danger px-1 text-micro font-semibold text-white"
               >
                 {unreadCount > 9 ? '9+' : unreadCount}
-              </motion.span>
+              </m.span>
             )}
           </button>
 
@@ -427,7 +427,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
           ) : (
             <AnimatePresence>
               {showNotifications && (
-                <motion.div
+                <m.div
                   initial={{ opacity: 0, y: 8, scale: 0.96 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 8, scale: 0.96 }}
@@ -503,7 +503,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                       })
                     )}
                   </div>
-                </motion.div>
+                </m.div>
               )}
             </AnimatePresence>
           )}
@@ -579,7 +579,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
           ) : (
             <AnimatePresence>
               {showUserMenu && (
-                <motion.div
+                <m.div
                   initial={{ opacity: 0, y: 8, scale: 0.96 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 8, scale: 0.96 }}
@@ -624,7 +624,7 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                       Sign out
                     </button>
                   </div>
-                </motion.div>
+                </m.div>
               )}
             </AnimatePresence>
           )}

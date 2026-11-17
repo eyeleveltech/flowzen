@@ -7,7 +7,8 @@ import { generateBriefSummary, numbersChangedSince } from '../services/briefSumm
 import { waitingOnShown } from '../services/taskWaiting.js';
 import { addDays, isWorkingDay, loadWorkCalendar, todayIn, weekdayOf } from '../utils/workCalendar.js';
 import { dayStartUtc, localDayAndTime, whenLabel } from '../utils/zonedTime.js';
-import { linkForUser, rawLinkFor } from '../utils/recordLink.js';
+import { linkAudience, linkForUser, rawLinkFor } from '../utils/recordLink.js';
+import { briefCache, briefKey } from '../services/briefCache.js';
 import { logger } from '../utils/logger.js';
 
 export const briefRouter = Router();
@@ -884,10 +885,20 @@ briefRouter.get(
         res.status(400).json({ success: false, error: NOT_A_WEEK });
         return;
       }
+      /*
+       * Held a minute per organisation, week and audience (services/briefCache.ts),
+       * and cleared when the summary is written again. Management read it with
+       * the "Not using Flowzen" line; everybody else's links depend on the
+       * screens they can open — both are in the key.
+       */
+      const management = req.user!.preset === 'MANAGEMENT';
+      const audience = `${management ? 'management' : 'others'}:${linkAudience(req.user)}`;
       const [brief, trends] = await Promise.all([
-        week.current
-          ? composeMondayBrief(orgId, { includeUsage: req.user!.preset === 'MANAGEMENT', viewer: req.user, now })
-          : pastWeek(orgId, week, now),
+        briefCache.get(briefKey(orgId, week.from, audience), () =>
+          week.current
+            ? composeMondayBrief(orgId, { includeUsage: management, viewer: req.user, now })
+            : pastWeek(orgId, week, now),
+        ) as Promise<Awaited<ReturnType<typeof composeMondayBrief>> | Awaited<ReturnType<typeof pastWeek>>>,
         trendsFor(orgId, week.from, tz, now),
       ]);
       res.json({

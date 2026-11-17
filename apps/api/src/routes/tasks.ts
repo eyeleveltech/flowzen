@@ -6,10 +6,12 @@ import { Router, type Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, requirePermission, hasPermission, type AuthRequest } from '../middleware/auth.js';
-import { dayMinutesOf, formatWorkingMinutes, loadWorkCalendar, workingMinutesOn } from '../utils/workCalendar.js';
-import { computeTaskTypeMedians, taskTypeGroupKey } from '../utils/taskTypeMedian.js';
+import { addDays, dayMinutesOf, formatWorkingMinutes, loadWorkCalendar, workingMinutesOn } from '../utils/workCalendar.js';
+import { cachedTaskTypeMedians, taskTypeGroupKey } from '../utils/taskTypeMedian.js';
+import { dayStartUtc } from '../utils/zonedTime.js';
+import { ttlCache } from '../utils/ttlCache.js';
 import { defaultProjectId } from '../services/retainerProjects.js';
-import { TaskStatus, TaskWorkType, WaitingOn, Priority, TaskType, RepeatFrequency } from '@prisma/client';
+import { TaskStatus, TaskWorkType, WaitingOn, Priority, TaskType, RepeatFrequency, type Prisma } from '@prisma/client';
 import { TASK_TYPE_LABEL } from '../services/taskTypes.js';
 
 import { parsePagination } from '../utils/query.js';
@@ -57,149 +59,202 @@ tasksRouter.use(authenticate);
 
 // ── 1. Personal Daily Cockpit Tasks (/api/tasks/my) ─────────────────────────
 
+/*
+ * ─── My Work's rows ─────────────────────────────────────────────────────────
+ *
+ * Finished work is the last 14 days (Perf Plan 2, decision 1). The query read
+ * every task this person had ever finished, on every load, to show the few
+ * done this week; a few months in that was most of the payload. Older work is
+ * one click away, 50 at a time (GET /tasks/my/done).
+ */
+const MY_DONE_DAYS = 14;
+const MY_DONE_PAGE = 50;
+
+/** What a My Work row reads of its relations — names, not whole client rows. */
+const MY_TASK_INCLUDE = {
+  monthCard: {
+    select: { month: true, retainerId: true, retainer: { select: { company: { select: { name: true } } } } },
+  },
+  project: { select: { name: true, company: { select: { name: true } } } },
+  // An internal task has no client to be labelled by, so without this
+  // every one of them reads as nothing at all on this screen.
+  internalProject: { select: { id: true, name: true } },
+  // A follow-up hangs off the client directly — no project, no month —
+  // and read as "Internal" until this was included.
+  company: { select: { name: true } },
+  ...TASK_PEOPLE,
+} satisfies Prisma.TaskInclude;
+type MyTaskRow = Prisma.TaskGetPayload<{ include: typeof MY_TASK_INCLUDE }>;
+
+/** The studio's day, as My Work buckets it. */
+async function myWorkDay(orgId: string, now: Date) {
+  // The studio's day, not the server's UTC one: between midnight and 05:30
+  // IST the UTC date is still yesterday, which put yesterday's work in
+  // "Due today" and coloured it late.
+  const { timezone } = await moneyClock(orgId);
+  const todayStr = orgToday(timezone, now);
+  // "Done this week" is since Monday, as My Department counts it.
+  const weekday = (new Date(`${todayStr}T00:00:00Z`).getUTCDay() + 6) % 7;
+  const mondayStr = new Date(Date.parse(`${todayStr}T00:00:00Z`) - weekday * 86_400_000).toISOString().slice(0, 10);
+  return {
+    now,
+    timezone,
+    todayStr,
+    mondayStr,
+    endOfWeek: new Date(now.getTime() + 7 * 24 * 3600 * 1000),
+    /** Where the Done group starts: the studio's midnight, 13 days before today. */
+    doneSince: dayStartUtc(addDays(todayStr, -(MY_DONE_DAYS - 1)), timezone),
+  };
+}
+
+/*
+ * Brief §8/§11.4: "Elapsed is shown against the median for that task type" —
+ * same grouping the TASK_AGING alert rule uses, computed once for every task
+ * type these buckets touch. Held ten minutes per studio (Perf Plan 2).
+ */
+const myWorkMeasures = (orgId: string) =>
+  Promise.all([cachedTaskTypeMedians(orgId), loadWorkCalendar(orgId)]).then(([medianByGroup, calendar]) => ({
+    medianByGroup,
+    calendar,
+  }));
+
+/** The day, and the figures every My Work row is measured against. */
+type MyWorkClock = Awaited<ReturnType<typeof myWorkDay>> & Awaited<ReturnType<typeof myWorkMeasures>>;
+
+/** One task, as a My Work row. */
+function formatMyTask(t: MyTaskRow, clock: MyWorkClock) {
+  const { now, timezone, todayStr, mondayStr, endOfWeek, medianByGroup, calendar } = clock;
+  const clientName =
+    t.monthCard?.retainer.company.name || t.project?.company.name || t.company?.name || 'Internal';
+  const workingHours = workingMinutesOn(calendar, t.assignedAt, t.completedAt ?? now, t.waitingTotalMinutes);
+  const typeMedianMinutes = medianByGroup.get(taskTypeGroupKey(t)) ?? null;
+
+  const dueStr = new Date(t.dueDate).toISOString().slice(0, 10);
+  // On hold is never overdue (services/internalWork.ts isLate): a held
+  // task past its date sits with today's, where its hold is shown.
+  const held = t.status === 'ON_HOLD';
+  const isOverdue = t.status !== 'DONE' && !held && dueStr < todayStr;
+  const isToday = t.status !== 'DONE' && (dueStr === todayStr || (held && dueStr < todayStr));
+  const isThisWeek = t.status !== 'DONE' && !isOverdue && !isToday && new Date(t.dueDate) <= endOfWeek;
+  const isDone = t.status === 'DONE';
+  const doneThisWeek = isDone && t.completedAt != null && orgToday(timezone, t.completedAt) >= mondayStr;
+  // Anything open and due beyond the 7-day window still needs a bucket —
+  // a retainer's template tasks are created a month out, and a task that
+  // fits none of overdue/today/thisWeek/done was silently disappearing
+  // from the one screen ~25 people rely on to see their work.
+  const isLater = !isOverdue && !isToday && !isThisWeek && !isDone;
+
+  return {
+    id: t.id,
+    title: t.title,
+    workType: t.workType,
+    workId: t.workId,
+    status: t.status,
+    priority: t.priority,
+    // An old client hold on a task with no client shows as plain On hold (QA19, F06).
+    waitingOn: waitingOnShown(t),
+    /** Whether "Waiting on the client" can be offered when it goes on hold. */
+    hasClient: taskHasClient(t),
+    waitingSince: t.waitingSince,
+    waitingTotalMinutes: t.waitingTotalMinutes,
+    dueDate: t.dueDate,
+    dueTime: t.dueTime,
+    assignedAt: t.assignedAt,
+    completedAt: t.completedAt,
+    reopenCount: t.reopenCount,
+    notes: t.notes,
+    /*
+     * The people, and the piece of work.
+     *
+     * `TASK_PEOPLE` has been in this query's include since multi-assignee
+     * landed, and every one of those rows was dropped on the floor right
+     * here — the screen asked the database for who else is on a task and
+     * who handed it over, and then returned none of it. So the one screen
+     * ~25 people open every day was the only place a task could not say.
+     *
+     * Same field names as every other task endpoint, so the shared drawer
+     * reads this without a translation layer.
+     */
+    taskType: t.taskType,
+    assignee: t.assignee,
+    assignees: t.assignees.map((a) => a.user),
+    assignedBy: t.assignedBy,
+    creator: t.creator,
+    reviewer: t.reviewer,
+    clientName,
+    // Which job it hangs off. A month card's task never has a project and
+    // a project's task never has a month card, so exactly one of these is
+    // ever set. Formatted on the web, the way the retainer screen already
+    // does it — "2026-09" is a key, not a label.
+    monthCardMonth: t.monthCard?.month ?? null,
+    projectName: t.project?.name ?? t.internalProject?.name ?? null,
+    // The drawer reads this to show what the task is already filed under.
+    // Without it, opening a filed task would show "Not part of anything"
+    // and saving would clear it. (workType is already above.)
+    internalProjectId: t.internalProjectId,
+    internalProjectName: t.internalProject?.name ?? null,
+    // What the drawer's edit form moves it between: the retainer's pieces of
+    // work, and (on an internal task) the client it is about.
+    retainerId: t.monthCard?.retainerId ?? null,
+    retainerProjectId: t.retainerProjectId,
+    companyId: t.companyId,
+    workingHoursText: workingHours.formatted,
+    workingMinutes: workingHours.totalMinutes,
+    typeMedianMinutes,
+    typeMedianText: typeMedianMinutes != null ? formatWorkingMinutes(typeMedianMinutes, dayMinutesOf(calendar)) : null,
+    // The repeat, if it is a copy in one; `nextDue` is added below.
+    repeat: t.repeat,
+    isOverdue,
+    isToday,
+    isThisWeek,
+    isLater,
+    isDone,
+    doneThisWeek,
+  };
+}
+
 tasksRouter.get('/my', requirePermission('work.own'), async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
     const userId = req.user!.userId;
 
-    const allMyTasks = await prisma.task.findMany({
-      where: {
-        organizationId: orgId,
-        // Every task this person is on, not only the ones they lead. Three
-        // people sharing a task are three people who have to do something
-        // about it, and My Work showing it to one of them is how the other two
-        // find out too late.
-        assignees: { some: { userId } },
-        deletedAt: null,
-        // Cancelled work isn't "done", but it doesn't belong in any of this
-        // screen's buckets either — it's not pending and it wasn't finished.
-        status: { not: TaskStatus.CANCELLED },
-      },
-      orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }],
-      include: {
-        monthCard: {
-          include: { retainer: { include: { company: true } } },
+    const day = await myWorkDay(orgId, new Date());
+    const mine = {
+      organizationId: orgId,
+      // Every task this person is on, not only the ones they lead. Three
+      // people sharing a task are three people who have to do something
+      // about it, and My Work showing it to one of them is how the other two
+      // find out too late.
+      assignees: { some: { userId } },
+      deletedAt: null,
+    } satisfies Prisma.TaskWhereInput;
+
+    const [allMyTasks, olderDone, measures] = await Promise.all([
+      prisma.task.findMany({
+        where: {
+          ...mine,
+          // Cancelled work isn't "done", but it doesn't belong in any of this
+          // screen's buckets either — it's not pending and it wasn't finished.
+          status: { not: TaskStatus.CANCELLED },
+          // Finished work: the last 14 days. "Show older" pages back.
+          OR: [{ status: { not: TaskStatus.DONE } }, { completedAt: { gte: day.doneSince } }],
         },
-        project: {
-          include: { company: true },
-        },
-        // An internal task has no client to be labelled by, so without this
-        // every one of them reads as nothing at all on this screen.
-        internalProject: { select: { id: true, name: true } },
-        // A follow-up hangs off the client directly — no project, no month —
-        // and read as "Internal" until this was included.
-        company: { select: { name: true } },
-        ...TASK_PEOPLE,
-      },
-    });
+        // The id last, so tasks made in the same moment keep one order load to load.
+        orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }, { id: 'asc' }],
+        include: MY_TASK_INCLUDE,
+      }),
+      // Whether there is anything for "Show older" to show.
+      prisma.task.findFirst({
+        where: { ...mine, status: TaskStatus.DONE, completedAt: { lt: day.doneSince } },
+        select: { id: true },
+      }),
+      // Alongside the tasks rather than before them: a cold median is the slow part.
+      myWorkMeasures(orgId),
+    ]);
+    const clock: MyWorkClock = { ...day, ...measures };
+    const { calendar } = clock;
 
-    const now = new Date();
-    // The studio's day, not the server's UTC one: between midnight and 05:30
-    // IST the UTC date is still yesterday, which put yesterday's work in
-    // "Due today" and coloured it late.
-    const { timezone } = await moneyClock(orgId);
-    const todayStr = orgToday(timezone, now);
-    // "Done this week" is since Monday, as My Department counts it — it was
-    // every task ever finished, 150 rows after a few months.
-    const weekday = (new Date(`${todayStr}T00:00:00Z`).getUTCDay() + 6) % 7;
-    const mondayStr = new Date(Date.parse(`${todayStr}T00:00:00Z`) - weekday * 86_400_000).toISOString().slice(0, 10);
-    const endOfWeek = new Date(now.getTime() + 7 * 24 * 3600 * 1000);
-
-    // Brief §8/§11.4: "Elapsed is shown against the median for that task
-    // type" — same grouping the TASK_AGING alert rule uses, computed once
-    // for every task type these buckets touch.
-    const medianByGroup = await computeTaskTypeMedians(orgId);
-    const calendar = await loadWorkCalendar(orgId);
-
-    const formattedTasks = allMyTasks.map((t) => {
-      const clientName =
-        t.monthCard?.retainer.company.name || t.project?.company.name || t.company?.name || 'Internal';
-      const workingHours = workingMinutesOn(calendar, t.assignedAt, t.completedAt ?? now, t.waitingTotalMinutes);
-      const typeMedianMinutes = medianByGroup.get(taskTypeGroupKey(t)) ?? null;
-
-      const dueStr = new Date(t.dueDate).toISOString().slice(0, 10);
-      // On hold is never overdue (services/internalWork.ts isLate): a held
-      // task past its date sits with today's, where its hold is shown.
-      const held = t.status === 'ON_HOLD';
-      const isOverdue = t.status !== 'DONE' && !held && dueStr < todayStr;
-      const isToday = t.status !== 'DONE' && (dueStr === todayStr || (held && dueStr < todayStr));
-      const isThisWeek = t.status !== 'DONE' && !isOverdue && !isToday && new Date(t.dueDate) <= endOfWeek;
-      const isDone = t.status === 'DONE';
-      const doneThisWeek = isDone && t.completedAt != null && orgToday(timezone, t.completedAt) >= mondayStr;
-      // Anything open and due beyond the 7-day window still needs a bucket —
-      // a retainer's template tasks are created a month out, and a task that
-      // fits none of overdue/today/thisWeek/done was silently disappearing
-      // from the one screen ~25 people rely on to see their work.
-      const isLater = !isOverdue && !isToday && !isThisWeek && !isDone;
-
-      return {
-        id: t.id,
-        title: t.title,
-        workType: t.workType,
-        workId: t.workId,
-        status: t.status,
-        priority: t.priority,
-        // An old client hold on a task with no client shows as plain On hold (QA19, F06).
-        waitingOn: waitingOnShown(t),
-        /** Whether "Waiting on the client" can be offered when it goes on hold. */
-        hasClient: taskHasClient(t),
-        waitingSince: t.waitingSince,
-        waitingTotalMinutes: t.waitingTotalMinutes,
-        dueDate: t.dueDate,
-        dueTime: t.dueTime,
-        assignedAt: t.assignedAt,
-        completedAt: t.completedAt,
-        reopenCount: t.reopenCount,
-        notes: t.notes,
-        /*
-         * The people, and the piece of work.
-         *
-         * `TASK_PEOPLE` has been in this query's include since multi-assignee
-         * landed, and every one of those rows was dropped on the floor right
-         * here — the screen asked the database for who else is on a task and
-         * who handed it over, and then returned none of it. So the one screen
-         * ~25 people open every day was the only place a task could not say.
-         *
-         * Same field names as every other task endpoint, so the shared drawer
-         * reads this without a translation layer.
-         */
-        taskType: t.taskType,
-        assignee: t.assignee,
-        assignees: t.assignees.map((a) => a.user),
-        assignedBy: t.assignedBy,
-        creator: t.creator,
-        reviewer: t.reviewer,
-        clientName,
-        // Which job it hangs off. A month card's task never has a project and
-        // a project's task never has a month card, so exactly one of these is
-        // ever set. Formatted on the web, the way the retainer screen already
-        // does it — "2026-09" is a key, not a label.
-        monthCardMonth: t.monthCard?.month ?? null,
-        projectName: t.project?.name ?? t.internalProject?.name ?? null,
-        // The drawer reads this to show what the task is already filed under.
-        // Without it, opening a filed task would show "Not part of anything"
-        // and saving would clear it. (workType is already above.)
-        internalProjectId: t.internalProjectId,
-        internalProjectName: t.internalProject?.name ?? null,
-        // What the drawer's edit form moves it between: the retainer's pieces of
-        // work, and (on an internal task) the client it is about.
-        retainerId: t.monthCard?.retainerId ?? null,
-        retainerProjectId: t.retainerProjectId,
-        companyId: t.companyId,
-        workingHoursText: workingHours.formatted,
-        workingMinutes: workingHours.totalMinutes,
-        typeMedianMinutes,
-        typeMedianText: typeMedianMinutes != null ? formatWorkingMinutes(typeMedianMinutes, dayMinutesOf(calendar)) : null,
-        // The repeat, if it is a copy in one; `nextDue` is added below.
-        repeat: t.repeat,
-        isOverdue,
-        isToday,
-        isThisWeek,
-        isLater,
-        isDone,
-        doneThisWeek,
-      };
-    });
+    const formattedTasks = allMyTasks.map((t) => formatMyTask(t, clock));
 
     /*
      * The order this person has arranged their own desk into.
@@ -240,8 +295,11 @@ tasksRouter.get('/my', requirePermission('work.own'), async (req: AuthRequest, r
     const overdue = inTheirOrder(placed.filter((t) => t.isOverdue));
     const thisWeek = inTheirOrder(placed.filter((t) => t.isThisWeek));
     const later = inTheirOrder(placed.filter((t) => t.isLater));
-    // History, not a plan — it stays in the order it was finished. This week's.
-    const completed = placed.filter((t) => t.isDone && t.doneThisWeek);
+    // History, not a plan: the last 14 days, newest finished first — the
+    // order "Show older" carries on in.
+    const completed = placed
+      .filter((t) => t.isDone)
+      .sort((a, b) => (b.completedAt?.getTime() ?? 0) - (a.completedAt?.getTime() ?? 0));
 
     res.json({
       success: true,
@@ -261,7 +319,47 @@ tasksRouter.get('/my', requirePermission('work.own'), async (req: AuthRequest, r
       },
       // One working day in minutes — what My Work's Elapsed filter counts a "day" as.
       dayMinutes: dayMinutesOf(calendar),
+      // Finished work before the last 14 days, for "Show older".
+      doneDays: MY_DONE_DAYS,
+      hasOlderDone: olderDone != null,
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/tasks/my/done?skip=0 — "Show older" under My Work's Done group:
+ * this person's finished work from before the last 14 days, newest first, 50
+ * at a time. Rows in the same shape as GET /tasks/my.
+ */
+tasksRouter.get('/my/done', requirePermission('work.own'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const userId = req.user!.userId;
+    const asked = Number(req.query.skip);
+    const skip = Number.isInteger(asked) && asked > 0 ? Math.min(asked, 100_000) : 0;
+    const [day, measures] = await Promise.all([myWorkDay(orgId, new Date()), myWorkMeasures(orgId)]);
+    const clock: MyWorkClock = { ...day, ...measures };
+    const rows = await prisma.task.findMany({
+      where: {
+        organizationId: orgId,
+        assignees: { some: { userId } },
+        deletedAt: null,
+        status: TaskStatus.DONE,
+        completedAt: { lt: clock.doneSince },
+      },
+      orderBy: [{ completedAt: 'desc' }, { id: 'desc' }],
+      skip,
+      take: MY_DONE_PAGE + 1,
+      include: MY_TASK_INCLUDE,
+    });
+    const page = rows.slice(0, MY_DONE_PAGE);
+    const tasks = (await withRepeatNext(orgId, page.map((t) => formatMyTask(t, clock)))).map((t) => ({
+      ...t,
+      sortOrder: null,
+    }));
+    res.json({ success: true, tasks, hasMore: rows.length > MY_DONE_PAGE, nextSkip: skip + page.length });
   } catch (error) {
     next(error);
   }
@@ -524,6 +622,111 @@ const STATUS_SORT_ORDER: string[] = [
   TaskStatus.CANCELLED,
 ];
 
+/*
+ * All tasks' filter lists — clients, projects, Internal — held five minutes
+ * per studio (Perf Plan 2, decision 5). Seven queries over every project,
+ * month and client ran on each load and each change of filter, for lists that
+ * change when a project is set up.
+ */
+const FILTER_OPTIONS_KEEP_MS = 5 * 60_000;
+const filterOptionsCache = ttlCache<Awaited<ReturnType<typeof computeAllTasksFilterOptions>>>(FILTER_OPTIONS_KEEP_MS);
+const allTasksFilterOptions = (orgId: string) => filterOptionsCache.get(orgId, () => computeAllTasksFilterOptions(orgId));
+
+async function computeAllTasksFilterOptions(orgId: string) {
+  /*
+   * What the filter can offer, from EVERY task rather than the filtered ones.
+   *
+   * Derived from `rows`, choosing one client would rebuild the dropdown with
+   * one option in it and there would be no way to get to a second without
+   * clearing first — the same fault the team screen's department filter had.
+   */
+  const withTasks = { some: { deletedAt: null } };
+  const [projectClients, retainerClients, followUpClients, internalCount, noProjectCount, retainerProjects, internalProjects] =
+    await Promise.all([
+      /*
+       * Projects still running, and any finished one that still has tasks.
+       *
+       * Only projects with tasks were offered, so a project set up this
+       * morning — internal ones especially, which start empty — could not
+       * be found in the list at all, and picking its client showed "No
+       * results". A live project with nothing in it is still a project
+       * somebody is about to fill; a delivered one with no tasks is not
+       * worth a row.
+       */
+      prisma.project.findMany({
+        where: { organizationId: orgId, OR: [{ status: 'LIVE' }, { tasks: withTasks }] },
+        select: {
+          id: true,
+          name: true,
+          isSample: true,
+          company: { select: { id: true, name: true } },
+          _count: { select: { tasks: { where: { deletedAt: null } } } },
+        },
+      }).then((rows) => rows.map((r) => ({ ...r, hasTasks: r._count.tasks > 0 }))),
+      prisma.monthCard.findMany({
+        where: { retainer: { organizationId: orgId }, tasks: withTasks },
+        select: { retainer: { select: { company: { select: { id: true, name: true } } } } },
+      }),
+      prisma.company.findMany({
+        where: { organizationId: orgId, tasks: withTasks },
+        select: { id: true, name: true },
+      }),
+      prisma.task.count({
+        where: { organizationId: orgId, deletedAt: null, projectId: null, monthCardId: null, companyId: null },
+      }),
+      prisma.task.count({ where: { organizationId: orgId, deletedAt: null, ...NO_PROJECT_WHERE } }),
+      prisma.retainerProject.findMany({
+        where: {
+          retainer: { organizationId: orgId },
+          OR: [{ status: 'ACTIVE', retainer: { status: 'ACTIVE' } }, { tasks: withTasks }],
+        },
+        select: { id: true, name: true, retainer: { select: { company: { select: { id: true, name: true } } } } },
+      }),
+      prisma.internalProject.findMany({
+        where: { organizationId: orgId, OR: [{ status: 'ACTIVE' }, { tasks: withTasks }] },
+        select: { id: true, name: true },
+      }),
+    ]);
+
+  const byId = new Map<string, string>();
+  for (const pr of projectClients.filter((x) => x.hasTasks)) byId.set(pr.company.id, pr.company.name);
+  for (const mc of retainerClients) byId.set(mc.retainer.company.id, mc.retainer.company.name);
+  for (const c of followUpClients) byId.set(c.id, c.name);
+
+  /*
+   * Every project that has work in it, whatever kind, with the client it is
+   * for — so the screen can narrow this list to the clients already chosen.
+   */
+  const projectOptions = [
+    ...projectClients.map((pr) => ({
+      value: `P:${pr.id}`,
+      name: pr.isSample ? `${pr.name} (sample)` : pr.name,
+      client: pr.company.name,
+      companyId: pr.company.id as string | null,
+    })),
+    ...retainerProjects.map((rp) => ({
+      value: `RP:${rp.id}`,
+      name: rp.name,
+      client: rp.retainer.company.name,
+      companyId: rp.retainer.company.id as string | null,
+    })),
+    ...internalProjects.map((ip) => ({
+      value: `IP:${ip.id}`,
+      name: ip.name,
+      client: 'Internal',
+      companyId: null as string | null,
+    })),
+  ].sort((a, b) => a.client.localeCompare(b.client) || a.name.localeCompare(b.name));
+
+  return {
+    clients: Array.from(byId, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)),
+    hasInternal: internalCount > 0,
+    // Whether "Internal — no project" is worth offering.
+    hasNoProject: noProjectCount > 0,
+    projects: projectOptions,
+  };
+}
+
 tasksRouter.get('/all', requirePermission('work.all'), async (req: AuthRequest, res: Response, next) => {
   try {
     const orgId = req.user!.organizationId;
@@ -661,6 +864,9 @@ tasksRouter.get('/all', requirePermission('work.all'), async (req: AuthRequest, 
       ...(and.length > 0 ? { AND: and } : {}),
     });
 
+    // Started alongside the list, not after it; held five minutes, so mostly instant.
+    const optionsLoad = wantsCsv ? null : allTasksFilterOptions(orgId);
+
     const tasks = await prisma.task.findMany({
       where,
       // Oldest due first: the point of the screen is what is late, and a list
@@ -675,8 +881,15 @@ tasksRouter.get('/all', requirePermission('work.all'), async (req: AuthRequest, 
             : [{ dueDate: sortBy === 'due' ? sortDir : 'asc' }, { createdAt: 'desc' }],
       take: wantsCsv ? 5000 : 500,
       include: {
-        monthCard: { include: { retainer: { include: { company: true } } } },
-        project: { include: { company: true } },
+        // Names and ids only — whole client rows came back for each of 500 tasks (Perf Plan 2).
+        monthCard: {
+          select: {
+            month: true,
+            retainerId: true,
+            retainer: { select: { companyId: true, company: { select: { name: true } } } },
+          },
+        },
+        project: { select: { name: true, companyId: true, company: { select: { name: true } } } },
         /*
          * A retainer task's project.
          *
@@ -820,99 +1033,12 @@ tasksRouter.get('/all', requirePermission('work.all'), async (req: AuthRequest, 
       return;
     }
 
-    /*
-     * What the filter can offer, from EVERY task rather than the filtered ones.
-     *
-     * Derived from `rows`, choosing one client would rebuild the dropdown with
-     * one option in it and there would be no way to get to a second without
-     * clearing first — the same fault the team screen's department filter had.
-     */
-    const withTasks = { some: { deletedAt: null } };
-    const [projectClients, retainerClients, followUpClients, internalCount, noProjectCount, retainerProjects, internalProjects] =
-      await Promise.all([
-        /*
-         * Projects still running, and any finished one that still has tasks.
-         *
-         * Only projects with tasks were offered, so a project set up this
-         * morning — internal ones especially, which start empty — could not
-         * be found in the list at all, and picking its client showed "No
-         * results". A live project with nothing in it is still a project
-         * somebody is about to fill; a delivered one with no tasks is not
-         * worth a row.
-         */
-        prisma.project.findMany({
-          where: { organizationId: orgId, OR: [{ status: 'LIVE' }, { tasks: withTasks }] },
-          select: {
-            id: true,
-            name: true,
-            isSample: true,
-            company: { select: { id: true, name: true } },
-            _count: { select: { tasks: { where: { deletedAt: null } } } },
-          },
-        }).then((rows) => rows.map((r) => ({ ...r, hasTasks: r._count.tasks > 0 }))),
-        prisma.monthCard.findMany({
-          where: { retainer: { organizationId: orgId }, tasks: withTasks },
-          select: { retainer: { select: { company: { select: { id: true, name: true } } } } },
-        }),
-        prisma.company.findMany({
-          where: { organizationId: orgId, tasks: withTasks },
-          select: { id: true, name: true },
-        }),
-        prisma.task.count({
-          where: { organizationId: orgId, deletedAt: null, projectId: null, monthCardId: null, companyId: null },
-        }),
-        prisma.task.count({ where: { organizationId: orgId, deletedAt: null, ...NO_PROJECT_WHERE } }),
-        prisma.retainerProject.findMany({
-          where: {
-            retainer: { organizationId: orgId },
-            OR: [{ status: 'ACTIVE', retainer: { status: 'ACTIVE' } }, { tasks: withTasks }],
-          },
-          select: { id: true, name: true, retainer: { select: { company: { select: { id: true, name: true } } } } },
-        }),
-        prisma.internalProject.findMany({
-          where: { organizationId: orgId, OR: [{ status: 'ACTIVE' }, { tasks: withTasks }] },
-          select: { id: true, name: true },
-        }),
-      ]);
-
-    const byId = new Map<string, string>();
-    for (const pr of projectClients.filter((x) => x.hasTasks)) byId.set(pr.company.id, pr.company.name);
-    for (const mc of retainerClients) byId.set(mc.retainer.company.id, mc.retainer.company.name);
-    for (const c of followUpClients) byId.set(c.id, c.name);
-
-    /*
-     * Every project that has work in it, whatever kind, with the client it is
-     * for — so the screen can narrow this list to the clients already chosen.
-     */
-    const projectOptions = [
-      ...projectClients.map((pr) => ({
-        value: `P:${pr.id}`,
-        name: pr.isSample ? `${pr.name} (sample)` : pr.name,
-        client: pr.company.name,
-        companyId: pr.company.id as string | null,
-      })),
-      ...retainerProjects.map((rp) => ({
-        value: `RP:${rp.id}`,
-        name: rp.name,
-        client: rp.retainer.company.name,
-        companyId: rp.retainer.company.id as string | null,
-      })),
-      ...internalProjects.map((ip) => ({
-        value: `IP:${ip.id}`,
-        name: ip.name,
-        client: 'Internal',
-        companyId: null as string | null,
-      })),
-    ].sort((a, b) => a.client.localeCompare(b.client) || a.name.localeCompare(b.name));
+    const options = await optionsLoad!;
 
     res.json({
       success: true,
       tasks: rows,
-      clients: Array.from(byId, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)),
-      hasInternal: internalCount > 0,
-      // Whether "Internal — no project" is worth offering.
-      hasNoProject: noProjectCount > 0,
-      projects: projectOptions,
+      ...options,
       counts: {
         total: rows.length,
         // Open is "not finished with", not a single status: TODO and

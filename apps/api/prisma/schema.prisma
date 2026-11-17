@@ -1612,6 +1612,9 @@ model Task {
 
   @@index([organizationId, assigneeId, status])
   @@index([dueDate, status])
+  // Perf Plan 2: finished work by when (medians, the brief), and the calendar / All tasks by due date.
+  @@index([organizationId, status, completedAt])
+  @@index([organizationId, dueDate])
   @@index([monthCardId])
   @@index([projectId])
   @@index([retainerProjectId])
@@ -1931,6 +1934,8 @@ model Invoice {
   @@index([milestoneId])
   @@index([organizationId, status])
   @@index([companyId])
+  // Perf Plan 2: the brief's "invoiced last week" and its trends.
+  @@index([organizationId, raisedAt])
   @@map("invoices")
 }
 
@@ -1994,6 +1999,8 @@ model Payment {
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
   @@index([invoiceId])
+  // Perf Plan 2: the brief's "cash collected" by week.
+  @@index([receivedAt])
   @@map("payments")
 }
 
@@ -2070,6 +2077,8 @@ model Activity {
   actor        User?        @relation("ActorActivity", fields: [actorId], references: [id], onDelete: SetNull)
 
   @@index([organizationId, entityType, entityId, at])
+  // Perf Plan 2: an organisation's activity by time, across every record.
+  @@index([organizationId, at])
   @@map("activities")
 }
 

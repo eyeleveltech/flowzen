@@ -28,7 +28,7 @@
  */
 
 import { useCallback, useId, useRef } from 'react';
-import { motion } from 'framer-motion';
+import { m } from 'framer-motion';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import type { LucideIcon } from 'lucide-react';
 
@@ -175,7 +175,7 @@ export function Tabs<T extends string>({
               rather than slid.
             */}
             {selected && (
-              <motion.span
+              <m.span
                 layoutId={`tab-underline-${id}`}
                 aria-hidden="true"
                 className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-accent"

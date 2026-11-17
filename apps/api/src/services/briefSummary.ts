@@ -3,6 +3,7 @@ import { logger } from '../utils/logger.js';
 import { AssistantNotConfigured } from './ai/index.js';
 import { settingsFor } from './moneyAssistant.js';
 import type { MondayBrief } from '../routes/brief.js';
+import { forgetBrief } from './briefCache.js';
 
 /**
  * The Monday brief's opening paragraph, written by the same AI connection Zen
@@ -165,6 +166,8 @@ export async function generateBriefSummary(
       create: { organizationId: orgId, weekStart, summary: text, summaryModel: model, summaryInput: input, generatedAt },
       update: { summary: text, summaryModel: model, summaryInput: input, generatedAt },
     });
+    // The held brief carries the old paragraph: the next read composes it afresh.
+    forgetBrief(orgId);
     return { text, generatedAt, model };
   } catch (e) {
     if (e instanceof AssistantNotConfigured) {
