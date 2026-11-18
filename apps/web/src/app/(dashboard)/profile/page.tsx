@@ -170,7 +170,7 @@ export default function ProfilePage() {
           <GoogleCalendarCard />
         </div>
 
-        {/* Per device, and only when the organisation has it switched on. */}
+        {/* Installing the app, always; notifications per device, when the organisation has them on. */}
         <div id="phone-notifications" className="scroll-mt-20">
           <PhoneNotificationsCard />
         </div>

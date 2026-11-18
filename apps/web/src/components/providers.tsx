@@ -13,6 +13,11 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { WaitingOnDialog } from '@/components/work/WaitingOnDialog';
 import { GlobalEvents } from '@/components/global-events';
 import { NumberWheelGuard } from '@/components/number-wheel-guard';
+import { catchInstallPrompt } from '@/lib/installPrompt';
+
+// The browser offers "Install app" once, as the page loads — caught here so
+// Profile's Install button still has it later (lib/installPrompt.ts).
+catchInstallPrompt();
 
 /*
  * framer-motion's features arrive after the page, not in the bundle every page

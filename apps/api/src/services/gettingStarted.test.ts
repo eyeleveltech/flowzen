@@ -6,6 +6,7 @@ import { prisma } from '../lib/prisma.js';
 import { signJwt } from '../utils/jwt.js';
 import { gettingStartedFor } from './gettingStarted.js';
 import * as google from './googleCalendar.js';
+import * as push from './push.js';
 
 /**
  * Getting started (Ease Plan 2): each step worked out from what already
@@ -25,6 +26,9 @@ beforeEach(() => {
   p.usageDay.groupBy.mockResolvedValue([]);
   p.googleCalendarConnection.findMany.mockResolvedValue([{ userId: 'u-busy' }]);
   vi.spyOn(google, 'googleConfigured').mockReturnValue(false);
+  // Phone notifications on: the server has the keys, the organisation's switch is on.
+  vi.spyOn(push, 'pushConfigured').mockReturnValue(true);
+  p.organization.findUnique.mockResolvedValue({ pushEnabled: true });
 });
 
 describe('each step', () => {
@@ -95,11 +99,36 @@ describe('the Google step', () => {
   });
 });
 
+describe('the phone step', () => {
+  it('is left out when this server has no push keys — nothing could ever tick it', async () => {
+    vi.mocked(push.pushConfigured).mockReturnValue(false);
+    const s = (await gettingStartedFor('org-1', ['u-new'])).get('u-new')!;
+    expect(s.steps.map((x) => x.key)).toEqual(['phone', 'firstTask', 'finishTask', 'howItWorks']);
+    expect(s.total).toBe(4);
+    expect(p.pushSubscription.groupBy).not.toHaveBeenCalled();
+  });
+
+  it("is left out when the organisation's switch is off", async () => {
+    p.organization.findUnique.mockResolvedValue({ pushEnabled: false });
+    const s = (await gettingStartedFor('org-1', ['u-new'])).get('u-new')!;
+    expect(s.steps.some((x) => x.key === 'phoneApp')).toBe(false);
+    expect(s.total).toBe(4);
+  });
+
+  it('without it, the other four finish the card', async () => {
+    p.organization.findUnique.mockResolvedValue({ pushEnabled: false });
+    p.user.findMany.mockResolvedValue([{ id: 'u-busy', phone: '9', gettingStartedHiddenAt: null }]);
+    p.usageDay.groupBy.mockResolvedValue([{ userId: 'u-busy' }]);
+    expect((await gettingStartedFor('org-1', ['u-busy'])).get('u-busy')).toMatchObject({ done: 4, total: 4, complete: true });
+  });
+});
+
 describe('one organisation only', () => {
   it('every read is narrowed to the organisation asked for', async () => {
     vi.mocked(google.googleConfigured).mockReturnValue(true);
     await gettingStartedFor('org-2', ['u-new']);
     expect(p.user.findMany.mock.calls[0][0].where).toEqual({ organizationId: 'org-2', id: { in: ['u-new'] } });
+    expect(p.organization.findUnique.mock.calls[0][0].where).toEqual({ id: 'org-2' });
     expect(p.pushSubscription.groupBy.mock.calls[0][0].where.organizationId).toBe('org-2');
     expect(p.task.groupBy.mock.calls[0][0].where.organizationId).toBe('org-2');
     expect(p.taskAssignee.groupBy.mock.calls[0][0].where.task.organizationId).toBe('org-2');

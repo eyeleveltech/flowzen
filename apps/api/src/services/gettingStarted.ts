@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma.js';
 import { googleConfigured } from './googleCalendar.js';
+import { pushConfigured } from './push.js';
 
 /**
  * My Work's "Getting started" card (Ease Plan 2).
@@ -9,7 +10,10 @@ import { googleConfigured } from './googleCalendar.js';
  * a task finished from Zen) is ticked all the same:
  *
  *   phone       their own phone number is on their record
- *   phoneApp    a phone or browser of theirs is subscribed to notifications
+ *   phoneApp    a phone or browser of theirs is subscribed to notifications —
+ *               only offered when phone notifications are on (the server has
+ *               the keys and the organisation's switch is on); otherwise
+ *               nothing could ever tick it and the card would never finish
  *   firstTask   they have written a task down themselves (the scanner's
  *               follow-ups, made under the deal owner's name, do not count)
  *   finishTask  a task they are on is Done, however it got there
@@ -17,7 +21,8 @@ import { googleConfigured } from './googleCalendar.js';
  *   google      (optional) their Google Calendar is connected — only offered
  *               when this server has the Google keys
  *
- * The optional step is never counted: "3 of 5" is the five that matter.
+ * The optional step is never counted: "3 of 5" is the five that matter (four
+ * without phone notifications).
  */
 
 export const REQUIRED_STEPS = ['phone', 'phoneApp', 'firstTask', 'finishTask', 'howItWorks'] as const;
@@ -27,7 +32,7 @@ export type GettingStarted = {
   /** They pressed Hide. The card stays away until Profile shows it again. */
   hidden: boolean;
   steps: { key: StepKey; done: boolean; optional?: true }[];
-  /** Required steps done, out of `total` (5). */
+  /** Required steps done, out of `total` (5, or 4 without phone notifications). */
   done: number;
   total: number;
   /** Every required step is done: the card simply stops showing. */
@@ -39,14 +44,20 @@ export async function gettingStartedFor(organizationId: string, userIds: string[
   const out = new Map<string, GettingStarted>();
   if (userIds.length === 0) return out;
   const google = googleConfigured();
+  const pushKeys = pushConfigured();
   const inOrg = { organizationId, userId: { in: userIds } };
 
-  const [users, push, created, finished, readGuide, connected] = await Promise.all([
+  const [users, org, push, created, finished, readGuide, connected] = await Promise.all([
     prisma.user.findMany({
       where: { organizationId, id: { in: userIds } },
       select: { id: true, phone: true, gettingStartedHiddenAt: true },
     }),
-    prisma.pushSubscription.groupBy({ by: ['userId'], where: inOrg }),
+    pushKeys
+      ? prisma.organization.findUnique({ where: { id: organizationId }, select: { pushEnabled: true } })
+      : Promise.resolve(null),
+    pushKeys
+      ? prisma.pushSubscription.groupBy({ by: ['userId'], where: inOrg })
+      : Promise.resolve([] as { userId: string }[]),
     prisma.task.groupBy({
       by: ['createdById'],
       where: {
@@ -72,11 +83,12 @@ export async function gettingStartedFor(organizationId: string, userIds: string[
   const finishedOne = has(finished, 'userId');
   const read = has(readGuide, 'userId');
   const calendar = has(connected, 'userId');
+  const phoneNotifications = Boolean(org?.pushEnabled);
 
   for (const u of users) {
     const required: GettingStarted['steps'] = [
       { key: 'phone', done: Boolean(u.phone?.trim()) },
-      { key: 'phoneApp', done: subscribed.has(u.id) },
+      ...(phoneNotifications ? [{ key: 'phoneApp' as const, done: subscribed.has(u.id) }] : []),
       { key: 'firstTask', done: wrote.has(u.id) },
       { key: 'finishTask', done: finishedOne.has(u.id) },
       { key: 'howItWorks', done: read.has(u.id) },
