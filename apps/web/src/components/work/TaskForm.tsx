@@ -115,7 +115,6 @@ function FixedField({ label, value, note }: { label: string; value: string; note
 export function TaskForm({
   belongsTo,
   assignee = { kind: 'pick' },
-  initialTitle,
   initialDueDate,
   initialDueTime,
   submitLabel = 'Add task',
@@ -125,8 +124,6 @@ export function TaskForm({
 }: {
   belongsTo: TaskFormBelongsTo;
   assignee?: TaskFormAssignee;
-  /** Typed already — My Work's quick add opens the form with it. */
-  initialTitle?: string;
   /** A day to start from — the calendar opens on the day that was clicked. */
   initialDueDate?: string;
   /** And a time, when it was a time slot. */
@@ -138,7 +135,7 @@ export function TaskForm({
   onCreated: () => void;
 }) {
   const queryClient = useQueryClient();
-  const [title, setTitle] = useState(initialTitle ?? '');
+  const [title, setTitle] = useState('');
   /** Empty means "me" — the server's own default. */
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   // Nobody, until somebody says otherwise — see tasks.ts on why this field

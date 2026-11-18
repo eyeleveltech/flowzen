@@ -75,10 +75,9 @@ Everybody's own list: every task they are on, as lead or helper. Cancelled and d
   4. **Done in the last 14 days:** newest first. **"Show older"** at the bottom loads 50 more finished tasks at a time.
 - **Arranging:** a person can drag tasks into their own order within the first three groups. New tasks land at the top.
 - **Group by:** "When" (the groups above, the default) or "Project or retainer" (the work still to do, under the retainer, project or internal project it belongs to, with "Internal — no project" for one-off studio jobs). Groups fold open and shut and show a count. The choice is remembered in that browser. Dragging works in "When" only.
-- **Getting started** (a card above the quick add, for everyone until it is done or hidden): "Getting started · 3 of 5 done" — check your details (a phone number on Profile), get Flowzen on your phone and turn on notifications (Profile → Phone notifications; on Android, Chrome's menu → Install app; on iPhone, Safari's Share → Add to Home Screen, then turn notifications on from there), add your first task, finish a task, and read How it works. When Google Calendar is set up for the studio, connecting it is an extra, optional step. Each step ticks itself from what the person has actually done. **Hide** removes the card; Profile has "Show the getting-started list again". Management sees each person's "3 of 5" on Settings → Usage.
-- **Quick add** (the line at the top, "Add a task for myself — press Enter"): type a title and press Enter. It makes the task for that person, due today, Medium, with the same type of work and "belongs to" as the last task they wrote down themselves; the toast ("Added · Acme — Design · due today") has **Change**, which opens it. For somebody with no earlier task — or whose last one's work has closed — Enter opens the full form with the title filled in instead.
-- **On each row:** the round tick at the start marks it Done in one tap (the toast has **Undo** for five seconds, which puts back what it was). The status dropdown is still there for the rest (To do, In progress, On hold, Done, Cancelled — On hold asks what it is waiting on). Change the due date by clicking the date. Clicking the task opens its drawer: details, Edit and Delete.
-- **On a phone:** each task is a card — tick, title, client · type of work, due date — in the same groups; tap the card to open it. Arranging by drag is on a computer only.
+- **Getting started** (a card at the top, for everyone until it is done or hidden): "Getting started · 3 of 5 done" — check your details (a phone number on Profile), get Flowzen on your phone and turn on notifications (Profile → Flowzen on your phone: an Install app button where the browser offers one; otherwise on Android, Chrome's menu → Install app; on iPhone, Safari's Share → Add to Home Screen, then turn notifications on from there — this step is only on the list when phone notifications are switched on for the studio, so without them it is "of 4"), add your first task (it opens the new-task form), finish a task (set its status to Done), and read How it works. When Google Calendar is set up for the studio, connecting it is an extra, optional step. Each step ticks itself from what the person has actually done. **Hide** removes the card; Profile has "Show the getting-started list again". Management sees each person's "3 of 5" on Settings → Usage.
+- **On each row:** the status dropdown (To do, In progress, On hold, Done, Cancelled — On hold asks what it is waiting on). A finished task is set to Done there; there is no one-tap tick. Change the due date by clicking the date. Clicking the task opens its drawer: details, Edit and Delete.
+- **On a phone:** each task is a card — title, client · type of work, due date — in the same groups; tap the card to open it and change its status there. Arranging by drag is on a computer only.
 - **"Task for myself"** opens the full form. Every new-task form starts on the type of work and "belongs to" of the person's last hand-made task (a project or retainer page keeps its own).
 - **Opening one task:** /my-work?task={id} opens that task when it is on the person's own list.
 
@@ -374,7 +373,7 @@ Enter costs (Heads, Accounts, Management). How each person's month divides acros
 
 ## Setup (/settings)
 
-Setup access (Management). The sidebar calls it Setup; the page is Settings. A panel on the left lists the tabs in five groups: Agency (General, Working calendar), Sales & money (Pipeline, Services & pricing, Documents & billing, Tax & numbering), People & work (Team, Departments, Onboarding, Assets), AI & connections (Zen assistant, Email, Integrations, API) and Records (Activity, Usage, Trash). A link opens a tab: /settings?tab=<key>, where the key is organisation, calendar, pipeline, pricing, proforma, documents, team, departments, onboarding, assets, zen, email, integrations, api, activity, usage or trash. Without one it opens on General.
+Setup access (Management). The sidebar calls it Setup; the page is Settings. A panel on the left lists the tabs in five groups: Agency (General, Working calendar), Sales & money (Pipeline, Services & pricing, Documents & billing, Tax & numbering), People & work (Team, Departments, Onboarding, Assets), AI & connections (Zen assistant, Email, Integrations, API) and Records (Activity, Usage, Feedback, Trash). A link opens a tab: /settings?tab=<key>, where the key is organisation, calendar, pipeline, pricing, proforma, documents, team, departments, onboarding, assets, zen, email, integrations, api, activity, usage, feedback or trash. Without one it opens on General.
 
 ### Settings → General
 
@@ -433,7 +432,7 @@ The "Google Calendar connection" switch. When it is on, people connect from Prof
 - Busy time syncs every 15 minutes; others see only "Busy".
 - Meetings and shoots are written into a "Flowzen" calendar in the person's Google.
 
-The "Phone notifications" switch. When it is on, people turn them on from Profile → Phone notifications. When it is off, nothing is sent and the Profile card is hidden. Each switch shows only when the server has its keys.
+The "Phone notifications" switch. When it is on, people turn them on from Profile → Flowzen on your phone. When it is off, nothing is sent, the card on Profile only shows how to install the app, and Getting started leaves out the phone step. Each switch shows only when the server has its keys.
 
 ### Settings → API
 
@@ -485,7 +484,19 @@ Management only. For 7 or 30 days:
 - who opened Flowzen, last active, days active, changes and top screens;
 - amber after 3 working days away.
 
+**Screens** (the switch beside People): for the last 30 days, each screen with how many people opened it out of those who can open it. A screen nobody opened, or fewer than a third of those who can, is flagged. In the first week of each month Management gets a "Usage review for <month> is ready" bell; it opens this view (/settings?tab=usage&view=screens) and closes once looked at.
+
 Records are kept 90 days.
+
+### Settings → Feedback
+
+Management only. Every note sent with **"Something confusing? Tell us"** — at the bottom of the ? help panel on every page, and in the profile menu. Anybody can send one: only the message is asked for; the page they were on, and phone or computer, go with it, and so does their name (there are no anonymous notes). Up to 10 notes per person a day.
+- Newest first: who sent it, from which page, phone or computer, when, and what they said. Filter All, New, Seen or Done.
+- Each note is **New**, **Seen** or **Done**, with an optional "What was done" reply. Marking a note Done with a reply tells the sender in their bell that it was looked at, and what was done.
+- Management's bell says how many notes are New ("3 new feedback notes"); it clears when none are New.
+
+## The menu (sidebar)
+Each person can arrange their own sidebar: the "…" on an item has **Pin to top** (it goes into Pinned at the top, in the order pinned) and **Hide from my menu** (it goes into "Hidden (n)" at the bottom, folded away, never lost). Only their own menu changes. On a phone, More → **Edit menu** does the same, and once anything is pinned the bottom tabs are My Work and the first three pinned. Something they lose access to drops out of Pinned on its own.
 
 ## How it works (/how-it-works)
 Open to everybody, at the bottom of the sidebar: the whole app on one page — the six stages work passes through (lead, proposal, won, tasks, billing, money) with one example client carried through them, what each role does on a normal day, the rules behind what the app refuses, and a map of where each thing is. For somebody new, send them here first.
@@ -496,15 +507,17 @@ Everybody:
 - edit their name, job title and phone;
 - see the kit they hold;
 - connect Google Calendar;
-- turn on phone notifications (below);
+- install Flowzen on their phone and turn on phone notifications (below);
 - see their account details;
 - change their password (at least 8 characters; this signs them out everywhere).
 
 Email, department and access are changed by an admin on Team.
 
-### Profile → Phone notifications
+### Profile → Flowzen on your phone
 
-Shown only when Settings → Integrations has it on. Per person and per device:
+Two parts. **The app**, always shown: an **Install app** button where the browser offers one (Chrome or Edge, on Android or a computer); on an iPhone, Safari's Share → Add to Home Screen steps; on a computer, the address to open on the phone with both sets of steps. Once installed it says so.
+
+**Notifications**, only when Settings → Integrations has them on (otherwise one line says they aren't switched on yet). Per person and per device:
 - **Turn on** asks the browser's permission, then lists the device. **Remove** takes a device off; **Send a test** checks it.
 - **Android:** works in Chrome.
 - **iPhone (iOS 16.4 or later):** works only when Flowzen is on the Home Screen. Tap Share → Add to Home Screen, open Flowzen from there, then turn this on. In a Safari tab the card shows these steps instead of the button.

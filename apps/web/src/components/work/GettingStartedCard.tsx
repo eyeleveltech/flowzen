@@ -23,9 +23,9 @@ export function GettingStartedCard({
   onAddTask,
   onFinishTask,
 }: {
-  /** "Add your first task": the quick add line on this page. */
+  /** "Add your first task": the new-task form. */
   onAddTask: () => void;
-  /** "Finish a task": the list below, where the round tick is. */
+  /** "Finish a task": the list below, where each task's status is. */
   onFinishTask: () => void;
 }) {
   const { data } = useGettingStarted();
@@ -105,10 +105,10 @@ export function GettingStartedCard({
                   </span>
                 )}
                 {step.key === 'firstTask' && !step.done && (
-                  <span className="mt-1 block text-micro text-secondary">Type it in the line below and press Enter.</span>
+                  <span className="mt-1 block text-micro text-secondary">Opens the form for a task of your own.</span>
                 )}
                 {step.key === 'finishTask' && !step.done && (
-                  <span className="mt-1 block text-micro text-secondary">Tap the circle next to a task when it is done.</span>
+                  <span className="mt-1 block text-micro text-secondary">Set a task&apos;s status to Done when it is finished.</span>
                 )}
               </span>
             </>

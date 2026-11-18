@@ -12,7 +12,7 @@
  * drawer, which is the same drawer a retainer opens.
  */
 
-import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Fragment, useState, useEffect, useCallback, useMemo } from 'react';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DragDropContext, Droppable, Draggable, type BeforeCapture, type DropResult } from '@hello-pangea/dnd';
 import { plural } from '@/lib/utils';
@@ -33,17 +33,15 @@ import { StatTile, StatRow } from '@/components/ui/stat-tile';
 import { TaskDrawer, type DrawerTask } from '@/components/work/TaskDrawer';
 import { FollowUps } from '@/components/sales/FollowUps';
 import toast from 'react-hot-toast';
-import { Check, CheckSquare, ChevronRight, Plus, GripVertical } from 'lucide-react';
+import { CheckSquare, ChevronRight, Plus, GripVertical } from 'lucide-react';
 import type { TaskRepeatInfo } from '@/lib/repeat';
 import { RepeatMark } from '@/components/work/RepeatMark';
 import { NewTaskModal } from '@/components/work/NewTaskModal';
 import { taskTypeLabel } from '@/lib/task-type';
 import { NowBadge, canBeNow, useWorkingOnNow } from '@/components/work/WorkingOnNow';
-import { qk, useLastChoices } from '@/hooks/queries';
+import { qk } from '@/hooks/queries';
 import { GettingStartedCard } from '@/components/work/GettingStartedCard';
-import { quickAddBody, quickAddSummary } from '@/lib/quickAdd';
 import { withDueTime } from '@/lib/due-time';
-import { toastWithAction } from '@/lib/actionToast';
 import { useRemembered } from '@/lib/remembered';
 import { ColumnFilter, ColumnTextFilter } from '@/components/ui/column-filter';
 import { NO_FILTERS, filterOptions, isFiltering, matchesFilters, type MyWorkFilters } from '@/lib/myWorkFilters';
@@ -290,17 +288,6 @@ export default function MyWorkPage() {
   const counts = { today: 0, overdue: 0, thisWeek: 0, later: 0, completed: 0, ...(data?.counts ?? {}) };
   const [busyId, setBusyId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
-  /** What quick add hands the full form when it cannot file the task itself. */
-  const [creatingTitle, setCreatingTitle] = useState('');
-  /*
-   * Quick add (Ease Plan 1, decision 3): one line, Enter, done — for you, due
-   * today, filed where your last hand-made task was.
-   */
-  const [quickTitle, setQuickTitle] = useState('');
-  const [quickBusy, setQuickBusy] = useState(false);
-  const lastChoices = useLastChoices();
-  /** "Add your first task" on the Getting started card puts the cursor here. */
-  const quickAddRef = useRef<HTMLInputElement>(null);
   const [selected, setSelected] = useState<TaskItem | null>(null);
   /*
    * What this person said they are working on now (Team plan 1): the Now badge
@@ -458,7 +445,7 @@ export default function MyWorkPage() {
     await refetch();
     // A task finished or held stops being "now" on the server.
     void queryClient.invalidateQueries({ queryKey: qk.myFocus });
-    // A quick add, a tick, a status change: each can tick a Getting started step.
+    // A new task or a status change: either can tick a Getting started step.
     void queryClient.invalidateQueries({ queryKey: qk.gettingStarted });
   }, [refetch, queryClient]);
 
@@ -506,110 +493,6 @@ export default function MyWorkPage() {
     }
   };
 
-  /** A row quick add has put up and the server has not answered for yet. */
-  const isPlaceholder = (t: TaskItem) => t.id.startsWith('quick-');
-
-  /*
-   * One tap to Done (Ease Plan 1, decision 4): the row changes now and the
-   * save follows, as any status change does, and the toast offers Undo for
-   * five seconds. Undo puts back what it was — a held task back on hold with
-   * what it was waiting on, without asking again. The status dropdown stays
-   * for everything else.
-   */
-  const markDone = async (task: TaskItem) => {
-    if (isPlaceholder(task)) return;
-    const was = task.status;
-    const waitingOn = task.waitingOn ?? null;
-    if (!(await changeStatus(task, 'DONE'))) return;
-    toastWithAction(`Done · ${task.title}`, {
-      label: 'Undo',
-      onClick: () => {
-        void (async () => {
-          try {
-            if (was === 'ON_HOLD') await api.tasks.wait(task.id, waitingOn);
-            else await api.tasks.updateStatus(task.id, was);
-            await load();
-          } catch (e) {
-            toast.error(e instanceof Error ? e.message : 'Could not put it back');
-          }
-        })();
-      },
-    });
-  };
-
-  /*
-   * Enter in the quick add line. Nothing is filed under a guess: with no
-   * last choices — a first task, or the last one's work has closed — the
-   * full form opens with the title already typed.
-   */
-  const quickAdd = async () => {
-    const title = quickTitle.trim();
-    if (!title || quickBusy) return;
-    const choices = lastChoices.data?.choices ?? null;
-    // The studio's today from the server, unless this device has since passed midnight.
-    const localToday = (() => {
-      const d = new Date();
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    })();
-    const today = [lastChoices.data?.today ?? '', localToday].sort().at(-1)!;
-    const body = quickAddBody(title, choices, today);
-    if (!body || !choices) {
-      // The typed title stays in the line until the task exists, so a form
-      // closed by a stray click loses nothing.
-      setCreatingTitle(title);
-      setCreating(true);
-      return;
-    }
-    setQuickBusy(true);
-    setQuickTitle('');
-    const placeholder: TaskItem = {
-      id: `quick-${Date.now()}`,
-      title: body.title,
-      status: 'TODO',
-      priority: body.priority,
-      dueDate: `${body.dueDate}T00:00:00.000Z`,
-      assignedAt: new Date().toISOString(),
-      reopenCount: 0,
-      taskType: body.taskType,
-      clientName: choices.target?.scope === 'CLIENT' ? choices.target.name : 'Internal',
-      workingHoursText: '0h 0m',
-      workingMinutes: 0,
-      typeMedianMinutes: null,
-      typeMedianText: null,
-    };
-    let createdId: string | null = null;
-    const saved = await optimistic<NonNullable<typeof data>>(
-      queryClient,
-      ['tasks', 'my'],
-      (cur) => ({
-        ...cur,
-        counts: { ...cur.counts, today: (cur.counts?.today ?? 0) + 1 },
-        tasks: { ...cur.tasks, today: [placeholder, ...cur.tasks.today] },
-      }),
-      async () => {
-        const res = await api.tasks.create(body);
-        createdId = res.task?.id ?? null;
-      },
-    );
-    setQuickBusy(false);
-    if (!saved) {
-      // Changed back: what they typed is still theirs to send again.
-      setQuickTitle(title);
-      return;
-    }
-    void queryClient.invalidateQueries({ queryKey: qk.lastChoices });
-    await load();
-    toastWithAction(
-      `Added · ${quickAddSummary(choices)} · due today`,
-      {
-        label: 'Change',
-        // The same address the bell gives a task: opens it in the drawer from the list.
-        onClick: () => createdId && router.replace(`/my-work?task=${createdId}`),
-      },
-      6000,
-    );
-  };
-
   const todayStr = new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date());
   /* Local, not UTC. `toISOString()` rolls over five and a half hours early
      here, so a task due today reads as late all evening. */
@@ -640,26 +523,9 @@ export default function MyWorkPage() {
    * week, which is history) or a draggable one (everything still to do),
    * without two copies of the row that drift apart.
    */
-  /** The round tick at the start of an open task: one tap and it is Done. */
-  const tick = (t: TaskItem, className = '') => (
-    <button
-      type="button"
-      aria-label={`Mark “${t.title}” done`}
-      title="Mark done"
-      disabled={busyId === t.id || isPlaceholder(t)}
-      onClick={(e) => {
-        e.stopPropagation();
-        void markDone(t);
-      }}
-      className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-border bg-white text-transparent outline-none transition-colors hover:border-success hover:text-success focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-50 ${className}`}
-    >
-      <Check className="h-3 w-3" strokeWidth={3} aria-hidden="true" />
-    </button>
-  );
-
   /*
    * My Work on a phone (Ease Plan 1, decision 5): below `md` each task is a
-   * card — tick, title, client · type of work, due date — and tapping it
+   * card — title, client · type of work, due date — and tapping it
    * opens the drawer. The same groups and the same Group by as the table;
    * arranging by drag stays on the desktop.
    */
@@ -669,10 +535,9 @@ export default function MyWorkPage() {
     const kind = taskTypeLabel(t.taskType);
     return (
       <li key={t.id} data-task-card={t.id} className="flex items-start gap-3 px-4 py-3">
-        {finished ? <span className="h-5 w-5 shrink-0" aria-hidden="true" /> : tick(t, 'mt-0.5')}
         <button
           type="button"
-          onClick={() => !isPlaceholder(t) && setSelected(t)}
+          onClick={() => setSelected(t)}
           className="min-w-0 flex-1 rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
         >
           <span className={`block text-sm font-medium ${finished ? 'text-secondary line-through' : 'text-primary'}`}>{t.title}</span>
@@ -745,10 +610,9 @@ export default function MyWorkPage() {
             is the target for a mouse, and this is what a keyboard and a screen
             reader get to open the same thing.
           */}
-          {!finished && tick(t, 'mr-2 align-middle')}
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); if (!isPlaceholder(t)) setSelected(t); }}
+            onClick={(e) => { e.stopPropagation(); setSelected(t); }}
             className={`rounded-sm text-left font-medium outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${finished ? 'text-secondary line-through' : 'text-primary'}`}
           >
             {t.title}
@@ -791,7 +655,7 @@ export default function MyWorkPage() {
             title={t.title}
             value={t.dueDate}
             time={t.dueTime}
-            disabled={finished || isPlaceholder(t)}
+            disabled={finished}
             className={late ? 'font-semibold text-danger' : 'text-secondary'}
           />
         </td>
@@ -815,7 +679,7 @@ export default function MyWorkPage() {
             options={STATUS_OPTIONS}
             ariaLabel={`Status for ${t.title}`}
             buttonClassName="px-2.5 py-1.5 text-xs w-32"
-            disabled={busyId === t.id || isPlaceholder(t)}
+            disabled={busyId === t.id}
           />
         </td>
       </>
@@ -824,7 +688,7 @@ export default function MyWorkPage() {
 
   /** A finished task: history, so it does not move. */
   const row = (t: TaskItem) => (
-    <tr key={t.id} onClick={() => !isPlaceholder(t) && setSelected(t)} className="group/row cursor-pointer transition-colors hover:bg-subtle">
+    <tr key={t.id} onClick={() => setSelected(t)} className="group/row cursor-pointer transition-colors hover:bg-subtle">
       {cells(t, null)}
     </tr>
   );
@@ -843,7 +707,7 @@ export default function MyWorkPage() {
           ref={drag.innerRef}
           {...drag.draggableProps}
           data-task-row={t.id}
-          onClick={() => !isPlaceholder(t) && setSelected(t)}
+          onClick={() => setSelected(t)}
           className={`group/row cursor-pointer transition-colors hover:bg-subtle ${
             snap.isDragging ? 'bg-white shadow-card ring-1 ring-primary/20' : ''
           }`}
@@ -941,46 +805,11 @@ export default function MyWorkPage() {
 
   return (
     <div className="page-shell">
-      {/*
-        Quick add (Ease Plan 1): a title and Enter makes it — for you, due
-        today, filed where your last task was. With nothing to go on, Enter
-        opens the full form with the title in it.
-      */}
-      {/* Getting started (Ease Plan 2): above the quick add, until every step is done or it is hidden. */}
+      {/* Getting started (Ease Plan 2): at the top, until every step is done or it is hidden. */}
       <GettingStartedCard
-        onAddTask={() => {
-          quickAddRef.current?.focus();
-          quickAddRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-        }}
+        onAddTask={() => setCreating(true)}
         onFinishTask={() => document.getElementById('my-work-list')?.scrollIntoView({ block: 'start', behavior: 'smooth' })}
       />
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          void quickAdd();
-        }}
-        className="mb-6"
-      >
-        <label htmlFor="quick-add" className="sr-only">
-          Add a task for myself
-        </label>
-        <div className="flex items-center gap-2 rounded-xl border border-border bg-white px-3 py-2.5 transition-colors focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20">
-          <Plus className="h-4 w-4 shrink-0 text-secondary" aria-hidden="true" />
-          <input
-            id="quick-add"
-            ref={quickAddRef}
-            value={quickTitle}
-            onChange={(e) => setQuickTitle(e.target.value)}
-            placeholder="Add a task for myself — press Enter"
-            maxLength={300}
-            enterKeyHint="done"
-            autoComplete="off"
-            disabled={quickBusy}
-            className="min-w-0 flex-1 bg-transparent text-sm text-body outline-none placeholder:text-secondary"
-          />
-        </div>
-      </form>
-
       <StatRow className="mb-8">
         <StatTile label="Due Today" value={counts.today} note={`${onHoldCount} on hold`} />
         {/*
@@ -1221,16 +1050,9 @@ export default function MyWorkPage() {
 
       <NewTaskModal
         open={creating}
-        initialTitle={creatingTitle || undefined}
-        onClose={() => {
-          setCreating(false);
-          setCreatingTitle('');
-        }}
+        onClose={() => setCreating(false)}
         onCreated={() => {
           setCreating(false);
-          // Made from the quick add line: it has done its job.
-          if (creatingTitle) setQuickTitle('');
-          setCreatingTitle('');
           void load();
         }}
       />

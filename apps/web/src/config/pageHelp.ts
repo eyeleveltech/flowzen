@@ -75,8 +75,8 @@ export const PAGE_HELP: Record<string, PageHelp> = {
     purpose: 'Your own list of tasks: everything you are on, sorted by when it is due. Start your day here.',
     steps: [
       'Look at Overdue and Due today first, then Coming up.',
-      'Tap the round tick at the start of a row when a task is done. Change its status or due date on the row.',
-      'Type a title in the line at the top and press Enter to add a task for yourself. Task for myself opens the full form.',
+      'When a task is done, set its status to Done. Change its status or due date on the row, or open the task.',
+      'Task for myself, above the list, adds a task of your own.',
     ],
     readMore: 'stage-tasks',
   },
