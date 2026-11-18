@@ -19,7 +19,7 @@
  */
 
 import Link from 'next/link';
-import type { ComponentType, ReactNode } from 'react';
+import { useEffect, type ComponentType, type ReactNode } from 'react';
 import {
   Bell,
   BookOpen,
@@ -36,6 +36,7 @@ import {
 import { usePageHeader } from '@/hooks/usePageHeader';
 import { Card } from '@/components/ui/card';
 import { NAV_ITEMS, offered } from '@/config/navigation';
+import type { HowItWorksSection } from '@/config/pageHelp';
 import { useAuthStore } from '@/stores';
 import { cn } from '@/lib/utils';
 
@@ -75,9 +76,15 @@ function Go({ href, children }: { href: string; children: ReactNode }) {
   );
 }
 
-/** The six stages, in the order work passes through them. */
+/**
+ * The six stages, in the order work passes through them.
+ *
+ * `anchor` is each stage's `id` on the page, from the list in config/pageHelp.ts
+ * — the "?" on every screen links to these with "Read more".
+ */
 const STAGES: {
   n: number;
+  anchor: HowItWorksSection;
   title: string;
   icon: Icon;
   what: ReactNode;
@@ -86,6 +93,7 @@ const STAGES: {
 }[] = [
   {
     n: 1,
+    anchor: 'stage-lead',
     title: 'A lead comes in',
     icon: Search,
     what: (
@@ -104,6 +112,7 @@ const STAGES: {
   },
   {
     n: 2,
+    anchor: 'stage-proposal',
     title: 'A proposal goes out',
     icon: FileText,
     what: (
@@ -124,6 +133,7 @@ const STAGES: {
   },
   {
     n: 3,
+    anchor: 'stage-won',
     title: 'The deal is won — the Prospect becomes a Client',
     icon: Handshake,
     what: (
@@ -142,6 +152,7 @@ const STAGES: {
   },
   {
     n: 4,
+    anchor: 'stage-tasks',
     title: 'The work is done as tasks',
     icon: ListChecks,
     what: (
@@ -164,6 +175,7 @@ const STAGES: {
   },
   {
     n: 5,
+    anchor: 'stage-billing',
     title: 'It is billed: proforma → invoice → payment',
     icon: Receipt,
     what: (
@@ -186,6 +198,7 @@ const STAGES: {
   },
   {
     n: 6,
+    anchor: 'stage-money',
     title: 'Management sees the money',
     icon: IndianRupee,
     what: (
@@ -209,9 +222,10 @@ const STAGES: {
 ];
 
 /** What a normal day looks like, by role. */
-const DAYS: { role: string; lines: ReactNode[] }[] = [
+const DAYS: { role: string; anchor: HowItWorksSection; lines: ReactNode[] }[] = [
   {
     role: 'Everybody',
+    anchor: 'day-everybody',
     lines: [
       <>
         Open <Go href="/my-work">My Work</Go>: Overdue, Due today, Later this week. Change a status or a date on the row.
@@ -225,6 +239,7 @@ const DAYS: { role: string; lines: ReactNode[] }[] = [
   },
   {
     role: 'Department head',
+    anchor: 'day-department-head',
     lines: [
       <>
         <Go href="/my-department">My department</Go>: who is carrying what, what is late. “Assign a task” from{' '}
@@ -239,6 +254,7 @@ const DAYS: { role: string; lines: ReactNode[] }[] = [
   },
   {
     role: 'Business development',
+    anchor: 'day-business-development',
     lines: [
       <>
         <Go href="/outreach">Outreach list</Go>: today’s call-backs. “Log touch” after every contact, or the deal counts as
@@ -252,6 +268,7 @@ const DAYS: { role: string; lines: ReactNode[] }[] = [
   },
   {
     role: 'Accounts',
+    anchor: 'day-accounts',
     lines: [
       <>
         <Go href="/money?tab=billing">Money → Billing</Go>: every retainer month and project milestone waiting for a proforma,
@@ -263,6 +280,7 @@ const DAYS: { role: string; lines: ReactNode[] }[] = [
   },
   {
     role: 'Management',
+    anchor: 'day-management',
     lines: [
       <>
         Monday: <Go href="/brief">Monday brief</Go>, then <Go href="/forecast">Forecast</Go>.
@@ -314,9 +332,10 @@ const RULES: { title: string; body: ReactNode }[] = [
   },
 ];
 
-function Section({ eyebrow, title, children }: { eyebrow: string; title: string; children: ReactNode }) {
+function Section({ id, eyebrow, title, children }: { id: HowItWorksSection; eyebrow: string; title: string; children: ReactNode }) {
+  // `scroll-mt-20`: a "Read more" link lands below the sticky top bar, not under it.
   return (
-    <section className="space-y-4">
+    <section id={id} className="scroll-mt-20 space-y-4">
       <div>
         <span className="eyebrow block">{eyebrow}</span>
         <h2 className="mt-1 text-lg font-semibold text-primary">{title}</h2>
@@ -327,6 +346,17 @@ function Section({ eyebrow, title, children }: { eyebrow: string; title: string;
 }
 
 export default function HowItWorksPage() {
+  /*
+   * A section link opened fresh — a new tab, a pasted address (Ease Plan 2's
+   * "Read more" sends people here): the browser looks for the section before
+   * the page has drawn it, so this jumps once it has. A click from the ? panel
+   * already lands there; this only covers the fresh load.
+   */
+  useEffect(() => {
+    const id = decodeURIComponent(window.location.hash.slice(1));
+    if (id) document.getElementById(id)?.scrollIntoView({ block: 'start' });
+  }, []);
+
   usePageHeader('How Flowzen works', 'The whole app in one page: the flow, one client carried through it, and what each role does.');
   const user = useAuthStore((s) => s.user);
   const me = ROLES[user?.preset ?? ''] ?? ROLES.EMPLOYEE;
@@ -372,10 +402,10 @@ export default function HowItWorksPage() {
         </ol>
       </Card>
 
-      <Section eyebrow="The flow" title="Six stages, and Carlton Hotels through all six">
+      <Section id="the-flow" eyebrow="The flow" title="Six stages, and Carlton Hotels through all six">
         <ol className="space-y-3">
           {STAGES.map((s) => (
-            <li key={s.n}>
+            <li key={s.n} id={s.anchor} className="scroll-mt-20">
               <Card padding="none" className={cn('overflow-hidden', mine(s.n) && 'border-l-4 border-l-accent')}>
                 <div className="grid lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
                   <div className="p-5">
@@ -412,13 +442,14 @@ export default function HowItWorksPage() {
         </ol>
       </Section>
 
-      <Section eyebrow="A normal day" title={`Your day as ${me.name}, then everyone else’s`}>
+      <Section id="a-normal-day" eyebrow="A normal day" title={`Your day as ${me.name}, then everyone else’s`}>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {days.map((d) => (
             <Card
               key={d.role}
+              id={d.anchor}
               padding="md"
-              className={cn(d.role === me.name && 'border-accent bg-warning-tint/40 md:col-span-2 xl:col-span-3')}
+              className={cn('scroll-mt-20', d.role === me.name && 'border-accent bg-warning-tint/40 md:col-span-2 xl:col-span-3')}
             >
               <h3 className="flex items-center gap-2 text-sm font-semibold text-primary">
                 {d.role}
@@ -436,7 +467,7 @@ export default function HowItWorksPage() {
               </ul>
             </Card>
           ))}
-          <Card padding="md" className="bg-subtle/60">
+          <Card id={'the-bell' satisfies HowItWorksSection} padding="md" className="scroll-mt-20 bg-subtle/60">
             <div className="flex items-center gap-2">
               <Bell className="h-4 w-4 text-secondary" />
               <h3 className="text-sm font-semibold text-primary">The bell, for everybody</h3>
@@ -450,7 +481,7 @@ export default function HowItWorksPage() {
         </div>
       </Section>
 
-      <Section eyebrow="The rules" title="Eight things the app will not do, and why">
+      <Section id="the-rules" eyebrow="The rules" title="Eight things the app will not do, and why">
         <div className="grid gap-3 md:grid-cols-2">
           {RULES.map((r) => (
             <Card key={r.title} padding="md" className={cn('border-l-4 border-l-accent')}>
@@ -461,7 +492,7 @@ export default function HowItWorksPage() {
         </div>
       </Section>
 
-      <Section eyebrow="Where is…" title="The quick map">
+      <Section id="quick-map" eyebrow="Where is…" title="The quick map">
         <Card padding="md">
           <dl className="grid gap-x-8 gap-y-2.5 text-sm sm:grid-cols-2">
             {(

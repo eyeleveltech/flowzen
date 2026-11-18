@@ -132,6 +132,9 @@ const RULES: Record<string, { words: string; area: string }> = {
   ASSET_WARRANTY_EXPIRING: { words: 'Warranty ending soon', area: 'assets' },
   EVENT_TODAY: { words: 'Meeting or shoot today', area: 'calendar' },
   EVENT_UPDATE: { words: 'Meeting or shoot changed', area: 'calendar' },
+  FEEDBACK_NEW: { words: 'New "Something confusing?" feedback notes', area: 'team' },
+  FEEDBACK_LOOKED_AT: { words: 'Your feedback note was looked at', area: 'team' },
+  USAGE_REVIEW: { words: 'Monthly usage review ready', area: 'team' },
 };
 const AREAS = ['money', 'sales', 'work', 'clients', 'team', 'assets', 'calendar'];
 

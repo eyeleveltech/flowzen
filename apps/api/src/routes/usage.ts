@@ -6,6 +6,7 @@ import { logger } from '../utils/logger.js';
 import { todayIn } from '../utils/workCalendar.js';
 import { screenFor, type ScreenKey } from '../services/usageScreens.js';
 import { usageForLastDays } from '../services/usageSummary.js';
+import { closeUsageReview, screensReview } from '../services/usageReview.js';
 
 /**
  * /api/usage — who is using Flowzen.
@@ -108,6 +109,26 @@ usageRouter.get(
       const days = req.query.days === '30' ? 30 : 7;
       const summary = await usageForLastDays(req.user!.organizationId, days);
       res.json({ success: true, days, ...summary });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+/**
+ * GET /usage/screens — the monthly review (Ease Plan 3): each screen, opened
+ * by how many people in the last 30 days out of how many can. Counts only.
+ * Management only; opening it closes "Usage review for … is ready".
+ */
+usageRouter.get(
+  '/screens',
+  requireManagement('Who is using Flowzen is for management only.'),
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const orgId = req.user!.organizationId;
+      const review = await screensReview(orgId);
+      await closeUsageReview(orgId).catch((e) => logger.warn(`Usage review bell not closed for ${orgId}: ${e instanceof Error ? e.message : e}`));
+      res.json({ success: true, ...review });
     } catch (e) {
       next(e);
     }

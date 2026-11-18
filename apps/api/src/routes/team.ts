@@ -1,5 +1,6 @@
 import { Router, type Response } from 'express';
 import { prisma } from '../lib/prisma.js';
+import { personOut } from '../services/taskPeople.js';
 import { authenticate, requirePermission, type AuthRequest, hasPermission } from '../middleware/auth.js';
 import { listDepartments } from './departments.js';
 import { loadWorkCalendar, workingMinutesOn } from '../utils/workCalendar.js';
@@ -47,9 +48,10 @@ teamRouter.get('/members', async (req: AuthRequest, res: Response, next) => {
     const members = await prisma.user.findMany({
       where: req.query.scoped === '1' ? await peopleInScope(req.user!, base) : base,
       orderBy: { name: 'asc' },
-      select: { id: true, name: true, designation: true, dept: true, departmentId: true },
+      select: { id: true, name: true, designation: true, departmentId: true, department: { select: { name: true } } },
     });
-    res.json({ success: true, members });
+    // `dept` is the department's name, from its record (Departments Plan 4).
+    res.json({ success: true, members: members.map((m) => personOut(m)) });
   } catch (error) {
     next(error);
   }
@@ -82,7 +84,6 @@ teamRouter.get('/capacity', requirePermission('work.team'), async (req: AuthRequ
         // without the other.
         designation: true,
         email: true,
-        dept: true,
         departmentId: true,
         department: { select: { name: true } },
         preset: true,
@@ -275,7 +276,7 @@ teamRouter.get('/:id', requirePermission('work.team'), async (req: AuthRequest, 
         name: true,
         designation: true,
         email: true,
-        dept: true,
+        department: { select: { name: true } },
         preset: true,
         active: true,
         monthlyCost: true,
@@ -363,7 +364,7 @@ teamRouter.get('/:id', requirePermission('work.team'), async (req: AuthRequest, 
         name: member.name,
         designation: member.designation,
         email: member.email,
-        dept: member.dept,
+        dept: member.department?.name ?? '',
         preset: member.preset,
         active: member.active,
         monthlyCost: canSeeSalaries ? member.monthlyCost : null,

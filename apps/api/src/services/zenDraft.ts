@@ -1,4 +1,5 @@
 import { prisma } from '../lib/prisma.js';
+import { personOut } from './taskPeople.js';
 import { TaskType } from '@prisma/client';
 import { TASK_TYPE_LABEL } from './taskTypes.js';
 import type { AiTool } from './ai/types.js';
@@ -167,9 +168,9 @@ export async function draftTask(
 
   const team = await prisma.user.findMany({
     where: { organizationId, active: true },
-    select: { id: true, name: true, dept: true },
+    select: { id: true, name: true, department: { select: { name: true } } },
     orderBy: { name: 'asc' },
-  });
+  }).then((people) => people.map((u) => personOut(u)));
 
   /* ── who it is for ──────────────────────────────────────────────────────── */
   let assignee = team.find((u) => u.id === askerId) ?? null;

@@ -27,8 +27,9 @@ import {
  * only with `setup.admin`. Never deleted: merged into another, or archived
  * once nobody active is left in it, so history keeps its name.
  *
- * `User.dept` is still written with the department's name on every change, so
- * anything that still reads the text sees the right word. It goes in Plan 4.
+ * The old text column went in Departments Plan 4: a person's department name is
+ * read off this record everywhere, and the API still hands it out as `dept`
+ * (services/taskPeople.ts `personOut`) so no screen had to change.
  */
 export const departmentsRouter = Router();
 departmentsRouter.use(authenticate);
@@ -123,11 +124,11 @@ const takenMessage = (t: { name: string; archivedAt: Date | null }) =>
 const findDepartment = (orgId: string, id: string) =>
   prisma.department.findFirst({ where: { id, organizationId: orgId } });
 
-/** Move people into a department, keeping their `dept` text in step. */
+/** Move people into a department. Their department's name is read from its record. */
 async function moveInto(tx: Tx, orgId: string, where: { id?: { in: string[] }; departmentId?: string }, to: { id: string; name: string }) {
   return tx.user.updateMany({
     where: { organizationId: orgId, ...where },
-    data: { departmentId: to.id, dept: to.name },
+    data: { departmentId: to.id },
   });
 }
 
@@ -340,8 +341,7 @@ departmentsRouter.patch('/:id', requirePermission('setup.admin'), async (req: Au
           ...(sortOrder !== undefined ? { sortOrder } : {}),
         },
       });
-      // A rename shows everywhere: the text kept beside the id follows it.
-      if (renamed) await tx.user.updateMany({ where: { organizationId: orgId, departmentId: dept.id }, data: { dept: name } });
+      // A rename shows everywhere by itself: every screen reads the name off this record.
       return row;
     });
 

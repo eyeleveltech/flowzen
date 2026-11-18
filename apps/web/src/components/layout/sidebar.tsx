@@ -10,6 +10,12 @@
  * Groups are headings, not folders: nothing collapses, nothing hides behind a
  * disclosure. At four groups and ten items the whole navigation fits on screen,
  * and a list you can see is faster than a list you have to search.
+ *
+ * The one disclosure is the person's own (Ease Plan 3, decisions 9–10): each
+ * item's "…" pins it into Pinned at the top, in the order pinned, or hides it
+ * into "Hidden (n)" at the bottom, collapsed but never lost. Only they move
+ * things — the order never changes by itself. Collapsed to 72px the controls
+ * go (there is no room for them); the sections stay.
  */
 
 import { useEffect, useState } from 'react';
@@ -19,12 +25,15 @@ import { m, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useUIStore, useAuthStore } from '@/stores';
 import { cn, getInitials, getAvatarColor } from '@/lib/utils';
 import {
-  visibleSections,
+  menuFor,
   BOTTOM_NAV_ITEMS,
+  HOME_HREF,
   NavItem,
   canSee,
 } from '@/config/navigation';
-import { ChevronLeft, LogOut } from 'lucide-react';
+import { ChevronDown, ChevronLeft, EyeOff, LogOut } from 'lucide-react';
+import { NavItemMenu } from './nav-item-menu';
+import { useNavMenu } from './use-nav-menu';
 
 export function Sidebar({ isMobile }: { isMobile?: boolean }) {
   const shouldReduceMotion = useReducedMotion();
@@ -34,63 +43,84 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
 
   const { sidebarCollapsed, toggleCollapse, mobileSidebarOpen } = useUIStore();
   const { user, logout } = useAuthStore();
+  const { togglePin, toggleHidden } = useNavMenu();
+  const [hiddenOpen, setHiddenOpen] = useState(false);
 
   // Nothing is rendered from the user until the session has been read from
   // storage — rendering the ladder against an empty role first would flash the
   // Member-sized navigation at an Admin on every load.
-  const sections = mounted ? visibleSections(user) : [];
+  const { pinned, sections, hidden } = mounted ? menuFor(user) : { pinned: [], sections: [], hidden: [] };
   const collapsed = mounted && sidebarCollapsed;
+  // Pin and hide live on the full-width rail; at 72px there is no room for them.
+  const editable = !collapsed;
 
   const isCurrent = (href: string) =>
     // /revenue has child routes that are their own screens, so a prefix match
     // would light two items at once.
     href === '/revenue' ? pathname === href : pathname === href || pathname.startsWith(href + '/');
 
-  const link = (item: NavItem) => {
+  const link = (item: NavItem, place: 'pinned' | 'normal' | 'hidden') => {
     const active = isCurrent(item.href);
     return (
-      <Link
-        key={item.href}
-        href={item.href}
-        title={collapsed ? item.label : undefined}
-        aria-label={item.label}
-        aria-current={active ? 'page' : undefined}
-      >
-        <div
-          className={cn(
-            'group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors duration-150 motion-reduce:transition-none',
-            active ? 'bg-white/12 text-white' : 'text-white/60 hover:bg-white/10 hover:text-white',
-            collapsed && 'justify-center px-0',
-          )}
+      // The "…" sits beside the link, not inside it: a button inside an <a> is
+      // two controls in one, and a screen reader announces neither properly.
+      <div key={item.href} className="group/item relative">
+        <Link
+          href={item.href}
+          title={collapsed ? item.label : undefined}
+          aria-label={item.label}
+          aria-current={active ? 'page' : undefined}
         >
-          <item.icon
+          <div
             className={cn(
-              'h-4.5 w-4.5 shrink-0',
-              active ? 'text-white' : 'text-white/60 group-hover:text-white',
+              'group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors duration-150 motion-reduce:transition-none',
+              active ? 'bg-white/12 text-white' : 'text-white/60 hover:bg-white/10 hover:text-white',
+              collapsed && 'justify-center px-0',
+              editable && 'pr-10',
             )}
-          />
-          <AnimatePresence>
-            {!collapsed && (
-              <m.span
-                initial={{ opacity: 0, width: 0 }}
-                animate={{ opacity: 1, width: 'auto' }}
-                exit={{ opacity: 0, width: 0 }}
-                transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.15 }}
-                className="whitespace-nowrap overflow-hidden"
-              >
-                {item.label}
-              </m.span>
-            )}
-          </AnimatePresence>
-          {active && (
-            <m.div
-              layoutId="sidebar-indicator"
-              className="absolute inset-0 rounded-xl bg-white/12 -z-10"
-              transition={shouldReduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 500, damping: 35 }}
+          >
+            <item.icon
+              className={cn(
+                'h-4.5 w-4.5 shrink-0',
+                active ? 'text-white' : 'text-white/60 group-hover:text-white',
+              )}
             />
-          )}
-        </div>
-      </Link>
+            <AnimatePresence>
+              {!collapsed && (
+                <m.span
+                  initial={{ opacity: 0, width: 0 }}
+                  animate={{ opacity: 1, width: 'auto' }}
+                  exit={{ opacity: 0, width: 0 }}
+                  transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.15 }}
+                  className="whitespace-nowrap overflow-hidden"
+                >
+                  {item.label}
+                </m.span>
+              )}
+            </AnimatePresence>
+            {active && (
+              <m.div
+                layoutId="sidebar-indicator"
+                className="absolute inset-0 rounded-xl bg-white/12 -z-10"
+                transition={shouldReduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 500, damping: 35 }}
+              />
+            )}
+          </div>
+        </Link>
+        {editable && (
+          <NavItemMenu
+            href={item.href}
+            label={item.label}
+            pinned={place === 'pinned'}
+            hidden={place === 'hidden'}
+            canHide={item.href !== HOME_HREF}
+            onTogglePin={() => togglePin(item.href)}
+            onToggleHidden={() => toggleHidden(item.href)}
+            alwaysVisible={isMobile}
+            className="absolute right-1.5 top-1/2 -translate-y-1/2"
+          />
+        )}
+      </div>
     );
   };
 
@@ -123,6 +153,14 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-3 py-4">
+        {/* Their pins, in the order they pinned them. */}
+        {pinned.length > 0 && (
+          <div>
+            {!collapsed && <p className="eyebrow px-3 pb-1.5 text-white/[0.32]">PINNED</p>}
+            <div className="space-y-1">{pinned.map((item) => link(item, 'pinned'))}</div>
+          </div>
+        )}
+
         {sections.map((section, i) => (
           <div
             // A section reduced to one row loses its heading (see
@@ -130,7 +168,7 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
             // title is no longer unique enough to key on. The first item's
             // href is.
             key={section.title ?? section.items[0]?.href ?? 'top'}
-            className={cn(i > 0 && (collapsed ? 'mt-3 border-t border-white/10 pt-3' : 'mt-5'))}
+            className={cn((i > 0 || pinned.length > 0) && (collapsed ? 'mt-3 border-t border-white/10 pt-3' : 'mt-5'))}
           >
             {/*
               Collapsed, the heading becomes the rule above the group. The words
@@ -141,9 +179,47 @@ export function Sidebar({ isMobile }: { isMobile?: boolean }) {
                 {section.title}
               </p>
             )}
-            <div className="space-y-1">{section.items.map(link)}</div>
+            <div className="space-y-1">{section.items.map((item) => link(item, 'normal'))}</div>
           </div>
         ))}
+
+        {/* What they hid — folded away at the bottom, one click from coming back. */}
+        {hidden.length > 0 && (
+          <div className={cn(collapsed ? 'mt-3 border-t border-white/10 pt-3' : 'mt-5')}>
+            <button
+              type="button"
+              data-nav-hidden-toggle
+              onClick={() => setHiddenOpen((v) => !v)}
+              aria-expanded={hiddenOpen}
+              aria-controls="sidebar-hidden-items"
+              aria-label={`Hidden (${hidden.length})`}
+              title={collapsed ? `Hidden (${hidden.length})` : undefined}
+              className={cn(
+                'flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-white/60 outline-none transition-colors duration-150 hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white/40 motion-reduce:transition-none',
+                collapsed && 'justify-center px-0',
+              )}
+            >
+              <EyeOff className="h-4.5 w-4.5 shrink-0" aria-hidden="true" />
+              {!collapsed && (
+                <>
+                  <span className="flex-1 whitespace-nowrap text-left">Hidden ({hidden.length})</span>
+                  <ChevronDown
+                    className={cn(
+                      'h-4 w-4 shrink-0 transition-transform duration-150 motion-reduce:transition-none',
+                      hiddenOpen && 'rotate-180',
+                    )}
+                    aria-hidden="true"
+                  />
+                </>
+              )}
+            </button>
+            {hiddenOpen && (
+              <div id="sidebar-hidden-items" className="mt-1 space-y-1">
+                {hidden.map((item) => link(item, 'hidden'))}
+              </div>
+            )}
+          </div>
+        )}
       </nav>
 
       {/* Bottom */}

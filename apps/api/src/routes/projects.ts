@@ -1,6 +1,7 @@
 import { Router, type Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
+import { personOut } from '../services/taskPeople.js';
 import { maskInvoiceFigures, maskPaymentFigures } from '../utils/invoiceFigures.js';
 import { moneyClock, orgToday } from '../utils/moneyDates.js';
 import { invoiceState } from '../utils/invoiceState.js';
@@ -305,7 +306,7 @@ projectsRouter.get('/:id', requirePermission('work.all'), async (req: AuthReques
       where: { id, organizationId: orgId, deletedAt: null },
       include: {
         company: true,
-        owner: { select: { id: true, name: true, email: true, dept: true } },
+        owner: { select: { id: true, name: true, email: true, department: { select: { name: true } } } },
         milestones: {
           orderBy: { order: 'asc' },
           include: {
@@ -325,7 +326,7 @@ projectsRouter.get('/:id', requirePermission('work.all'), async (req: AuthReques
         tasks: {
           where: { deletedAt: null },
           include: {
-            assignee: { select: { id: true, name: true, designation: true, dept: true } },
+            assignee: { select: { id: true, name: true, designation: true, department: { select: { name: true } } } },
             // The small repeat mark on the project's task list.
             repeat: { select: { id: true, frequency: true, weekday: true, dayOfMonth: true, stoppedAt: true, stoppedReason: true } },
           },
@@ -338,7 +339,7 @@ projectsRouter.get('/:id', requirePermission('work.all'), async (req: AuthReques
         },
         allocations: {
           include: {
-            user: { select: { id: true, name: true, designation: true, dept: true, monthlyCost: true } },
+            user: { select: { id: true, name: true, designation: true, department: { select: { name: true } }, monthlyCost: true } },
             confirmedBy: { select: { id: true, name: true } },
           },
         },
@@ -385,7 +386,7 @@ projectsRouter.get('/:id', requirePermission('work.all'), async (req: AuthReques
     const canSeeSalaries = hasPermission(req.user!, 'setup.admin');
     const maskedAllocations = project.allocations.map((a) => ({
       ...a,
-      user: { ...a.user, monthlyCost: canSeeSalaries ? a.user.monthlyCost : undefined },
+      user: { ...personOut(a.user), monthlyCost: canSeeSalaries ? a.user.monthlyCost : undefined },
     }));
     const maskedMilestones = project.milestones.map((m) => ({
       ...m,
@@ -406,6 +407,8 @@ projectsRouter.get('/:id', requirePermission('work.all'), async (req: AuthReques
       success: true,
       project: {
         ...project,
+        owner: personOut(project.owner),
+        tasks: project.tasks.map((t) => ({ ...t, assignee: personOut(t.assignee) })),
         quotedValue: canSeeFigures ? project.quotedValue : null,
         // A Decimal column, which serialises as a string; the screen does
         // arithmetic on it, so it goes out as the number it is.

@@ -125,7 +125,7 @@ describe('Phase 1: RBAC Permissions & Authorization Gates', () => {
       organizationId: 'org-test-1',
       name: 'Test Owner',
       email: randomEmail,
-      dept: 'Management',
+      departmentId: 'dept-mgmt',
       preset: RolePreset.MANAGEMENT,
       permissions: ['setup.admin', 'money.figures'],
       active: true,
@@ -159,7 +159,10 @@ describe('Phase 1: RBAC Permissions & Authorization Gates', () => {
       name: 'Management',
       sortOrder: 0,
     });
-    expect((prisma.user.create as any).mock.calls[0][0].data).toMatchObject({ departmentId: 'dept-mgmt', dept: 'Management' });
+    expect((prisma.user.create as any).mock.calls[0][0].data).toMatchObject({ departmentId: 'dept-mgmt' });
+    // No department text any more (Departments Plan 4): the record is the department.
+    expect((prisma.user.create as any).mock.calls[0][0].data).not.toHaveProperty('dept');
+    expect(res.body.user.dept).toBe('Management');
     delete process.env.ALLOW_FIRST_RUN_SETUP;
   });
 

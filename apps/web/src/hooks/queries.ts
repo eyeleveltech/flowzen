@@ -35,6 +35,10 @@ export const qk = {
   teamScope: ['team', 'scope'] as const,
   departments: ['departments'] as const,
   myFocus: ['me', 'focus'] as const,
+  /** Not under ['tasks']: only creating a task changes it, and that says so (useLastChoices). */
+  lastChoices: ['last-choices'] as const,
+  /** My Work's Getting started card. Refreshed after anything that can tick a step. */
+  gettingStarted: ['getting-started'] as const,
 };
 
 /** Settings-like data — config, the roster, departments — holds for ten minutes (Perf Plan 1). */
@@ -141,4 +145,32 @@ export function useDepartments() {
     staleTime: SETTINGS_STALE_MS,
   });
   return { departments: (data?.departments ?? []) as Department[], loading: isPending };
+}
+
+/**
+ * What the next new task starts from (Ease Plan 1, decision 2): the type of
+ * work and "belongs to" of this person's last hand-made task, and the studio's
+ * today. Held a long time — only creating a task changes it, and every way of
+ * creating one invalidates `qk.lastChoices`.
+ */
+export function useLastChoices() {
+  return useQuery({
+    queryKey: qk.lastChoices,
+    queryFn: () => api.tasks.lastChoices(),
+    staleTime: 30 * 60 * 1000,
+    gcTime: 60 * 60 * 1000,
+  });
+}
+
+/**
+ * The Getting started card (Ease Plan 2). Asked again on every visit — a step
+ * can be done on another screen (How it works, Profile, a phone) — and
+ * refreshed straight after the actions on My Work that tick one.
+ */
+export function useGettingStarted() {
+  return useQuery({
+    queryKey: qk.gettingStarted,
+    queryFn: () => api.me.gettingStarted(),
+    staleTime: 0,
+  });
 }

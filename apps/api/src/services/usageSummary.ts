@@ -3,6 +3,7 @@ import { addDays, isWorkingDay, loadWorkCalendar, todayIn, weekdayOf } from '../
 import { dayStartUtc, localDayAndTime } from '../utils/zonedTime.js';
 import { SIGN_IN_VERBS } from './activityLog.js';
 import { screenLabel } from './usageScreens.js';
+import { gettingStartedFor, type GettingStarted } from './gettingStarted.js';
 
 /**
  * Who is using Flowzen — the one compute behind Settings → Usage and the
@@ -27,6 +28,8 @@ export type UsagePerson = {
   topScreens: string[];
   /** Working days since they were last active; null for never. */
   inactiveWorkingDays: number | null;
+  /** Getting started (Ease Plan 2): "3 of 5", and which required steps are missing. */
+  gettingStarted: { done: number; total: number; missing: string[] } | null;
 };
 
 export type UsageSummary = {
@@ -124,6 +127,11 @@ export async function composeUsageSummary(
     return n;
   };
 
+  // Who is stuck — Management sees it on Settings → Usage, the only reader of this summary.
+  const started = await gettingStartedFor(organizationId, users.map((u) => u.id));
+  const missingOf = (g: GettingStarted | undefined) =>
+    g ? { done: g.done, total: g.total, missing: g.steps.filter((s) => !s.done && !s.optional).map((s) => s.key) } : null;
+
   const people: UsagePerson[] = users.map((u) => {
     const lastActiveAt = lastAtOf.get(u.id) ?? null;
     const screens = [...(screensOf.get(u.id) ?? new Map()).entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
@@ -134,6 +142,7 @@ export async function composeUsageSummary(
       changes: changesOf.get(u.id) ?? 0,
       topScreens: screens.slice(0, 3).map(([key]) => screenLabel(key)),
       inactiveWorkingDays: lastActiveAt ? workingDaysSince(localDayAndTime(lastActiveAt, timezone).date) : null,
+      gettingStarted: missingOf(started.get(u.id)),
     };
   });
   // Least recently active first: never, then the longest ago.

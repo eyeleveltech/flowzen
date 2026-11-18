@@ -1,6 +1,6 @@
 import { Priority, TaskStatus } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
-import { TASK_PEOPLE } from './taskPeople.js';
+import { TASK_PEOPLE, personOut } from './taskPeople.js';
 import { taskHasClient, waitingOnShown } from './taskWaiting.js';
 import { withRepeatNext } from './taskRepeat.js';
 import { FOCUS_STATUSES } from './taskFocus.js';
@@ -231,8 +231,8 @@ export async function composeTeamBoard(orgId: string, people: BoardPerson[], now
     hasClient: taskHasClient(t),
     waitingSince: t.waitingSince,
     repeat: t.repeat,
-    assignee: t.assignee,
-    assignees: t.assignees.map((a) => a.user),
+    assignee: personOut(t.assignee),
+    assignees: t.assignees.map((a) => personOut(a.user)),
     assignedBy: t.assignedBy,
     creator: t.creator,
     reviewer: t.reviewer,

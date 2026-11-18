@@ -29,4 +29,28 @@ export const API_KEY_RULE = 'API_KEY_CHANGED';
  */
 export const CREDENTIAL_RULES = ['CREDENTIAL_UNUSUAL_ACTIVITY', 'CREDENTIAL_ACCESS_LOST'];
 
-export const EXTERNAL_RULES = [...EVENT_RULES, REVIEW_RULE, API_KEY_RULE, ...CREDENTIAL_RULES];
+/**
+ * "Something confusing? Tell us" (Ease Plan 3). FEEDBACK_NEW is Management's
+ * one "3 new feedback notes" alert per organisation, kept in step by the
+ * feedback routes; FEEDBACK_LOOKED_AT is the sender's "your note was looked
+ * at" bell, closed after two weeks by the daily usage clean-up.
+ */
+export const FEEDBACK_NEW_RULE = 'FEEDBACK_NEW';
+export const FEEDBACK_REPLY_RULE = 'FEEDBACK_LOOKED_AT';
+
+/**
+ * "Usage review for October is ready": Management's, early each month, raised
+ * by the daily usage clean-up and closed when the Screens view is opened or
+ * the next month's arrives.
+ */
+export const USAGE_REVIEW_RULE = 'USAGE_REVIEW';
+
+export const EXTERNAL_RULES = [
+  ...EVENT_RULES,
+  REVIEW_RULE,
+  API_KEY_RULE,
+  ...CREDENTIAL_RULES,
+  FEEDBACK_NEW_RULE,
+  FEEDBACK_REPLY_RULE,
+  USAGE_REVIEW_RULE,
+];

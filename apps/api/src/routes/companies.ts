@@ -1,6 +1,7 @@
 import { Router, type NextFunction, type Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
+import { personOut } from '../services/taskPeople.js';
 import { maskInvoiceFigures, maskPaymentFigures } from '../utils/invoiceFigures.js';
 import { moneyClock, orgToday } from '../utils/moneyDates.js';
 import { invoiceState } from '../utils/invoiceState.js';
@@ -274,7 +275,7 @@ companiesRouter.get('/:id', requirePermission('company.read'), async (req: AuthR
     const company = await prisma.company.findFirst({
       where: { id, organizationId: orgId },
       include: {
-        owner: { select: { id: true, name: true, email: true, dept: true } },
+        owner: { select: { id: true, name: true, email: true, department: { select: { name: true } } } },
         // A removed contact (DELETE /:id/people/:personId) leaves the page.
         people: { where: { active: true }, orderBy: { createdAt: 'asc' } },
         proposals: {
@@ -510,6 +511,7 @@ companiesRouter.get('/:id', requirePermission('company.read'), async (req: AuthR
       success: true,
       company: {
         ...company,
+        owner: personOut(company.owner),
         tasks: await withRepeatNext(orgId, company.tasks),
         invoices: sanitizedInvoices,
         retainers: sanitizedRetainers,

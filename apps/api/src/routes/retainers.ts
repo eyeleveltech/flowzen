@@ -1,6 +1,7 @@
 import { Router, type Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
+import { personOut } from '../services/taskPeople.js';
 import { changeableTaskIds } from '../services/taskAccess.js';
 import { todayIn } from '../utils/workCalendar.js';
 import { maskInvoiceFigures, maskPaymentFigures } from '../utils/invoiceFigures.js';
@@ -525,7 +526,7 @@ retainersRouter.get('/:id', requirePermission('work.all'), async (req: AuthReque
       where: { id, organizationId: orgId },
       include: {
         company: { select: { id: true, name: true, vertical: true, city: true, gstin: true } },
-        owner: { select: { id: true, name: true, email: true, dept: true } },
+        owner: { select: { id: true, name: true, email: true, department: { select: { name: true } } } },
         monthCards: { orderBy: { month: 'desc' }, select: { id: true, month: true, status: true } },
         projects: {
           orderBy: [{ status: 'asc' }, { startDate: 'asc' }, { name: 'asc' }],
@@ -572,6 +573,7 @@ retainersRouter.get('/:id', requirePermission('work.all'), async (req: AuthReque
       success: true,
       retainer: {
         ...retainer,
+        owner: personOut(retainer.owner),
         projects: retainer.projects.map(summariseProject),
         unfiled,
         monthlyValue: canSeeFigures ? retainer.monthlyValue : null,
@@ -1013,7 +1015,7 @@ retainersRouter.get('/:id/month-cards/:month', requirePermission('work.all'), as
         tasks: {
           where: { deletedAt: null },
           include: {
-            assignee: { select: { id: true, name: true, designation: true, dept: true } },
+            assignee: { select: { id: true, name: true, designation: true, department: { select: { name: true } } } },
             creator: { select: { id: true, name: true } },
             reviewer: { select: { id: true, name: true } },
             assignees: {
@@ -1033,7 +1035,7 @@ retainersRouter.get('/:id/month-cards/:month', requirePermission('work.all'), as
         },
         allocations: {
           include: {
-            user: { select: { id: true, name: true, designation: true, dept: true, monthlyCost: true } },
+            user: { select: { id: true, name: true, designation: true, department: { select: { name: true } }, monthlyCost: true } },
             confirmedBy: { select: { id: true, name: true } },
           },
         },
@@ -1092,7 +1094,7 @@ retainersRouter.get('/:id/month-cards/:month', requirePermission('work.all'), as
     const canSeeSalaries = hasPermission(req.user!, 'setup.admin');
     const maskedAllocations = monthCard.allocations.map((a) => ({
       ...a,
-      user: { ...a.user, monthlyCost: canSeeSalaries ? a.user.monthlyCost : undefined },
+      user: { ...personOut(a.user), monthlyCost: canSeeSalaries ? a.user.monthlyCost : undefined },
     }));
     // Every figure on the row, not just `amount` — its GST and printed totals are the same money.
     const maskedInvoice = monthCard.invoice
@@ -1110,6 +1112,7 @@ retainersRouter.get('/:id/month-cards/:month', requirePermission('work.all'), as
         // same shape /tasks hands back.
         tasks: monthCard.tasks.map((t) => ({
           ...t,
+          assignee: personOut(t.assignee),
           assignees: t.assignees.map((a) => a.user),
         })),
         revenue: canSeeFigures ? monthCard.revenue : null,

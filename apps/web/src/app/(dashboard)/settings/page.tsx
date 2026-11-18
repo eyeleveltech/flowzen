@@ -47,6 +47,8 @@ import { TrashTab } from './components/TrashTab';
 import { ActivityTab } from './components/ActivityTab';
 import { DepartmentsTab } from './components/DepartmentsTab';
 import { UsageTab } from './components/UsageTab';
+import { UsageScreensView } from './components/UsageScreensView';
+import { FeedbackTab } from './components/FeedbackTab';
 import { IntegrationsTab } from './components/IntegrationsTab';
 import { AssetsTab } from './components/AssetsTab';
 import { ApiTab } from './components/ApiTab';
@@ -139,6 +141,16 @@ export default function SettingsPage() {
   const setTab = (key: TabKey) => {
     setTabState(key);
     router.replace(`/settings?tab=${key}`, { scroll: false });
+  };
+  /*
+   * Usage has two views: People (who, by name) and Screens (the monthly
+   * review, counts only — Ease Plan 3). The review's bell links to
+   * ?tab=usage&view=screens.
+   */
+  const [usageView, setUsageViewState] = useState<'people' | 'screens'>(search.get('view') === 'screens' ? 'screens' : 'people');
+  const setUsageView = (view: 'people' | 'screens') => {
+    setUsageViewState(view);
+    router.replace(view === 'screens' ? '/settings?tab=usage&view=screens' : '/settings?tab=usage', { scroll: false });
   };
   /*
    * On a wide screen the panel and the page scroll on their own — a long tab
@@ -366,6 +378,7 @@ export default function SettingsPage() {
   const visible = (t: TabDef) =>
     (t.key !== 'integrations' || config.organization.googleCalendarConfigured || config.organization.pushConfigured) &&
     (t.key !== 'usage' || config.me.preset === 'MANAGEMENT') &&
+    (t.key !== 'feedback' || config.me.preset === 'MANAGEMENT') &&
     (t.key !== 'pricing' || config.me.preset === 'MANAGEMENT');
   const groups = GROUPS.map((g) => ({ label: g.label, tabs: g.tabs.filter(visible) })).filter((g) => g.tabs.length);
   const current = ALL_TABS.find((t) => t.key === tab) ?? ALL_TABS[0];
@@ -987,15 +1000,44 @@ export default function SettingsPage() {
         )}
 
         {tab === 'usage' && config.me.preset === 'MANAGEMENT' && (
-          <UsageTab
-            tz={tz}
-            locale={locale}
-            onOpenPerson={(id) => {
-              setActivityPerson(id);
-              setTab('activity');
-            }}
-          />
+          <div className="space-y-5">
+            <div role="tablist" aria-label="Usage view" className="flex gap-1.5">
+              {(
+                [
+                  { key: 'people', label: 'People' },
+                  { key: 'screens', label: 'Screens' },
+                ] as const
+              ).map((v) => (
+                <button
+                  key={v.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={usageView === v.key}
+                  onClick={() => setUsageView(v.key)}
+                  className={`rounded-lg border px-3 py-1.5 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary/40 ${
+                    usageView === v.key ? 'border-primary/30 bg-primary/5 text-primary' : 'border-border text-secondary hover:bg-subtle'
+                  }`}
+                >
+                  {v.label}
+                </button>
+              ))}
+            </div>
+            {usageView === 'screens' ? (
+              <UsageScreensView />
+            ) : (
+              <UsageTab
+                tz={tz}
+                locale={locale}
+                onOpenPerson={(id) => {
+                  setActivityPerson(id);
+                  setTab('activity');
+                }}
+              />
+            )}
+          </div>
         )}
+
+        {tab === 'feedback' && config.me.preset === 'MANAGEMENT' && <FeedbackTab tz={tz} locale={locale} />}
             </div>
           </div>
         </div>

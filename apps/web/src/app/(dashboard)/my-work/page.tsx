@@ -12,11 +12,11 @@
  * drawer, which is the same drawer a retainer opens.
  */
 
-import { Fragment, useState, useEffect, useCallback, useMemo } from 'react';
+import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DragDropContext, Droppable, Draggable, type BeforeCapture, type DropResult } from '@hello-pangea/dnd';
 import { plural } from '@/lib/utils';
-import { api, ApiError } from '@/lib/api-v2';
+import { api, ApiError, formatDate } from '@/lib/api-v2';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select } from '@/components/ui/select';
@@ -33,13 +33,17 @@ import { StatTile, StatRow } from '@/components/ui/stat-tile';
 import { TaskDrawer, type DrawerTask } from '@/components/work/TaskDrawer';
 import { FollowUps } from '@/components/sales/FollowUps';
 import toast from 'react-hot-toast';
-import { CheckSquare, ChevronRight, Plus, GripVertical } from 'lucide-react';
+import { Check, CheckSquare, ChevronRight, Plus, GripVertical } from 'lucide-react';
 import type { TaskRepeatInfo } from '@/lib/repeat';
 import { RepeatMark } from '@/components/work/RepeatMark';
 import { NewTaskModal } from '@/components/work/NewTaskModal';
 import { taskTypeLabel } from '@/lib/task-type';
 import { NowBadge, canBeNow, useWorkingOnNow } from '@/components/work/WorkingOnNow';
-import { qk } from '@/hooks/queries';
+import { qk, useLastChoices } from '@/hooks/queries';
+import { GettingStartedCard } from '@/components/work/GettingStartedCard';
+import { quickAddBody, quickAddSummary } from '@/lib/quickAdd';
+import { withDueTime } from '@/lib/due-time';
+import { toastWithAction } from '@/lib/actionToast';
 import { useRemembered } from '@/lib/remembered';
 import { ColumnFilter, ColumnTextFilter } from '@/components/ui/column-filter';
 import { NO_FILTERS, filterOptions, isFiltering, matchesFilters, type MyWorkFilters } from '@/lib/myWorkFilters';
@@ -286,6 +290,17 @@ export default function MyWorkPage() {
   const counts = { today: 0, overdue: 0, thisWeek: 0, later: 0, completed: 0, ...(data?.counts ?? {}) };
   const [busyId, setBusyId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  /** What quick add hands the full form when it cannot file the task itself. */
+  const [creatingTitle, setCreatingTitle] = useState('');
+  /*
+   * Quick add (Ease Plan 1, decision 3): one line, Enter, done — for you, due
+   * today, filed where your last hand-made task was.
+   */
+  const [quickTitle, setQuickTitle] = useState('');
+  const [quickBusy, setQuickBusy] = useState(false);
+  const lastChoices = useLastChoices();
+  /** "Add your first task" on the Getting started card puts the cursor here. */
+  const quickAddRef = useRef<HTMLInputElement>(null);
   const [selected, setSelected] = useState<TaskItem | null>(null);
   /*
    * What this person said they are working on now (Team plan 1): the Now badge
@@ -443,21 +458,24 @@ export default function MyWorkPage() {
     await refetch();
     // A task finished or held stops being "now" on the server.
     void queryClient.invalidateQueries({ queryKey: qk.myFocus });
+    // A quick add, a tick, a status change: each can tick a Getting started step.
+    void queryClient.invalidateQueries({ queryKey: qk.gettingStarted });
   }, [refetch, queryClient]);
 
   // Quick Create's "New task" lands here — including when you are already
   // here, which is the case the old mount-only check missed.
   useCreateFlag(() => setCreating(true), '/my-work');
 
-  const changeStatus = async (task: TaskItem, next: TStatus) => {
-    if (next === task.status) return;
+  /** Resolves true once the change has been saved; false when nothing moved. */
+  const changeStatus = async (task: TaskItem, next: TStatus): Promise<boolean> => {
+    if (next === task.status) return false;
     setBusyId(task.id);
     try {
       if (next === 'ON_HOLD') {
         // On hold goes through /wait, so the wait is timed — and asks what it
         // is waiting on first. Nothing moves until that is answered; cancelled,
         // nothing moved.
-        if (!(await changeTaskStatus(task, next))) return;
+        if (!(await changeTaskStatus(task, next))) return false;
       } else {
         // The row changes now and the save follows (lib/optimistic). Refused
         // or failed, it goes back with "Couldn't save — changed back".
@@ -475,15 +493,121 @@ export default function MyWorkPage() {
           }),
           () => api.tasks.updateStatus(task.id, next),
         );
-        if (!saved) return;
+        if (!saved) return false;
       }
       await load();
       setSelected((s) => (s && s.id === task.id ? { ...s, status: next } : s));
+      return true;
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not update that task');
+      return false;
     } finally {
       setBusyId(null);
     }
+  };
+
+  /** A row quick add has put up and the server has not answered for yet. */
+  const isPlaceholder = (t: TaskItem) => t.id.startsWith('quick-');
+
+  /*
+   * One tap to Done (Ease Plan 1, decision 4): the row changes now and the
+   * save follows, as any status change does, and the toast offers Undo for
+   * five seconds. Undo puts back what it was — a held task back on hold with
+   * what it was waiting on, without asking again. The status dropdown stays
+   * for everything else.
+   */
+  const markDone = async (task: TaskItem) => {
+    if (isPlaceholder(task)) return;
+    const was = task.status;
+    const waitingOn = task.waitingOn ?? null;
+    if (!(await changeStatus(task, 'DONE'))) return;
+    toastWithAction(`Done · ${task.title}`, {
+      label: 'Undo',
+      onClick: () => {
+        void (async () => {
+          try {
+            if (was === 'ON_HOLD') await api.tasks.wait(task.id, waitingOn);
+            else await api.tasks.updateStatus(task.id, was);
+            await load();
+          } catch (e) {
+            toast.error(e instanceof Error ? e.message : 'Could not put it back');
+          }
+        })();
+      },
+    });
+  };
+
+  /*
+   * Enter in the quick add line. Nothing is filed under a guess: with no
+   * last choices — a first task, or the last one's work has closed — the
+   * full form opens with the title already typed.
+   */
+  const quickAdd = async () => {
+    const title = quickTitle.trim();
+    if (!title || quickBusy) return;
+    const choices = lastChoices.data?.choices ?? null;
+    // The studio's today from the server, unless this device has since passed midnight.
+    const localToday = (() => {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    })();
+    const today = [lastChoices.data?.today ?? '', localToday].sort().at(-1)!;
+    const body = quickAddBody(title, choices, today);
+    if (!body || !choices) {
+      // The typed title stays in the line until the task exists, so a form
+      // closed by a stray click loses nothing.
+      setCreatingTitle(title);
+      setCreating(true);
+      return;
+    }
+    setQuickBusy(true);
+    setQuickTitle('');
+    const placeholder: TaskItem = {
+      id: `quick-${Date.now()}`,
+      title: body.title,
+      status: 'TODO',
+      priority: body.priority,
+      dueDate: `${body.dueDate}T00:00:00.000Z`,
+      assignedAt: new Date().toISOString(),
+      reopenCount: 0,
+      taskType: body.taskType,
+      clientName: choices.target?.scope === 'CLIENT' ? choices.target.name : 'Internal',
+      workingHoursText: '0h 0m',
+      workingMinutes: 0,
+      typeMedianMinutes: null,
+      typeMedianText: null,
+    };
+    let createdId: string | null = null;
+    const saved = await optimistic<NonNullable<typeof data>>(
+      queryClient,
+      ['tasks', 'my'],
+      (cur) => ({
+        ...cur,
+        counts: { ...cur.counts, today: (cur.counts?.today ?? 0) + 1 },
+        tasks: { ...cur.tasks, today: [placeholder, ...cur.tasks.today] },
+      }),
+      async () => {
+        const res = await api.tasks.create(body);
+        createdId = res.task?.id ?? null;
+      },
+    );
+    setQuickBusy(false);
+    if (!saved) {
+      // Changed back: what they typed is still theirs to send again.
+      setQuickTitle(title);
+      return;
+    }
+    void queryClient.invalidateQueries({ queryKey: qk.lastChoices });
+    await load();
+    toastWithAction(
+      `Added · ${quickAddSummary(choices)} · due today`,
+      {
+        label: 'Change',
+        // The same address the bell gives a task: opens it in the drawer from the list.
+        onClick: () => createdId && router.replace(`/my-work?task=${createdId}`),
+      },
+      6000,
+    );
   };
 
   const todayStr = new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date());
@@ -516,6 +640,97 @@ export default function MyWorkPage() {
    * week, which is history) or a draggable one (everything still to do),
    * without two copies of the row that drift apart.
    */
+  /** The round tick at the start of an open task: one tap and it is Done. */
+  const tick = (t: TaskItem, className = '') => (
+    <button
+      type="button"
+      aria-label={`Mark “${t.title}” done`}
+      title="Mark done"
+      disabled={busyId === t.id || isPlaceholder(t)}
+      onClick={(e) => {
+        e.stopPropagation();
+        void markDone(t);
+      }}
+      className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-border bg-white text-transparent outline-none transition-colors hover:border-success hover:text-success focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-50 ${className}`}
+    >
+      <Check className="h-3 w-3" strokeWidth={3} aria-hidden="true" />
+    </button>
+  );
+
+  /*
+   * My Work on a phone (Ease Plan 1, decision 5): below `md` each task is a
+   * card — tick, title, client · type of work, due date — and tapping it
+   * opens the drawer. The same groups and the same Group by as the table;
+   * arranging by drag stays on the desktop.
+   */
+  const card = (t: TaskItem) => {
+    const finished = t.status === 'DONE' || t.status === 'CANCELLED';
+    const late = !finished && t.status !== 'ON_HOLD' && t.dueDate.slice(0, 10) < todayKey;
+    const kind = taskTypeLabel(t.taskType);
+    return (
+      <li key={t.id} data-task-card={t.id} className="flex items-start gap-3 px-4 py-3">
+        {finished ? <span className="h-5 w-5 shrink-0" aria-hidden="true" /> : tick(t, 'mt-0.5')}
+        <button
+          type="button"
+          onClick={() => !isPlaceholder(t) && setSelected(t)}
+          className="min-w-0 flex-1 rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+        >
+          <span className={`block text-sm font-medium ${finished ? 'text-secondary line-through' : 'text-primary'}`}>{t.title}</span>
+          <span className="mt-0.5 block truncate text-micro text-secondary">
+            {[t.clientName, kind].filter(Boolean).join(' · ')}
+            {t.status === 'ON_HOLD' && t.waitingOn ? ` · ${waitingWords(t.waitingOn)}` : t.status === 'ON_HOLD' ? ' · on hold' : ''}
+          </span>
+        </button>
+        <span className={`shrink-0 whitespace-nowrap pt-0.5 text-micro ${late ? 'font-semibold text-danger' : 'text-secondary'}`}>
+          {/* As the table's date reads: InlineDueDate's own format. */}
+          {withDueTime(formatDate(t.dueDate), t.dueTime ?? null)}
+        </span>
+      </li>
+    );
+  };
+
+  const cardGroup = (key: string, label: string, items: TaskItem[], sub?: string) =>
+    items.length === 0 ? null : (
+      <section key={key}>
+        <h3 className="eyebrow border-y border-border bg-surface px-4 py-2">
+          {label}
+          {sub && <span className="ml-1.5 normal-case tracking-normal text-secondary">{sub}</span>}
+        </h3>
+        <ul className="divide-y divide-border">{items.map(card)}</ul>
+      </section>
+    );
+
+  const phoneCards = () => {
+    const more = Boolean(data?.success && (showOlder ? older.hasNextPage : data.hasOlderDone));
+    return (
+      <div className="md:hidden">
+        {filtering && shownTotal === 0 && (
+          <p className="px-4 py-8 text-center text-sm text-secondary">No tasks match these filters.</p>
+        )}
+        {groupBy === 'work'
+          ? workGroups.map((g) => cardGroup(`work:${g.key}`, g.label, g.tasks, g.sub))
+          : [
+              cardGroup('overdue', 'Overdue', shown.overdue),
+              cardGroup('today', 'Due today', shown.today),
+              cardGroup('week', 'Coming up', [...shown.thisWeek, ...shown.later]),
+            ]}
+        {cardGroup('done', olderDone.length > 0 ? 'Done' : `Done in the last ${data?.doneDays ?? 14} days`, shown.completed)}
+        {more && (
+          <div className="border-t border-border px-4 py-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              loading={older.isFetching}
+              onClick={() => (showOlder ? void older.fetchNextPage() : setShowOlder(true))}
+            >
+              Show older
+            </Button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const cells = (t: TaskItem, grip: React.ReactNode) => {
     const finished = t.status === 'DONE' || t.status === 'CANCELLED';
     // On hold is never late: it is waiting, and says on what.
@@ -530,9 +745,10 @@ export default function MyWorkPage() {
             is the target for a mouse, and this is what a keyboard and a screen
             reader get to open the same thing.
           */}
+          {!finished && tick(t, 'mr-2 align-middle')}
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); setSelected(t); }}
+            onClick={(e) => { e.stopPropagation(); if (!isPlaceholder(t)) setSelected(t); }}
             className={`rounded-sm text-left font-medium outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${finished ? 'text-secondary line-through' : 'text-primary'}`}
           >
             {t.title}
@@ -575,7 +791,7 @@ export default function MyWorkPage() {
             title={t.title}
             value={t.dueDate}
             time={t.dueTime}
-            disabled={finished}
+            disabled={finished || isPlaceholder(t)}
             className={late ? 'font-semibold text-danger' : 'text-secondary'}
           />
         </td>
@@ -599,7 +815,7 @@ export default function MyWorkPage() {
             options={STATUS_OPTIONS}
             ariaLabel={`Status for ${t.title}`}
             buttonClassName="px-2.5 py-1.5 text-xs w-32"
-            disabled={busyId === t.id}
+            disabled={busyId === t.id || isPlaceholder(t)}
           />
         </td>
       </>
@@ -608,7 +824,7 @@ export default function MyWorkPage() {
 
   /** A finished task: history, so it does not move. */
   const row = (t: TaskItem) => (
-    <tr key={t.id} onClick={() => setSelected(t)} className="group/row cursor-pointer transition-colors hover:bg-subtle">
+    <tr key={t.id} onClick={() => !isPlaceholder(t) && setSelected(t)} className="group/row cursor-pointer transition-colors hover:bg-subtle">
       {cells(t, null)}
     </tr>
   );
@@ -627,7 +843,7 @@ export default function MyWorkPage() {
           ref={drag.innerRef}
           {...drag.draggableProps}
           data-task-row={t.id}
-          onClick={() => setSelected(t)}
+          onClick={() => !isPlaceholder(t) && setSelected(t)}
           className={`group/row cursor-pointer transition-colors hover:bg-subtle ${
             snap.isDragging ? 'bg-white shadow-card ring-1 ring-primary/20' : ''
           }`}
@@ -725,6 +941,46 @@ export default function MyWorkPage() {
 
   return (
     <div className="page-shell">
+      {/*
+        Quick add (Ease Plan 1): a title and Enter makes it — for you, due
+        today, filed where your last task was. With nothing to go on, Enter
+        opens the full form with the title in it.
+      */}
+      {/* Getting started (Ease Plan 2): above the quick add, until every step is done or it is hidden. */}
+      <GettingStartedCard
+        onAddTask={() => {
+          quickAddRef.current?.focus();
+          quickAddRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        }}
+        onFinishTask={() => document.getElementById('my-work-list')?.scrollIntoView({ block: 'start', behavior: 'smooth' })}
+      />
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          void quickAdd();
+        }}
+        className="mb-6"
+      >
+        <label htmlFor="quick-add" className="sr-only">
+          Add a task for myself
+        </label>
+        <div className="flex items-center gap-2 rounded-xl border border-border bg-white px-3 py-2.5 transition-colors focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20">
+          <Plus className="h-4 w-4 shrink-0 text-secondary" aria-hidden="true" />
+          <input
+            id="quick-add"
+            ref={quickAddRef}
+            value={quickTitle}
+            onChange={(e) => setQuickTitle(e.target.value)}
+            placeholder="Add a task for myself — press Enter"
+            maxLength={300}
+            enterKeyHint="done"
+            autoComplete="off"
+            disabled={quickBusy}
+            className="min-w-0 flex-1 bg-transparent text-sm text-body outline-none placeholder:text-secondary"
+          />
+        </div>
+      </form>
+
       <StatRow className="mb-8">
         <StatTile label="Due Today" value={counts.today} note={`${onHoldCount} on hold`} />
         {/*
@@ -758,7 +1014,7 @@ export default function MyWorkPage() {
         <FollowUps />
       </div>
 
-      <Card padding="none" className="overflow-hidden">
+      <Card padding="none" className="overflow-hidden" id="my-work-list">
         <CardHeader className="flex-wrap gap-2">
           <CardTitle>Everything assigned to you</CardTitle>
           <div className="flex items-center gap-2">
@@ -832,7 +1088,9 @@ export default function MyWorkPage() {
             />
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          {phoneCards()}
+          <div className="hidden overflow-x-auto md:block">
             {/*
               `min-w` so the columns keep their own width on a phone and the box
               scrolls, instead of the browser compressing six columns into 356px
@@ -957,10 +1215,25 @@ export default function MyWorkPage() {
               )}
             </table>
           </div>
+          </>
         )}
       </Card>
 
-      <NewTaskModal open={creating} onClose={() => setCreating(false)} onCreated={() => { setCreating(false); void load(); }} />
+      <NewTaskModal
+        open={creating}
+        initialTitle={creatingTitle || undefined}
+        onClose={() => {
+          setCreating(false);
+          setCreatingTitle('');
+        }}
+        onCreated={() => {
+          setCreating(false);
+          // Made from the quick add line: it has done its job.
+          if (creatingTitle) setQuickTitle('');
+          setCreatingTitle('');
+          void load();
+        }}
+      />
       <TaskDrawer
         task={toDrawerTask(selected)}
         statusOptions={STATUS_OPTIONS}

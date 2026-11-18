@@ -57,6 +57,11 @@ const auth = (who: keyof typeof PEOPLE) =>
 const ist = (day: string, hhmm = '10:42') => new Date(new Date(`${day}T${hhmm}:00Z`).getTime() - 330 * 60_000);
 
 beforeEach(() => {
+  // Getting started (Ease Plan 2) rides along on the summary: nothing done, unless a test says so.
+  (prisma.pushSubscription.groupBy as any).mockResolvedValue([]);
+  (prisma.task.groupBy as any).mockResolvedValue([]);
+  (prisma.taskAssignee.groupBy as any).mockResolvedValue([]);
+  (prisma.googleCalendarConnection.findMany as any).mockResolvedValue([]);
   (prisma.organization.findUnique as any).mockResolvedValue(ORG);
   (prisma.user.findUnique as any).mockImplementation(async ({ where }: any) => {
     const p = Object.values(PEOPLE).find((x) => x.id === where.id);

@@ -40,7 +40,7 @@ allocationsRouter.get('/', requirePermission('cost.enter'), async (req: AuthRequ
         id: true,
         name: true,
         email: true,
-        dept: true,
+        department: { select: { name: true } },
         preset: true,
         monthlyCost: true,
         allocations: {
@@ -75,7 +75,7 @@ allocationsRouter.get('/', requirePermission('cost.enter'), async (req: AuthRequ
         id: member.id,
         name: member.name,
         email: member.email,
-        dept: member.dept,
+        dept: member.department?.name ?? '',
         preset: member.preset,
         monthlyCost: canSeeFigures ? Number(member.monthlyCost) : null,
         totalPercent,

@@ -14,7 +14,8 @@
  */
 
 import { useEffect, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { qk } from '@/hooks/queries';
 import toast from 'react-hot-toast';
 import { Smartphone } from 'lucide-react';
 import { api, ApiError, type PushPreferences } from '@/lib/api-v2';
@@ -37,6 +38,7 @@ const KINDS: { key: keyof PushPreferences; label: string; hint: string }[] = [
 
 export function PhoneNotificationsCard() {
   const { data: config } = useQuery({ queryKey: ['push-config'], queryFn: () => api.push.config() });
+  const queryClient = useQueryClient();
   const enabled = Boolean(config?.enabled && config.publicKey);
   const devicesQuery = useQuery({ queryKey: ['push-devices'], queryFn: () => api.push.devices(), enabled });
   const prefsQuery = useQuery({ queryKey: ['push-preferences'], queryFn: () => api.push.preferences(), enabled });
@@ -87,6 +89,8 @@ export function PhoneNotificationsCard() {
       await api.push.subscribe(sub);
       setThisEndpoint(sub.endpoint);
       await devicesQuery.refetch();
+      // "Get Flowzen on your phone" on My Work's Getting started card.
+      void queryClient.invalidateQueries({ queryKey: qk.gettingStarted });
       toast.success('Phone notifications on for this device');
     } catch (e) {
       setProblem(e instanceof ApiError ? e.message : "This device couldn't turn them on. Try again in a moment.");

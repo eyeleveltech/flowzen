@@ -2,6 +2,7 @@ import { Router, type Response } from 'express';
 import { z } from 'zod';
 import crypto from 'crypto';
 import { prisma } from '../lib/prisma.js';
+import { personOut } from '../services/taskPeople.js';
 import { changesBetween } from '../utils/activityDiff.js';
 import { emitToOrganization } from '../sse.js';
 import { authenticate, requirePermission, hasPermission, type AuthRequest } from '../middleware/auth.js';
@@ -254,8 +255,6 @@ usersRouter.post('/invite', requirePermission('setup.admin'), async (req: AuthRe
       name: name.trim(),
       passwordHash: placeholderHash,
       departmentId: placed.department.id,
-      // Kept beside the id until Plan 4, for anything still reading text.
-      dept: placed.department.name,
       preset,
       permissions: [],
       active: false,
@@ -307,7 +306,7 @@ usersRouter.post('/invite', requirePermission('setup.admin'), async (req: AuthRe
           id: user.id,
           name: user.name,
           email: user.email,
-          dept: user.dept,
+          dept: placed.department.name,
           departmentId: user.departmentId,
           preset: user.preset,
           active: user.active,
@@ -523,7 +522,7 @@ usersRouter.patch('/:id', requirePermission('setup.admin'), async (req: AuthRequ
     const orgId = req.user!.organizationId;
     const id = String(req.params.id);
 
-    const existing = await prisma.user.findFirst({ where: { id, organizationId: orgId } });
+    const existing = await prisma.user.findFirst({ where: { id, organizationId: orgId }, include: { department: { select: { name: true } } } });
     if (!existing) {
       res.status(404).json({ success: false, error: 'Person not found' });
       return;
@@ -642,7 +641,7 @@ usersRouter.patch('/:id', requirePermission('setup.admin'), async (req: AuthRequ
         ...(preset !== undefined ? { preset } : {}),
         ...(permissions !== undefined ? { permissions } : {}),
         ...(monthlyCost !== undefined ? { monthlyCost } : {}),
-        ...(placed ? { departmentId: placed.id, dept: placed.name } : {}),
+        ...(placed ? { departmentId: placed.id } : {}),
         ...(active !== undefined ? { active } : {}),
         ...(active !== undefined && active !== existing.active
           ? {
@@ -654,6 +653,7 @@ usersRouter.patch('/:id', requirePermission('setup.admin'), async (req: AuthRequ
             }
           : {}),
       },
+      include: { department: { select: { name: true } } },
     });
 
     // No longer HEAD or Management: no longer a department's head, so its
@@ -671,7 +671,8 @@ usersRouter.patch('/:id', requirePermission('setup.admin'), async (req: AuthRequ
         verb: 'user_access_updated',
         payload: {
           name: updated.name,
-          changed: changesBetween(existing, updated, [
+          // `dept` by name, so a move still reads "Department: Design → Video" in history.
+          changed: changesBetween(personOut(existing), personOut(updated), [
             'name',
             'email',
             'preset',
@@ -698,7 +699,7 @@ usersRouter.patch('/:id', requirePermission('setup.admin'), async (req: AuthRequ
       data: {
         id: updated.id,
         name: updated.name,
-        dept: updated.dept,
+        dept: updated.department?.name ?? '',
         departmentId: updated.departmentId,
         preset: updated.preset,
         permissions: updated.permissions,

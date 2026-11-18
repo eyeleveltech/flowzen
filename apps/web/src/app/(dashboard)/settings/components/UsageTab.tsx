@@ -19,6 +19,7 @@ import { api, ApiError, type UsageSummary } from '@/lib/api-v2';
 import { SectionCard } from '@/components/ui/section-card';
 import { ErrorNote } from '@/components/ui/empty-state';
 import { Table, THead, TH, TBody, TR, TD } from '@/components/ui/table';
+import { missingStepsText } from '@/lib/gettingStarted';
 import { cn } from '@/lib/utils';
 import { useDepartments } from '@/hooks/queries';
 
@@ -141,6 +142,8 @@ export function UsageTab({
                 <TH numeric>Days active</TH>
                 <TH numeric>Changes</TH>
                 <TH>Top screens</TH>
+                {/* Ease Plan 2: who has not got going — the phone app above all. */}
+                <TH>Getting started</TH>
               </tr>
             </THead>
             <TBody>
@@ -184,6 +187,18 @@ export function UsageTab({
                     </TD>
                     <TD numeric>{p.changes}</TD>
                     <TD className="text-secondary">{p.topScreens.length ? p.topScreens.join(', ') : '—'}</TD>
+                    <TD className="whitespace-nowrap">
+                      {p.gettingStarted ? (
+                        <span
+                          title={missingStepsText(p.gettingStarted.missing)}
+                          className={p.gettingStarted.done === p.gettingStarted.total ? 'text-secondary' : 'font-medium text-primary'}
+                        >
+                          {p.gettingStarted.done} of {p.gettingStarted.total}
+                        </span>
+                      ) : (
+                        '—'
+                      )}
+                    </TD>
                   </TR>
                 );
               })}

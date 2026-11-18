@@ -1,6 +1,7 @@
 import { Router, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
+import { personOut } from '../services/taskPeople.js';
 import { authenticate, hasPermission, type AuthRequest } from '../middleware/auth.js';
 import { parsePagination } from '../utils/query.js';
 import { TaskWorkType, TaskStatus, type Prisma } from '@prisma/client';
@@ -137,16 +138,18 @@ activitiesRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunc
         take,
         include: {
           // Name only: an email address is never part of the feed.
-          actor: { select: { id: true, name: true, dept: true } },
+          actor: { select: { id: true, name: true, department: { select: { name: true } } } },
         },
       }),
       prisma.activity.count({ where }),
     ]);
 
     const canSeeFigures = hasPermission(req.user!, 'money.figures');
+    // The actor's department by name, from its record (Departments Plan 4).
+    const withActor = activities.map((a) => ({ ...a, actor: personOut(a.actor) }));
     const data = canSeeFigures
-      ? activities
-      : activities.map((a) => ({ ...a, payload: stripMoney(a.payload) }));
+      ? withActor
+      : withActor.map((a) => ({ ...a, payload: stripMoney(a.payload) }));
 
     res.json({
       success: true,

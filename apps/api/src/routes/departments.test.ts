@@ -4,8 +4,8 @@ import { RolePreset } from '@prisma/client';
 import { ROLE_PRESET_PERMISSIONS } from '@flowzen/shared';
 import { app } from '../index.js';
 import { prisma } from '../lib/prisma.js';
+import { personOut } from '../services/taskPeople.js';
 import { signJwt } from '../utils/jwt.js';
-import { lookAlikes, planDepartments } from '../services/departmentBackfill.js';
 
 /**
  * Departments as records (Departments Plan 1).
@@ -115,17 +115,15 @@ describe('adding and renaming', () => {
     expect((prisma.activity.create as any).mock.calls[0][0].data).toMatchObject({ entityType: 'Department', verb: 'department_created' });
   });
 
-  it('renames once, and everybody in it carries the new name', async () => {
+  it('renames once — the people in it read the new name off the record', async () => {
     (prisma.department.findFirst as any)
       .mockResolvedValueOnce(DEPT()) // the department
       .mockResolvedValueOnce(null); // nobody else is called Video
     (prisma.department.update as any).mockResolvedValue(DEPT({ name: 'Video' }));
     const res = await request(app).patch('/api/departments/d-video').set(...as('boss')).send({ name: 'Video' });
     expect(res.status).toBe(200);
-    expect((prisma.user.updateMany as any).mock.calls[0][0]).toEqual({
-      where: { organizationId: 'org-1', departmentId: 'd-video' },
-      data: { dept: 'Video' },
-    });
+    // No text kept beside the id any more (Departments Plan 4): nobody's row is written.
+    expect(prisma.user.updateMany).not.toHaveBeenCalled();
     expect((prisma.activity.create as any).mock.calls[0][0].data).toMatchObject({
       verb: 'department_renamed',
       payload: { from: 'Video & Production', to: 'Video' },
@@ -175,7 +173,7 @@ describe('merge and archive', () => {
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     expect((prisma.user.updateMany as any).mock.calls[0][0]).toEqual({
       where: { organizationId: 'org-1', departmentId: 'd-vp' },
-      data: { departmentId: 'd-video', dept: 'Video' },
+      data: { departmentId: 'd-video' },
     });
     expect((prisma.department.update as any).mock.calls[0][0].where).toEqual({ id: 'd-vp' });
     expect((prisma.department.update as any).mock.calls[0][0].data.archivedAt).toBeInstanceOf(Date);
@@ -230,7 +228,7 @@ describe('putting people in a department', () => {
     expect(ok.body.moved).toBe(1);
     expect((prisma.user.updateMany as any).mock.calls[0][0]).toEqual({
       where: { organizationId: 'org-1', id: { in: ['u1'] } },
-      data: { departmentId: 'd-video', dept: 'Video & Production' },
+      data: { departmentId: 'd-video' },
     });
   });
 
@@ -253,47 +251,36 @@ describe('putting people in a department', () => {
   });
 });
 
-describe('the backfill mapping', () => {
-  it('makes one department per name ignoring case, and guesses nothing else', () => {
-    const plan = planDepartments(
-      ['Design', 'Video / Production', 'Accounts / Finance', '  '],
-      [
-        { id: 'janani', dept: 'Design' },
-        { id: 'sneha', dept: ' design ' },
-        { id: 'charles', dept: 'Video & Production' },
-        { id: 'priya', dept: 'Accounts' },
-        { id: 'naif', dept: 'Development' },
-        { id: 'new', dept: '   ' },
-      ],
-    );
-    expect(plan.departments.map((d) => d.name)).toEqual([
-      // The old list's order first, in its own spelling…
-      'Design',
-      'Video / Production',
-      'Accounts / Finance',
-      // …then the rest, alphabetically.
-      'Accounts',
-      'Development',
-      'Video & Production',
+/*
+ * Departments Plan 4: the free-text `User.dept` column is gone. The name is
+ * read off the department record and still handed out as `dept`, so a rename
+ * shows everywhere through the record alone.
+ */
+describe('the department name, without the old text column', () => {
+  it('is read off the record and handed out as `dept`, blank for nobody placed', async () => {
+    (prisma.user.findMany as any).mockResolvedValue([
+      { id: 'u1', name: 'Janani', designation: 'Head, Design', departmentId: 'd-design', department: { name: 'Design' } },
+      { id: 'u2', name: 'New', designation: null, departmentId: null, department: null },
     ]);
-    expect(plan.placed.get('sneha')).toBe('Design');
-    expect(plan.placed.get('charles')).toBe('Video & Production');
-    expect(plan.unplaced).toEqual(['new']);
+    const res = await request(app).get('/api/team/members').set(...as('boss'));
+    expect(res.status).toBe(200);
+    expect(res.body.members).toEqual([
+      { id: 'u1', name: 'Janani', designation: 'Head, Design', departmentId: 'd-design', dept: 'Design' },
+      { id: 'u2', name: 'New', designation: null, departmentId: null, dept: '' },
+    ]);
+    // Asked of the record, never of a column that no longer exists.
+    const select = (prisma.user.findMany as any).mock.calls[0][0].select;
+    expect(select).toHaveProperty('department');
+    expect(select).not.toHaveProperty('dept');
   });
 
-  it('keeps the most used spelling when the old list has none', () => {
-    const plan = planDepartments([], [
-      { id: 'a', dept: 'digital marketing' },
-      { id: 'b', dept: 'Digital Marketing' },
-      { id: 'c', dept: 'Digital Marketing' },
-    ]);
-    expect(plan.departments).toEqual([{ name: 'Digital Marketing', sortOrder: 0 }]);
-  });
-
-  it('lists the near-duplicates for management to merge', () => {
-    const alike = lookAlikes(['Video / Production', 'Video & Production', 'Accounts', 'Accounts / Finance', 'Design']);
-    expect(alike).toContainEqual(['Video / Production', 'Video & Production']);
-    expect(alike).toContainEqual(['Accounts', 'Accounts / Finance']);
-    expect(alike.flat()).not.toContain('Design');
+  it('a person on a task carries the department by name too', () => {
+    expect(personOut({ id: 'u1', name: 'Ravi', designation: null, department: { name: 'Video' } })).toEqual({
+      id: 'u1',
+      name: 'Ravi',
+      designation: null,
+      dept: 'Video',
+    });
+    expect(personOut(null)).toBeNull();
   });
 });

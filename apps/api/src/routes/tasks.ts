@@ -1,4 +1,4 @@
-import { TASK_PEOPLE } from '../services/taskPeople.js';
+import { TASK_PEOPLE, personOut } from '../services/taskPeople.js';
 import { taskHasClient, waitingOnShown } from '../services/taskWaiting.js';
 import { createTaskRecord } from '../services/taskCreate.js';
 import { dayOf, ruleFromDueDate, withRepeatNext } from '../services/taskRepeat.js';
@@ -46,9 +46,19 @@ export { TASK_PEOPLE } from '../services/taskPeople.js';
  * every caller and the CSV column reading `a.name` failed to compile.
  */
 export type TaskPerson = { id: string; name: string; designation: string | null; dept?: string };
+type TaskPersonRow = { id: string; name: string; designation: string | null; department?: { name: string } | null };
 
-export function withPeople<T extends { assignees: { user: TaskPerson }[] }>(task: T) {
-  return { ...task, assignees: task.assignees.map((a) => a.user) } as Omit<T, 'assignees'> & {
+/*
+ * The lead and everybody on it go out with `dept` — the department's name,
+ * read from its record now the text column is gone (Departments Plan 4).
+ */
+export function withPeople<T extends { assignees: { user: TaskPersonRow }[]; assignee?: TaskPersonRow | null }>(task: T) {
+  return {
+    ...task,
+    ...('assignee' in task ? { assignee: personOut(task.assignee ?? null) } : {}),
+    assignees: task.assignees.map((a) => personOut(a.user)),
+  } as Omit<T, 'assignees' | 'assignee'> & {
+    assignee: TaskPerson | null;
     assignees: TaskPerson[];
   };
 }
@@ -176,8 +186,8 @@ function formatMyTask(t: MyTaskRow, clock: MyWorkClock) {
      * reads this without a translation layer.
      */
     taskType: t.taskType,
-    assignee: t.assignee,
-    assignees: t.assignees.map((a) => a.user),
+    assignee: personOut(t.assignee),
+    assignees: t.assignees.map((a) => personOut(a.user)),
     assignedBy: t.assignedBy,
     creator: t.creator,
     reviewer: t.reviewer,
@@ -323,6 +333,111 @@ tasksRouter.get('/my', requirePermission('work.own'), async (req: AuthRequest, r
       doneDays: MY_DONE_DAYS,
       hasOlderDone: olderDone != null,
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/tasks/my/last-choices — what this person picked on the last task
+ * they wrote down themselves (Ease Plan 1, decision 2): its type of work and
+ * what it belongs to, so the next new-task form, and the quick add on My Work,
+ * start from there.
+ *
+ * Worked out from the tasks themselves — no column remembers it:
+ *   - only tasks this person created by hand: not a repeat's later copies
+ *     (they carry the first one's creator), not the scanner's follow-ups
+ *     (made under the deal owner's name), not deleted;
+ *   - what it belongs to comes back only while the pickers still offer it
+ *     (GET /tasks/targets); a closed job or project gives the type alone.
+ *
+ * Same gate as /tasks/targets. `today` is the studio's day, for the quick add.
+ */
+tasksRouter.get('/my/last-choices', requirePermission('work.own'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const orgId = req.user!.organizationId;
+    const userId = req.user!.userId;
+    const today = await studioToday(orgId);
+
+    const recent = await prisma.task.findMany({
+      where: {
+        organizationId: orgId,
+        createdById: userId,
+        deletedAt: null,
+        // The scanner's follow-ups carry their key here; a person's own tasks never do.
+        OR: [{ workId: null }, { NOT: { workId: { startsWith: 'proposal_followup:' } } }],
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: 25,
+      select: {
+        id: true,
+        createdAt: true,
+        taskType: true,
+        workType: true,
+        repeatId: true,
+        monthCardId: true,
+        retainerProjectId: true,
+        projectId: true,
+        internalProjectId: true,
+        companyId: true,
+        monthCard: { select: { retainerId: true } },
+      },
+    });
+    // A repeat's first task was written by hand; the copies after it were not.
+    const series = [...new Set(recent.map((t) => t.repeatId).filter((r): r is string => Boolean(r)))];
+    const firsts =
+      series.length === 0
+        ? new Map<string, Date>()
+        : new Map(
+            (
+              await prisma.task.groupBy({
+                by: ['repeatId'],
+                where: { repeatId: { in: series }, deletedAt: undefined },
+                _min: { createdAt: true },
+              })
+            ).map((g) => [g.repeatId!, g._min.createdAt!]),
+          );
+    const last = recent.find((t) => !t.repeatId || firsts.get(t.repeatId)?.getTime() === t.createdAt.getTime());
+    if (!last) {
+      res.json({ success: true, today, choices: null });
+      return;
+    }
+
+    const { companies, internalProjects } = await taskTargetsFor(orgId);
+    type Remembered =
+      | { scope: 'INTERNAL'; internalProjectId: string | null; name: string }
+      | ({ scope: 'CLIENT'; companyId: string; name: string } & Omit<TaskTargetJob, 'retainerId'>);
+    let target: Remembered | null = null;
+
+    if (last.workType === 'INTERNAL' && !last.projectId && !last.monthCardId) {
+      if (last.companyId && !last.internalProjectId) {
+        // A follow-up on a client: not something the pickers offer.
+        target = null;
+      } else if (!last.internalProjectId) {
+        target = { scope: 'INTERNAL', internalProjectId: null, name: 'Internal' };
+      } else {
+        const ip = internalProjects.find((p) => p.id === last.internalProjectId);
+        target = ip ? { scope: 'INTERNAL', internalProjectId: ip.id, name: ip.name } : null;
+      }
+    } else {
+      for (const c of companies) {
+        const job = c.jobs.find((j) =>
+          last.retainerProjectId
+            ? j.retainerProjectId === last.retainerProjectId
+            : last.projectId
+              ? j.projectId === last.projectId
+              : // A retainer month with no piece of work: this month's card of the same retainer.
+                last.monthCard?.retainerId != null && !j.retainerProjectId && j.retainerId === last.monthCard.retainerId,
+        );
+        if (job) {
+          const { retainerId: _r, ...shown } = job;
+          target = { scope: 'CLIENT', companyId: c.id, name: c.name, ...shown };
+          break;
+        }
+      }
+    }
+
+    res.json({ success: true, today, choices: { taskType: last.taskType, target } });
   } catch (error) {
     next(error);
   }
@@ -497,112 +612,141 @@ tasksRouter.get('/targets/company/:id', requirePermission('work.own'), async (re
   }
 });
 
-tasksRouter.get('/targets', requirePermission('work.own'), async (req: AuthRequest, res: Response, next) => {
-  try {
-    const orgId = req.user!.organizationId;
-    // The studio's month — on the 1st before 05:30 IST the UTC one is last month.
-    const thisMonth = (await studioToday(orgId)).slice(0, 7);
+/** One thing a task can be filed under, as the new-task pickers offer it. */
+export type TaskTargetJob = {
+  key: string;
+  label: string;
+  workType: 'RETAINER' | 'PROJECT';
+  monthCardId?: string;
+  retainerProjectId?: string;
+  projectId?: string;
+  month?: string;
+  /** Kept for matching a remembered retainer month to this month's card; not sent. */
+  retainerId?: string;
+};
 
-    const [companies, internalProjects] = await Promise.all([
-      prisma.company.findMany({
-        // Somewhere work can actually be filed: a prospect has nothing to do
-        // for yet, and the server would refuse the task anyway.
-        where: {
-          organizationId: orgId,
-          OR: [
-            { retainers: { some: { status: 'ACTIVE' } } },
-            { projects: { some: { status: 'LIVE', deletedAt: null } } },
-          ],
-        },
-        orderBy: { name: 'asc' },
-        select: {
-          id: true,
-          name: true,
-          retainers: {
-            where: { status: 'ACTIVE' },
-            select: {
-              id: true,
-              // The month being worked. A retainer task must sit on the month
-              // that pays for it, so a retainer with no open card has nothing
-              // to offer yet.
-              monthCards: { where: { month: thisMonth }, select: { id: true, month: true } },
-              projects: {
-                where: { status: 'ACTIVE' },
-                orderBy: [{ isDefault: 'desc' }, { name: 'asc' }],
-                select: { id: true, name: true },
-              },
+/**
+ * Everything a new task can be filed under: the clients' live jobs and the
+ * active internal projects. Names and ids only. Shared by GET /tasks/targets
+ * and GET /tasks/my/last-choices, so a remembered choice is only offered back
+ * while the pickers would still offer it.
+ */
+async function taskTargetsFor(orgId: string) {
+  // The studio's month — on the 1st before 05:30 IST the UTC one is last month.
+  const thisMonth = (await studioToday(orgId)).slice(0, 7);
+
+  const [companies, internalProjects] = await Promise.all([
+    prisma.company.findMany({
+      // Somewhere work can actually be filed: a prospect has nothing to do
+      // for yet, and the server would refuse the task anyway.
+      where: {
+        organizationId: orgId,
+        OR: [
+          { retainers: { some: { status: 'ACTIVE' } } },
+          { projects: { some: { status: 'LIVE', deletedAt: null } } },
+        ],
+      },
+      orderBy: { name: 'asc' },
+      select: {
+        id: true,
+        name: true,
+        retainers: {
+          where: { status: 'ACTIVE' },
+          select: {
+            id: true,
+            // The month being worked. A retainer task must sit on the month
+            // that pays for it, so a retainer with no open card has nothing
+            // to offer yet.
+            monthCards: { where: { month: thisMonth }, select: { id: true, month: true } },
+            projects: {
+              where: { status: 'ACTIVE' },
+              orderBy: [{ isDefault: 'desc' }, { name: 'asc' }],
+              select: { id: true, name: true },
             },
           },
-          projects: {
-            where: { status: 'LIVE', deletedAt: null },
-            orderBy: { name: 'asc' },
-            // Sample work is offered too — it is where real effort and real
-            // cost go, and tasks are how that gets recorded. It is labelled,
-            // so nobody files billable work against something unbilled.
-            select: { id: true, name: true, isSample: true },
-          },
         },
-      }),
-      prisma.internalProject.findMany({
-        where: { organizationId: orgId, status: 'ACTIVE' },
-        orderBy: [{ name: 'asc' }],
-        select: { id: true, name: true },
-      }),
-    ]);
+        projects: {
+          where: { status: 'LIVE', deletedAt: null },
+          orderBy: { name: 'asc' },
+          // Sample work is offered too — it is where real effort and real
+          // cost go, and tasks are how that gets recorded. It is labelled,
+          // so nobody files billable work against something unbilled.
+          select: { id: true, name: true, isSample: true },
+        },
+      },
+    }),
+    prisma.internalProject.findMany({
+      where: { organizationId: orgId, status: 'ACTIVE' },
+      orderBy: [{ name: 'asc' }],
+      select: { id: true, name: true },
+    }),
+  ]);
 
-    /*
-     * The jobs, already flattened the way the picker shows them.
-     *
-     * A retainer contributes one option per piece of work inside it, not one
-     * for the retainer: "Retainer — 2026-09" is a month, and a month is not a
-     * job. The month rides along on the option so the task still lands on the
-     * card that bills it.
-     */
-    const shaped = companies
-      .map((c) => {
-        const jobs: Record<string, unknown>[] = [];
+  /*
+   * The jobs, already flattened the way the picker shows them.
+   *
+   * A retainer contributes one option per piece of work inside it, not one
+   * for the retainer: "Retainer — 2026-09" is a month, and a month is not a
+   * job. The month rides along on the option so the task still lands on the
+   * card that bills it.
+   */
+  const shaped = companies
+    .map((c) => {
+      const jobs: TaskTargetJob[] = [];
 
-        for (const r of c.retainers) {
-          const card = r.monthCards[0];
-          if (!card) continue;
-          if (r.projects.length === 0) {
-            jobs.push({
-              key: card.id,
-              label: `Retainer — ${card.month}`,
-              workType: 'RETAINER',
-              monthCardId: card.id,
-              month: card.month,
-            });
-            continue;
-          }
-          for (const rp of r.projects) {
-            jobs.push({
-              key: rp.id,
-              label: `Retainer — ${rp.name}`,
-              workType: 'RETAINER',
-              monthCardId: card.id,
-              retainerProjectId: rp.id,
-              month: card.month,
-            });
-          }
-        }
-
-        for (const pr of c.projects) {
+      for (const r of c.retainers) {
+        const card = r.monthCards[0];
+        if (!card) continue;
+        if (r.projects.length === 0) {
           jobs.push({
-            key: pr.id,
-            label: pr.isSample ? `Sample — ${pr.name}` : `Project — ${pr.name}`,
-            workType: 'PROJECT',
-            projectId: pr.id,
+            key: card.id,
+            label: `Retainer — ${card.month}`,
+            workType: 'RETAINER',
+            monthCardId: card.id,
+            month: card.month,
+            retainerId: r.id,
+          });
+          continue;
+        }
+        for (const rp of r.projects) {
+          jobs.push({
+            key: rp.id,
+            label: `Retainer — ${rp.name}`,
+            workType: 'RETAINER',
+            monthCardId: card.id,
+            retainerProjectId: rp.id,
+            month: card.month,
           });
         }
+      }
 
-        return { id: c.id, name: c.name, jobs };
-      })
-      // A client whose only retainer has no open month yet would otherwise sit
-      // in the list offering nothing.
-      .filter((c) => c.jobs.length > 0);
+      for (const pr of c.projects) {
+        jobs.push({
+          key: pr.id,
+          label: pr.isSample ? `Sample — ${pr.name}` : `Project — ${pr.name}`,
+          workType: 'PROJECT',
+          projectId: pr.id,
+        });
+      }
 
-    res.json({ success: true, companies: shaped, internalProjects });
+      return { id: c.id, name: c.name, jobs };
+    })
+    // A client whose only retainer has no open month yet would otherwise sit
+    // in the list offering nothing.
+    .filter((c) => c.jobs.length > 0);
+
+  return { companies: shaped, internalProjects };
+}
+
+tasksRouter.get('/targets', requirePermission('work.own'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const { companies, internalProjects } = await taskTargetsFor(req.user!.organizationId);
+    res.json({
+      success: true,
+      // Without the retainer id the matching keeps: the pickers never needed it.
+      companies: companies.map((c) => ({ ...c, jobs: c.jobs.map(({ retainerId: _r, ...job }) => job) })),
+      internalProjects,
+    });
   } catch (error) {
     next(error);
   }
@@ -946,8 +1090,8 @@ tasksRouter.get('/all', requirePermission('work.all'), async (req: AuthRequest, 
         completedAt: t.completedAt,
         reopenCount: t.reopenCount,
         notes: t.notes,
-        assignee: t.assignee,
-        assignees: t.assignees.map((a) => a.user),
+        assignee: personOut(t.assignee),
+        assignees: t.assignees.map((a) => personOut(a.user)),
         assignedBy: t.assignedBy,
         creator: t.creator,
         reviewer: t.reviewer,
@@ -2307,8 +2451,8 @@ tasksRouter.get('/:id', requirePermission('work.own'), async (req: AuthRequest, 
         reopenCount: t.reopenCount,
         notes: t.notes,
         taskType: t.taskType,
-        assignee: t.assignee,
-        assignees: t.assignees.map((a) => a.user),
+        assignee: personOut(t.assignee),
+        assignees: t.assignees.map((a) => personOut(a.user)),
         assignedBy: t.assignedBy,
         creator: t.creator,
         reviewer: t.reviewer,

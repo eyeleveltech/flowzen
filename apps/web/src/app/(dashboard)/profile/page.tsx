@@ -24,6 +24,9 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
+import { qk, useGettingStarted } from '@/hooks/queries';
 import { Check, KeyRound, ShieldCheck } from 'lucide-react';
 import { api, ApiError, formatDate, type OrgConfig, type Profile } from '@/lib/api-v2';
 import { useAuthStore } from '@/stores';
@@ -50,6 +53,7 @@ export default function ProfilePage() {
   const [name, setName] = useState('');
   const [designation, setDesignation] = useState('');
   const [phone, setPhone] = useState('');
+  const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
@@ -79,6 +83,8 @@ export default function ProfilePage() {
     setSaved(false);
     try {
       await api.profile.update({ name, designation: designation || null, phone: phone || null });
+      // "Check your details" on My Work's Getting started card.
+      void queryClient.invalidateQueries({ queryKey: qk.gettingStarted });
       // Keep the header and sidebar in step without a reload.
       if (user) setAuth({ ...user, name, designation: designation || null });
       setSaved(true);
@@ -160,10 +166,17 @@ export default function ProfilePage() {
         {profile && <HeldAssets userId={profile.id} />}
 
         {/* Optional, and only when the organisation has it switched on. */}
-        <GoogleCalendarCard />
+        <div id="google-calendar" className="scroll-mt-20">
+          <GoogleCalendarCard />
+        </div>
 
         {/* Per device, and only when the organisation has it switched on. */}
-        <PhoneNotificationsCard />
+        <div id="phone-notifications" className="scroll-mt-20">
+          <PhoneNotificationsCard />
+        </div>
+
+        {/* The Getting started card, hidden from My Work: one click brings it back. */}
+        <ShowGettingStartedAgain />
 
         {/* ── What cannot be changed here, and why ────────────────────────── */}
         <Card padding="none">
@@ -314,6 +327,41 @@ function PasswordCard({ hasPassword }: { hasPassword: boolean }) {
           </Button>
         </CardFooter>
       </form>
+    </Card>
+  );
+}
+
+/**
+ * "Show the getting-started list again" (Ease Plan 2) — only while it is
+ * hidden and there is still something on it.
+ */
+function ShowGettingStartedAgain() {
+  const { data } = useGettingStarted();
+  const queryClient = useQueryClient();
+  const [busy, setBusy] = useState(false);
+  if (!data?.success || !data.hidden || data.complete) return null;
+  const show = async () => {
+    setBusy(true);
+    try {
+      await api.me.setGettingStartedHidden(false);
+      await queryClient.invalidateQueries({ queryKey: qk.gettingStarted });
+      toast.success('Getting started is back on My Work');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not show it again');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Card padding="none">
+      <CardBody className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-secondary">
+          Getting started · {data.done} of {data.total} done. You hid the list on My Work.
+        </p>
+        <Button variant="secondary" size="sm" loading={busy} onClick={() => void show()}>
+          Show the getting-started list again
+        </Button>
+      </CardBody>
     </Card>
   );
 }

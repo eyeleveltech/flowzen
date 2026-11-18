@@ -166,6 +166,12 @@ async function main() {
   // since some relations (Cost.project, Invoice.project, Proforma.milestone)
   // use SetNull rather than Cascade.
   await prisma.$transaction([
+    // Subscription invoices, their files and the logins each name the person
+    // who added them and will not let that person go first — so they go now.
+    prisma.subscriptionInvoice.deleteMany(),
+    prisma.storedFile.deleteMany(),
+    prisma.credentialLog.deleteMany(),
+    prisma.credential.deleteMany(),
     prisma.payment.deleteMany(),
     prisma.activity.deleteMany(),
     prisma.alertRead.deleteMany(),
@@ -363,7 +369,6 @@ async function main() {
       email: data.email,
       passwordHash: data.hash ?? demoHash,
       departmentId: departmentId.get(data.dept)!,
-      dept: data.dept,
       monthlyCost: data.cost,
       preset: data.preset,
       permissions: data.perms,

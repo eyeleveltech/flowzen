@@ -216,13 +216,114 @@ export const NAV_ITEMS: NavItem[] = NAV_SECTIONS.flatMap((s) => s.items);
  * "MANAGEMENT / Assets" does. Sections keep their titles the moment a second
  * item appears under them, which is what everybody except an Employee sees.
  */
-export const visibleSections = (user: NavUser | null | undefined): NavSection[] => {
+export const visibleSections = (
+  user: NavUser | null | undefined,
+  /** Hrefs drawn somewhere else — the person's Pinned and Hidden (n) — and so left out here. */
+  leaveOut: ReadonlySet<string> = new Set(),
+): NavSection[] => {
   if (!user?.permissions) return [];
 
   return NAV_SECTIONS.map((section) => {
-    const items = section.items.filter((item) => offered(item, user));
+    const items = section.items.filter((item) => offered(item, user) && !leaveOut.has(item.href));
     return { ...section, items, title: items.length > 1 ? section.title : null };
   }).filter((section) => section.items.length > 0);
+};
+
+/*
+ * ─── Each person's own menu (Ease Plan 3, decisions 9–12) ───────────────────
+ *
+ * Pinned items sit in a Pinned section at the top, in the order they were
+ * pinned; hidden ones fold into a collapsed "Hidden (n)" at the bottom, so
+ * nothing is ever lost. The order never moves by itself — unpinning or
+ * unhiding puts an item straight back in its usual place.
+ *
+ * Saved on the person's row (`PATCH /profile/menu`), read from the session
+ * (`navPinned` / `navHidden`). PINS NEVER GRANT ACCESS: every helper here asks
+ * `offered()` again, so an item somebody has lost access to just disappears —
+ * from Pinned, from Hidden, from the tabs — while the stored copy waits for
+ * their next save to be corrected by the server.
+ */
+
+/** Who the navigation is drawn for, with the menu they saved. */
+export type MenuUser = NavUser & { navPinned?: readonly string[]; navHidden?: readonly string[] };
+
+/** The two saved lists, as hrefs. */
+export type MenuPrefs = { pinned: string[]; hidden: string[] };
+
+/** The home page: it can be pinned, never hidden. */
+export const HOME_HREF = '/my-work';
+
+const navItemAt = (href: string) => NAV_ITEMS.find((i) => i.href === href);
+
+/** Their pins they can open now, each once, in the order they pinned them. */
+export const pinnedItems = (user: MenuUser | null | undefined): NavItem[] => {
+  if (!user?.permissions) return [];
+  const out: NavItem[] = [];
+  for (const href of user.navPinned ?? []) {
+    const item = navItemAt(href);
+    if (item && !out.includes(item) && offered(item, user)) out.push(item);
+  }
+  return out;
+};
+
+/** What they hid and can open now, in the menu's own order — never My Work, never a pinned item. */
+export const hiddenItems = (user: MenuUser | null | undefined): NavItem[] => {
+  if (!user?.permissions) return [];
+  const hidden = new Set(user.navHidden ?? []);
+  const pinned = new Set(pinnedItems(user).map((i) => i.href));
+  return NAV_ITEMS.filter(
+    (item) => hidden.has(item.href) && item.href !== HOME_HREF && !pinned.has(item.href) && offered(item, user),
+  );
+};
+
+/** The whole sidebar: Pinned, the usual sections without what is pinned or hidden, and Hidden (n). */
+export const menuFor = (
+  user: MenuUser | null | undefined,
+): { pinned: NavItem[]; sections: NavSection[]; hidden: NavItem[] } => {
+  const pinned = pinnedItems(user);
+  const hidden = hiddenItems(user);
+  const elsewhere = new Set([...pinned, ...hidden].map((i) => i.href));
+  return { pinned, sections: visibleSections(user, elsewhere), hidden };
+};
+
+/**
+ * The phone's tab bar. With pins: My Work and their first three (My Work
+ * itself pinned is not counted twice). With none: the first four
+ * `isPrimaryMobile` items they can open, exactly as before.
+ */
+export const bottomTabsFor = (user: MenuUser | null | undefined): NavItem[] => {
+  if (!user?.permissions) return [];
+  const pins = pinnedItems(user).filter((i) => i.href !== HOME_HREF);
+  if (pins.length > 0) return [navItemAt(HOME_HREF)!, ...pins.slice(0, 3)];
+  return NAV_ITEMS.filter((i) => i.isPrimaryMobile && offered(i, user)).slice(0, 4);
+};
+
+/** The phone's More sheet: what the tabs leave out, in the sidebar's shape. */
+export const moreSheetFor = (
+  user: MenuUser | null | undefined,
+  tabs: readonly NavItem[],
+): { pinned: NavItem[]; items: NavItem[]; hidden: NavItem[] } => {
+  const { pinned, sections, hidden } = menuFor(user);
+  const notATab = (item: NavItem) => !tabs.includes(item);
+  return {
+    pinned: pinned.filter(notATab),
+    items: sections.flatMap((s) => s.items).filter(notATab),
+    hidden: hidden.filter(notATab),
+  };
+};
+
+/** Pin it at the end of Pinned (and out of Hidden), or unpin it back to its usual place. */
+export const withPinToggled = (prefs: MenuPrefs, href: string): MenuPrefs =>
+  prefs.pinned.includes(href)
+    ? { pinned: prefs.pinned.filter((h) => h !== href), hidden: prefs.hidden }
+    : { pinned: [...prefs.pinned, href], hidden: prefs.hidden.filter((h) => h !== href) };
+
+/** Hide it (and unpin it), or bring it back. My Work never hides. */
+export const withHiddenToggled = (prefs: MenuPrefs, href: string): MenuPrefs => {
+  if (href === HOME_HREF) return prefs;
+  return prefs.hidden.includes(href)
+    ? { pinned: prefs.pinned, hidden: prefs.hidden.filter((h) => h !== href) }
+    : { pinned: prefs.pinned.filter((h) => h !== href), hidden: [...prefs.hidden, href] };
 };
 
 /**

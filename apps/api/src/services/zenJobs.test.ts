@@ -31,10 +31,11 @@ const run = (name: Parameters<typeof runZenJob>[0], args: Record<string, unknown
 const plan = (out: { cards?: ZenCard[] }) => out.cards?.[0] as Extract<ZenCard, { type: 'plan' }>;
 
 const TEAM = [
-  { id: 'u-boss', name: 'Akmal', dept: 'Management' },
-  { id: 'u-janani', name: 'Janani', dept: 'Design' },
-  { id: 'u-ravi', name: 'Ravi', dept: 'Video' },
-  { id: 'u-ravik', name: 'Ravi Kumar', dept: 'Video' },
+  // The department as a record (Departments Plan 4: the text column is gone).
+  { id: 'u-boss', name: 'Akmal', department: { name: 'Management' } },
+  { id: 'u-janani', name: 'Janani', department: { name: 'Design' } },
+  { id: 'u-ravi', name: 'Ravi', department: { name: 'Video' } },
+  { id: 'u-ravik', name: 'Ravi Kumar', department: { name: 'Video' } },
 ];
 const task = (over: Record<string, unknown> = {}) => ({
   id: 't1',

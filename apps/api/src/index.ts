@@ -43,6 +43,7 @@ import { calendarRouter } from './routes/calendar.js';
 import { googleRouter } from './routes/google.js';
 import { pushRouter } from './routes/push.js';
 import { usageRouter } from './routes/usage.js';
+import { feedbackRouter } from './routes/feedback.js';
 import { apiKeysRouter } from './routes/apiKeys.js';
 import { apiV1Router } from './routes/apiV1.js';
 import { mcpRouter } from './routes/mcp.js';
@@ -187,6 +188,8 @@ app.use('/api/calendar', calendarRouter);
 app.use('/api/google', googleRouter);
 app.use('/api/push', pushRouter);
 app.use('/api/usage', usageRouter);
+// "Something confusing? Tell us": anybody sends, Management reads (Ease Plan 3).
+app.use('/api/feedback', feedbackRouter);
 // Settings → API: making and revoking keys. A signed-in session, like any screen.
 app.use('/api/api-keys', apiKeysRouter);
 // Money → Subscriptions, and the invoice files behind it. Management only.

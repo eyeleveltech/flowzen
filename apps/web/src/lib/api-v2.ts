@@ -1966,6 +1966,13 @@ export const api = {
         companies: { id: string; name: string; jobs: any[] }[];
         internalProjects: { id: string; name: string }[];
       }>('/tasks/targets'),
+    /**
+     * What this person picked on the last task they wrote down themselves
+     * (Ease Plan 1): its type of work and what it belongs to — the target
+     * only while it is still offered — plus the studio's today.
+     */
+    lastChoices: () =>
+      get<{ success: boolean; today: string; choices: LastTaskChoices | null }>('/tasks/my/last-choices'),
     /** One client's months and live projects, for a task filed inside their work. */
     companyTargets: (companyId: string) =>
       get<{ success: boolean; monthCards: { id: string; month: string }[]; projects: { id: string; name: string }[] }>(
@@ -2197,6 +2204,11 @@ export const api = {
     /** What I said I am working on now, or null. */
     focus: () => get<{ success: boolean; focus: MyFocus | null }>('/me/focus'),
     clearFocus: () => del<{ success: boolean }>('/me/focus'),
+    /** My Work's Getting started card (Ease Plan 2): each step, worked out from what already exists. */
+    gettingStarted: () => get<{ success: boolean } & GettingStarted>('/me/getting-started'),
+    /** Hide on the card; Profile's "Show the getting-started list again" is `false`. */
+    setGettingStartedHidden: (hidden: boolean) =>
+      patch<{ success: boolean; hidden: boolean }>('/me/getting-started', { hidden }),
   },
 
   team: {
@@ -2309,6 +2321,12 @@ export const api = {
     /** Every other session dies with the change, this one included. */
     setPassword: (body: { currentPassword?: string; newPassword: string }) =>
       post<{ signedOutEverywhere: boolean }>('/profile/password', body),
+    /**
+     * Their own menu (Ease Plan 3): pinned and hidden sidebar hrefs. The server
+     * keeps only items this person can see now, and answers with what it kept.
+     */
+    saveMenu: (body: { pinned: string[]; hidden: string[] }) =>
+      patch<{ success: boolean; pinned: string[]; hidden: string[] }>('/profile/menu', body),
   },
 
   /**
@@ -2551,6 +2569,21 @@ export const api = {
     view: (path: string) => post<void>('/usage/view', { path }),
     /** Management only. */
     summary: (days: 7 | 30) => get<UsageSummary>(`/usage/summary?days=${days}`),
+    /**
+     * Management only (Ease Plan 3): each screen, how many people opened it
+     * in the last 30 days out of how many can open it. Counts, never names.
+     * Opening it closes this month's "Usage review is ready" bell.
+     */
+    screens: () => get<UsageScreens>('/usage/screens'),
+  },
+
+  /** "Something confusing? Tell us" (Ease Plan 3). Sending is anybody's; reading and handling, Management's. */
+  feedback: {
+    send: (body: { message: string; path: string; device: 'PHONE' | 'DESKTOP' }) =>
+      post<{ success: boolean; id: string }>('/feedback', body),
+    list: () => get<{ success: boolean; notes: FeedbackNote[] }>('/feedback'),
+    update: (id: string, body: { status: FeedbackStatus; note?: string | null }) =>
+      patch<{ success: boolean; note: Pick<FeedbackNote, 'id' | 'status' | 'note' | 'handledAt' | 'handledBy'> }>(`/feedback/${id}`, body),
   },
 
   /** Your own Google Calendar connection — optional, and only ever yours. */
@@ -2844,6 +2877,30 @@ export type MyFocus = { id: string; title: string; status: string };
 /** The counts on a Board row — each a list of task ids, so a count opens its tasks. */
 export type TeamBoardList = 'open' | 'dueThisWeek' | 'overdue' | 'waiting' | 'doneThisWeek';
 
+/**
+ * Where the last hand-made task was filed, as the new-task pickers offer it —
+ * a client's job (its key is the picker's option key) or an internal project,
+ * `internalProjectId: null` being "No project". `name` is for a toast:
+ * the client, or the internal project, or "Internal".
+ */
+export type RememberedTarget =
+  | { scope: 'INTERNAL'; internalProjectId: string | null; name: string }
+  | {
+      scope: 'CLIENT';
+      companyId: string;
+      name: string;
+      key: string;
+      label: string;
+      workType: 'RETAINER' | 'PROJECT';
+      monthCardId?: string;
+      retainerProjectId?: string;
+      projectId?: string;
+      month?: string;
+    };
+
+/** GET /tasks/my/last-choices — `target` is null once that work is closed. */
+export type LastTaskChoices = { taskType: string | null; target: RememberedTarget | null };
+
 export type TeamBoardReason = 'OVERDUE' | 'WAITING_LONG' | 'URGENT_NOT_STARTED';
 
 export type TeamBoard = {
@@ -3001,7 +3058,55 @@ export type UsageSummary = {
     changes: number;
     topScreens: string[];
     inactiveWorkingDays: number | null;
+    /** Getting started (Ease Plan 2): "3 of 5", and the required steps still missing. */
+    gettingStarted: { done: number; total: number; missing: GettingStartedStep[] } | null;
   }[];
+};
+
+export type FeedbackStatus = 'NEW' | 'SEEN' | 'DONE';
+
+/** One "Something confusing? Tell us" note, as Setup → Feedback lists it. */
+export type FeedbackNote = {
+  id: string;
+  message: string;
+  path: string;
+  /** The screen's name ("Money"), or null for a page it has no name for. */
+  screen: string | null;
+  device: 'PHONE' | 'DESKTOP';
+  status: FeedbackStatus;
+  note: string | null;
+  createdAt: string;
+  handledAt: string | null;
+  /** `dept` is the sender's department, or null when they have none. */
+  from: { id: string; name: string; dept: string | null };
+  handledBy: { id: string; name: string } | null;
+};
+
+/** GET /usage/screens — the monthly usage review. */
+export type UsageScreens = {
+  success: boolean;
+  /** The 30 days counted, as studio days ("2026-10-20" to "2026-11-18"). */
+  from: string;
+  to: string;
+  days: number;
+  screens: {
+    key: string;
+    label: string;
+    openedBy: number;
+    canOpen: number;
+    flag: 'NOBODY' | 'UNDER_A_THIRD' | null;
+  }[];
+};
+
+/** The Getting started steps, in the card's order. `google` is optional and only on a server with Google set up. */
+export type GettingStartedStep = 'phone' | 'phoneApp' | 'firstTask' | 'finishTask' | 'howItWorks' | 'google';
+
+export type GettingStarted = {
+  hidden: boolean;
+  steps: { key: GettingStartedStep; done: boolean; optional?: true }[];
+  done: number;
+  total: number;
+  complete: boolean;
 };
 
 export type CalendarLayer = 'mine' | 'team' | 'events' | 'google' | 'money' | 'sales' | 'work' | 'equipment' | 'holidays';

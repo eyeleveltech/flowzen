@@ -23,6 +23,7 @@ import { prisma } from '../lib/prisma.js';
 import { authenticate, type AuthRequest } from '../middleware/auth.js';
 import { comparePassword, hashPassword } from '../utils/password.js';
 import { roleForPreset } from '../utils/roles.js';
+import { keptMenu, MENU_INPUT_MAX } from '../services/navMenu.js';
 
 export const profileRouter = Router();
 
@@ -34,7 +35,10 @@ profileRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunctio
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.user!.userId },
-      include: { organization: { select: { id: true, name: true, allowPasswordLogin: true } } },
+      include: {
+        organization: { select: { id: true, name: true, allowPasswordLogin: true } },
+        department: { select: { name: true } },
+      },
     });
 
     if (!user) {
@@ -52,7 +56,7 @@ profileRouter.get('/', async (req: AuthRequest, res: Response, next: NextFunctio
       designation: user.designation,
       // The team they sit in. Theirs to know, an admin's to set — same as the
       // access level below it.
-      dept: user.dept,
+      dept: user.department?.name ?? '',
       phone: user.phone,
       // The day the account was made. There is no separate joining date to keep
       // in step with it, and inventing one would only let the two disagree.
@@ -122,6 +126,43 @@ profileRouter.patch('/', async (req: AuthRequest, res: Response, next: NextFunct
     });
 
     res.json(user);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// ── Menu ────────────────────────────────────────────────────────────────────
+//
+// Their own sidebar (Ease Plan 3, decisions 9–12): hrefs pinned to the top, in
+// the order they were pinned, and hrefs hidden into "Hidden (n)". Saved on
+// their row so it follows them from the laptop to the phone.
+//
+// Pins never grant access: only items this person is offered now are kept —
+// see services/navMenu.ts for the rule and why the server keeps its own copy
+// of the list. The answer is what was kept, so the screen can show exactly
+// that. A personal display preference like Getting started's Hide, so no
+// Activity row: nothing about what anybody can do changes.
+
+const hrefList = z.array(z.string().max(200)).max(MENU_INPUT_MAX, 'That is more menu items than there are.');
+const menuSchema = z.object({ pinned: hrefList, hidden: hrefList });
+
+profileRouter.patch('/menu', async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const parsed = menuSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: 'Send the pinned and hidden menu items as two lists.' });
+      return;
+    }
+
+    const kept = await keptMenu(req.user!, parsed.data);
+
+    // Only their own row — the id and the organisation both come from the session.
+    await prisma.user.updateMany({
+      where: { id: req.user!.userId, organizationId: req.user!.organizationId },
+      data: { navPinned: kept.pinned, navHidden: kept.hidden },
+    });
+
+    res.json({ success: true, ...kept });
   } catch (e) {
     next(e);
   }

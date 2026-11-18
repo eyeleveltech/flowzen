@@ -104,7 +104,15 @@ export const RULE_PERMISSION: Record<string, PermissionKey | readonly Permission
  * decisions 1 and 8): a Head granted `setup.admin` runs Settings, not the
  * studio's spending.
  */
-export const MANAGEMENT_RULES = ['SUBSCRIPTION_RENEWAL_DUE', 'SUBSCRIPTION_PRICE_UP', 'SUBSCRIPTION_INVOICE_MISSING'] as const;
+export const MANAGEMENT_RULES = [
+  'SUBSCRIPTION_RENEWAL_DUE',
+  'SUBSCRIPTION_PRICE_UP',
+  'SUBSCRIPTION_INVOICE_MISSING',
+  // What people find confusing, and the monthly usage review (Ease Plan 3):
+  // Setup → Feedback and Usage are Management's screens, so these are too.
+  'FEEDBACK_NEW',
+  'USAGE_REVIEW',
+] as const;
 
 /**
  * Also Management's, but about a PERSON — "Harish opened 25 logins in 10
@@ -284,7 +292,10 @@ export async function alertClausesFor(user: UserSession): Promise<Prisma.AlertWh
   const aboutOthers: Prisma.AlertWhereInput[] =
     user.preset === 'MANAGEMENT' ? [{ rule: { in: [...MANAGEMENT_PEOPLE_RULES] }, NOT: { entityType: 'User', entityId: userId } }] : [];
 
-  return [...(openRules.length > 0 ? [{ rule: { in: openRules } }] : []), ...scoped, ...mine, ...people, ...aboutOthers];
+  // "Your note was looked at" (Ease Plan 3): to the person who sent it, whoever they are.
+  const myFeedback: Prisma.AlertWhereInput = { rule: 'FEEDBACK_LOOKED_AT', entityType: 'FeedbackReply', entityId: userId };
+
+  return [...(openRules.length > 0 ? [{ rule: { in: openRules } }] : []), ...scoped, ...mine, ...people, ...aboutOthers, myFeedback];
 }
 
 /**
@@ -323,6 +334,9 @@ const SOURCE: Record<string, string> = {
   InternalProject: 'Internal work',
   ApiKey: 'Settings',
   SubscriptionPlatform: 'Money',
+  Feedback: 'Feedback',
+  FeedbackReply: 'Feedback',
+  UsageReview: 'Usage',
 };
 
 /** Where a row opens: utils/recordLink, shared with the calendar. */
@@ -349,6 +363,11 @@ const linkFor = (
   if (entityType === 'SubscriptionPlatform') return `/subscriptions?platform=${entityId}`;
   // The logins bells open the Log, filtered to the person they are about.
   if (rule === 'CREDENTIAL_UNUSUAL_ACTIVITY' || rule === 'CREDENTIAL_ACCESS_LOST') return `/logins?tab=log&user=${entityId}`;
+  // Feedback and the usage review open on their Setup tabs, Management's like the rules.
+  if (rule === 'FEEDBACK_NEW') return '/settings?tab=feedback';
+  if (rule === 'USAGE_REVIEW') return '/settings?tab=usage&view=screens';
+  // The sender's "looked at" bell says everything there is; it opens nowhere.
+  if (rule === 'FEEDBACK_LOOKED_AT') return null;
   return linkForUser(entityType, entityId, user);
 };
 

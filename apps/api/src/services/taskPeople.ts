@@ -17,14 +17,33 @@
  * manager writing up what a Head asked for in a meeting is exactly the case
  * the product exists to record, and it was the one it got wrong.
  */
+/**
+ * A person's department, read from its record (Departments Plan 4). The
+ * free-text `User.dept` column is gone; `personOut` puts the name back under
+ * the same field, so every screen and Zen read it as before.
+ */
+export const DEPT_NAME = { department: { select: { name: true } } } as const;
+
+type HasDepartment = { department?: { name: string } | null };
+type PersonOut<T extends HasDepartment> = Omit<T, 'department'> & { dept: string };
+
+/** A person as the API hands one out: `dept` is the department's name, '' for none. */
+export function personOut<T extends HasDepartment>(person: T): PersonOut<T>;
+export function personOut<T extends HasDepartment>(person: T | null): PersonOut<T> | null;
+export function personOut<T extends HasDepartment>(person: T | null): PersonOut<T> | null {
+  if (!person) return null;
+  const { department, ...rest } = person;
+  return { ...rest, dept: department?.name ?? '' };
+}
+
 export const TASK_PEOPLE = {
-  assignee: { select: { id: true, name: true, designation: true, dept: true } },
+  assignee: { select: { id: true, name: true, designation: true, ...DEPT_NAME } },
   assignedBy: { select: { id: true, name: true, designation: true } },
   creator: { select: { id: true, name: true, designation: true } },
   reviewer: { select: { id: true, name: true, designation: true } },
   assignees: {
     orderBy: { assignedAt: 'asc' as const },
-    select: { user: { select: { id: true, name: true, designation: true, dept: true } } },
+    select: { user: { select: { id: true, name: true, designation: true, ...DEPT_NAME } } },
   },
   /*
    * The repeat, when the task is a copy in one: the rule and whether it has

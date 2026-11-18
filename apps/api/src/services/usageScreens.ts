@@ -1,3 +1,5 @@
+import type { PermissionKey } from '@flowzen/shared';
+
 /**
  * Which screen a path is, for usage tracking — by name, never by address.
  *
@@ -41,6 +43,39 @@ export const SCREENS = {
 } as const;
 
 export type ScreenKey = keyof typeof SCREENS;
+
+/**
+ * Who can open each screen, for the Screens view's "out of how many"
+ * (Ease Plan 3): the sidebar's own `needs` / `managementOnly` on the web
+ * (config/navigation.ts), and the record pages' URL guard. No entry means
+ * everybody signed in. Checked with `hasPermission`, so setup.admin and
+ * Management open everything a permission guards — as the sidebar shows it.
+ */
+export const SCREEN_ACCESS: Partial<Record<ScreenKey, { needs?: PermissionKey; managementOnly?: true }>> = {
+  calendar: { needs: 'work.own' },
+  team: { needs: 'work.team' },
+  'all-tasks': { needs: 'work.all' },
+  companies: { needs: 'company.read' },
+  'client-page': { needs: 'company.read' },
+  outreach: { needs: 'company.read' },
+  pipeline: { needs: 'pipeline.read' },
+  proposals: { needs: 'pipeline.read' },
+  'live-work': { needs: 'work.all' },
+  'project-page': { needs: 'work.all' },
+  'retainer-page': { needs: 'work.all' },
+  'retainer-project-page': { needs: 'work.all' },
+  'internal-project-page': { needs: 'work.all' },
+  'monday-brief': { needs: 'reports.read' },
+  money: { needs: 'money.figures' },
+  'money-billing': { needs: 'money.figures' },
+  'money-costs': { needs: 'money.figures' },
+  'money-profit': { needs: 'money.figures' },
+  forecast: { needs: 'reports.read' },
+  subscriptions: { managementOnly: true },
+  logins: { managementOnly: true },
+  'time-split': { needs: 'cost.enter' },
+  settings: { needs: 'setup.admin' },
+};
 
 /** The address, as path segments: one screen for each shape. */
 const SHAPES: { match: (s: string[]) => boolean; key: ScreenKey }[] = [

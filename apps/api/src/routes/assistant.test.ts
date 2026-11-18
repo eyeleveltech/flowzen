@@ -130,8 +130,8 @@ beforeEach(() => {
     { name: "Heaven's ELIX", status: 'CLIENT' },
   ]);
   (prisma.user.findMany as any).mockResolvedValue([
-    { name: 'Akmal', dept: 'Management' },
-    { name: 'Janani', dept: 'Design' },
+    { name: 'Akmal', department: { name: 'Management' } },
+    { name: 'Janani', department: { name: 'Design' } },
   ]);
 });
 
@@ -671,8 +671,8 @@ describe('a model that thinks before it looks', () => {
  */
 describe('drafting a task', () => {
   const TEAM = [
-    { id: 'usr-boss', name: 'Akmal', dept: 'Management' },
-    { id: 'usr-des', name: 'Janani', dept: 'Design' },
+    { id: 'usr-boss', name: 'Akmal', department: { name: 'Management' } },
+    { id: 'usr-des', name: 'Janani', department: { name: 'Design' } },
   ];
 
   const VOSO = {

@@ -158,7 +158,6 @@ authRouter.post('/register', authLimiter, async (req, res: Response, next) => {
         email: cleanEmail,
         passwordHash,
         departmentId: management.id,
-        dept: management.name,
         preset: 'MANAGEMENT',
         monthlyCost: 0,
         permissions: [
@@ -189,7 +188,7 @@ authRouter.post('/register', authLimiter, async (req, res: Response, next) => {
         id: adminUser.id,
         name: adminUser.name,
         email: adminUser.email,
-        dept: adminUser.dept,
+        dept: management.name,
         preset: adminUser.preset,
         role: roleForPreset(adminUser.preset),
         permissions: effectivePermissions,
@@ -291,7 +290,7 @@ authRouter.post('/login', authLimiter, async (req, res: Response, next) => {
     const { email, password } = parsed.data;
     const user = await prisma.user.findUnique({
       where: { email: email.toLowerCase().trim() },
-      include: { organization: true },
+      include: { organization: true, department: { select: { name: true } } },
     });
 
     if (!user || !user.active) {
@@ -317,12 +316,16 @@ authRouter.post('/login', authLimiter, async (req, res: Response, next) => {
         id: user.id,
         name: user.name,
         email: user.email,
-        dept: user.dept,
+        dept: user.department?.name ?? '',
         preset: user.preset,
         role: roleForPreset(user.preset),
         permissions: effectivePermissions,
         // The departments they head — what puts "My department" in the sidebar.
         headOf: (await departmentsHeadedBy(user.organizationId, user.id)).map((d) => d.id),
+        // Their own menu (Ease Plan 3) — pinned and hidden sidebar hrefs, as
+        // saved. The sidebar shows only those they can open now.
+        navPinned: user.navPinned,
+        navHidden: user.navHidden,
         organization: {
           id: user.organization.id,
           name: user.organization.name,
@@ -373,6 +376,7 @@ authRouter.post('/accept-invite', authLimiter, async (req, res: Response, next) 
       // A fresh start: a cookie left from before the account was switched off
       // and invited again stops working.
       data: { passwordHash, active: true, inviteToken: null, inviteTokenExpiresAt: null, sessionsValidFrom: new Date() },
+      include: { department: { select: { name: true } } },
     });
 
     const effectivePermissions = resolvePermissions(activated.preset, activated.permissions);
@@ -386,7 +390,7 @@ authRouter.post('/accept-invite', authLimiter, async (req, res: Response, next) 
         id: activated.id,
         name: activated.name,
         email: activated.email,
-        dept: activated.dept,
+        dept: activated.department?.name ?? '',
         preset: activated.preset,
         role: roleForPreset(activated.preset),
         permissions: effectivePermissions,
@@ -572,6 +576,7 @@ authRouter.post('/reset-password', authLimiter, async (req, res, next) => {
         // event as accepting an invitation: the account becomes usable.
         active: true,
       },
+      include: { department: { select: { name: true } } },
     });
 
     const effectivePermissions = resolvePermissions(updated.preset, updated.permissions);
@@ -595,7 +600,7 @@ authRouter.post('/reset-password', authLimiter, async (req, res, next) => {
         id: updated.id,
         name: updated.name,
         email: updated.email,
-        dept: updated.dept,
+        dept: updated.department?.name ?? '',
         preset: updated.preset,
         role: roleForPreset(updated.preset),
         permissions: effectivePermissions,
@@ -618,7 +623,7 @@ authRouter.get('/me', authenticate, async (req: AuthRequest, res: Response, next
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.user!.userId },
-      include: { organization: true },
+      include: { organization: true, department: { select: { name: true } } },
     });
 
     if (!user || !user.active) {
@@ -634,13 +639,18 @@ authRouter.get('/me', authenticate, async (req: AuthRequest, res: Response, next
         id: user.id,
         name: user.name,
         email: user.email,
-        dept: user.dept,
+        dept: user.department?.name ?? '',
         preset: user.preset,
         role: roleForPreset(user.preset),
         permissions: effectivePermissions,
         // The departments they head — what puts "My department" in the sidebar
         // and opens /my-department (Department head page plan).
         headOf: (await departmentsHeadedBy(user.organizationId, user.id)).map((d) => d.id),
+        // Their own menu (Ease Plan 3): what the sidebar reads on every load.
+        // As saved — the sidebar filters again by what they can open now, so a
+        // pin on a screen they have since lost simply does not show.
+        navPinned: user.navPinned,
+        navHidden: user.navHidden,
         // Strip monthlyCost if user lacks setup.admin
         monthlyCost: effectivePermissions.includes('setup.admin') ? user.monthlyCost : undefined,
         organization: {

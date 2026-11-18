@@ -7,6 +7,7 @@ import {
   History,
   KeyRound,
   Mail,
+  MessageCircleQuestion,
   Network,
   Package,
   Plug,
@@ -72,6 +73,7 @@ export const SETTINGS_GROUPS = [
     tabs: [
       { key: 'activity', label: 'Activity', caption: 'Everything that happened, and who did it.', icon: History },
       { key: 'usage', label: 'Usage', caption: 'Who is using Flowzen, and how much.', icon: BarChart3 },
+      { key: 'feedback', label: 'Feedback', caption: 'What people found confusing, and what was done about it.', icon: MessageCircleQuestion },
       { key: 'trash', label: 'Trash', caption: 'Removed, not gone. Put things back from here.', icon: Trash2 },
     ],
   },

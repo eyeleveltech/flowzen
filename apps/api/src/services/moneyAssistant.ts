@@ -342,7 +342,7 @@ async function orientation(organizationId: string, month: string) {
     }),
     prisma.user.findMany({
       where: { organizationId, active: true },
-      select: { name: true, dept: true },
+      select: { name: true, department: { select: { name: true } } },
       orderBy: { name: 'asc' },
     }),
     prisma.monthCard.findMany({
@@ -365,7 +365,7 @@ async function orientation(organizationId: string, month: string) {
     month,
     currency: org?.currency ?? 'INR',
     clients: clients.map((c) => `${c.name} (${c.status})`),
-    team: team.map((u) => `${u.name} — ${u.dept}`),
+    team: team.map((u) => `${u.name} — ${u.department?.name ?? ''}`),
     thisMonthTotals: {
       retainerFee: fee,
       retainerCost: cost,

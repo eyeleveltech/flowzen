@@ -34,8 +34,11 @@ import {
   IndianRupee,
   FileSignature,
   Trash2,
+  MessageCircleQuestion,
 } from 'lucide-react';
 import { Drawer } from '@/components/ui/drawer';
+import { PageHelp } from '@/components/layout/PageHelp';
+import { FeedbackModal } from '@/components/layout/FeedbackModal';
 import toast from 'react-hot-toast';
 import { changedBackMessage } from '@/lib/optimistic';
 import { canSee } from '@/config/navigation';
@@ -150,6 +153,8 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showQuickCreate, setShowQuickCreate] = useState(false);
+  // "Something confusing? Tell us" (Ease Plan 3), from the "?" panel or the profile menu.
+  const [showFeedback, setShowFeedback] = useState(false);
 
   /*
    * `?bell=1` opens the bell — where a phone notification summary ("You have
@@ -246,18 +251,43 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
           <div className="h-7 w-7 rounded-lg bg-primary text-white font-bold flex items-center justify-center text-xs">
               F
             </div>
-            <span className="font-semibold text-primary text-sm tracking-tight">Flowzen</span>
+            {/* The word only where there is room for it beside the "?": on a
+                narrower phone the bar would otherwise push the account menu
+                off the right edge. The "F" stays either way. */}
+            <span className="hidden min-[420px]:inline font-semibold text-primary text-sm tracking-tight">Flowzen</span>
           </div>
         ) : null}
 
         {/* Page title/subtitle — the sticky-bar equivalent of the prototype's
             `.top h1`/`.sub`, set per-page via usePageHeader() instead of each
             screen drawing its own <h1> in the scrolling body. Desktop only;
-            the compact "Flowzen" wordmark above still covers mobile. */}
-        <div className="hidden sm:flex min-w-0 items-center gap-3">
-          <h1 className="truncate text-lg font-semibold tracking-[-0.3px] text-primary">{pageTitle}</h1>
+            the compact "Flowzen" wordmark above still covers mobile.
+
+            The "?" sits right after the title and, unlike it, shows on a phone
+            too: help for whichever page is open, picked from the address
+            rather than from the title (components/layout/PageHelp.tsx). */}
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex min-w-0 items-center gap-1">
+            <h1 className="hidden sm:block truncate text-lg font-semibold tracking-[-0.3px] text-primary">{pageTitle}</h1>
+            <PageHelp
+              footer={(closeHelp) => (
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeHelp();
+                    setShowFeedback(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-sm text-sm font-medium text-primary underline decoration-primary/30 underline-offset-2 hover:decoration-primary outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+                >
+                  <MessageCircleQuestion className="h-3.5 w-3.5" aria-hidden="true" />
+                  Something confusing? Tell us
+                </button>
+              )}
+            />
+            <FeedbackModal open={showFeedback} onClose={() => setShowFeedback(false)} />
+          </div>
           {pageSubtitle && (
-            <span className="truncate border-l border-border pl-3.5 text-xs text-secondary">{pageSubtitle}</span>
+            <span className="hidden sm:block truncate border-l border-border pl-3.5 text-xs text-secondary">{pageSubtitle}</span>
           )}
         </div>
       </div>
@@ -543,6 +573,15 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                   </div>
                   My Profile
                 </button>
+                <button
+                  onClick={() => { setShowUserMenu(false); setShowFeedback(true); }}
+                  className="flex w-full items-center gap-3 rounded-xl px-4 py-3.5 text-base text-body hover:bg-surface active:bg-subtle transition-colors"
+                >
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-subtle">
+                    <MessageCircleQuestion className="h-5 w-5 text-secondary" />
+                  </div>
+                  Something confusing? Tell us
+                </button>
                 {user?.permissions?.includes('setup.admin') && (
                   <button
                     onClick={() => { router.push('/settings'); setShowUserMenu(false); }}
@@ -597,6 +636,13 @@ export function TopNav({ isMobile }: { isMobile?: boolean }) {
                     >
                       <UserIcon className="h-4 w-4 text-secondary" />
                       My Profile
+                    </button>
+                    <button
+                      onClick={() => { setShowUserMenu(false); setShowFeedback(true); }}
+                      className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-body hover:bg-surface transition-colors"
+                    >
+                      <MessageCircleQuestion className="h-4 w-4 text-secondary" />
+                      Something confusing? Tell us
                     </button>
                     {user?.permissions?.includes('setup.admin') && (
                       <button

@@ -1,5 +1,6 @@
 import { LOST_REASONS, LOST_REASON_OTHER } from '@flowzen/shared';
 import { prisma } from '../lib/prisma.js';
+import { personOut } from './taskPeople.js';
 import type { AiTool } from './ai/types.js';
 import { eventLink, findClashes, UNPICKABLE, windowFrom } from './calendarEvents.js';
 import { resolveMailConfig } from '../utils/mailer.js';
@@ -159,9 +160,9 @@ async function resolvePeople(orgId: string, names: unknown): Promise<{ id: strin
   const list = (Array.isArray(names) ? names : names ? [names] : []).map((n) => String(n).trim()).filter(Boolean);
   const team = await prisma.user.findMany({
     where: { organizationId: orgId, active: true },
-    select: { id: true, name: true, dept: true },
+    select: { id: true, name: true, department: { select: { name: true } } },
     orderBy: { name: 'asc' },
-  });
+  }).then((people) => people.map((u) => personOut(u)));
   const out: { id: string; name: string }[] = [];
   for (const typed of list) {
     const t = typed.toLowerCase();

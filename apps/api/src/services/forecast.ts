@@ -41,7 +41,8 @@ export async function composeForecast(orgId: string, assumeWonId: string | null 
   // 1. Salaries — each active person's monthly cost, and only that (decision 3).
   const teamMembers = await prisma.user.findMany({
     where: { organizationId: orgId, active: true },
-    select: { id: true, name: true, designation: true, dept: true, monthlyCost: true },
+    // Nothing below reads the department; the old text column is gone (Departments Plan 4).
+    select: { id: true, name: true, designation: true, monthlyCost: true },
   });
   const monthlyPayroll = Math.round(teamMembers.reduce((acc, m) => acc + Number(m.monthlyCost || 0), 0));
   // Nobody can be paid ₹0. A person with no monthly cost entered is a person

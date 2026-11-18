@@ -17,6 +17,13 @@ interface User {
    * sidebar and opens /my-department. Undefined until /auth/me has answered.
    */
   headOf?: string[];
+  /**
+   * Their own menu (Ease Plan 3): sidebar hrefs pinned to the top, in the
+   * order they pinned them, and hrefs hidden into "Hidden (n)". As saved — the
+   * sidebar draws only those they can open now (config/navigation.ts).
+   */
+  navPinned?: string[];
+  navHidden?: string[];
   avatar?: string | null;
   team?: { id: string; name: string } | null;
   designation?: string | null;
@@ -35,6 +42,8 @@ interface AuthStore {
   token?: never; // Removed
   isAuthenticated: boolean;
   setAuth: (user: User) => void;
+  /** Their pinned and hidden menu items — on the screen at once, kept with the session. */
+  setMenu: (pinned: string[], hidden: string[]) => void;
   logout: () => Promise<void>;
   loadFromStorage: () => void;
 }
@@ -47,6 +56,18 @@ export const useAuthStore = create<AuthStore>((set) => ({
     localStorage.setItem('flowzen-user', JSON.stringify(user));
     set({ user, isAuthenticated: true });
   },
+
+  setMenu: (navPinned, navHidden) =>
+    set((s) => {
+      if (!s.user) return {};
+      const user = { ...s.user, navPinned, navHidden };
+      try {
+        localStorage.setItem('flowzen-user', JSON.stringify(user));
+      } catch {
+        // Remembering it in this browser is a convenience; the server has it.
+      }
+      return { user };
+    }),
 
   logout: async () => {
     const api = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
